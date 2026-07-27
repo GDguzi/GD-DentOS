@@ -1,0 +1,7 @@
+# 核心依赖(实测版本:fastapi 0.136.1 / uvicorn 0.46.0 / pillow 12.2.0)
+fastapi>=0.110
+uvicorn>=0.29
+python-multipart>=0.0.9   # FastAPI 表单/文件上传(患者影像)
+pillow>=10           # 患者影像旋转/演示库占位图
+pypinyin>=0.51       # 患者姓名拼音/首字母搜索(缺失时搜索退化为汉字匹配,不报错)
+tzdata>=2024.1       # Windows 无系统时区库,ZoneInfo("Asia/Shanghai") 依赖它;mac/linux 装了也无害

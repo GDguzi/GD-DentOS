@@ -1,0 +1,76 @@
+name: build-windows-exe
+
+# Windows 一键 exe 自动构建：打 v* 标签自动构建并挂到 Release；也可在 Actions 页手动触发。
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write   # 打标签时创建 Release 需要;默认令牌只读会报 Resource not accessible
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 安装依赖与 PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: 打包一键 exe
+        run: pyinstaller packaging/windows/good-dental.spec --distpath dist --workpath build --clean --noconfirm
+
+      - name: 冒烟——启动 exe、健康检查、登录页 200
+        shell: pwsh
+        run: |
+          $env:DENTAL_PORT = "8891"
+          # onefile 首启要解压+建库+迁移,慢机器实测可超 3 分钟 → 等 300 秒;失败时打印 exe 输出定位
+          $p = Start-Process "dist/good-dental-clinic.exe" -PassThru -WindowStyle Hidden `
+            -RedirectStandardOutput exe_stdout.log -RedirectStandardError exe_stderr.log
+          try {
+            $ok = $false
+            for ($i = 0; $i -lt 300; $i++) {
+              if ($p.HasExited) { break }
+              try {
+                $r = Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:8891/api/health" -TimeoutSec 2
+                if ($r.StatusCode -eq 200) { $ok = $true; break }
+              } catch { Start-Sleep 1 }
+            }
+            if (-not $ok) {
+              Get-Content exe_stdout.log, exe_stderr.log -ErrorAction SilentlyContinue |
+                Select-String -NotMatch "已建管理员" | Write-Host
+              if ($p.HasExited) { throw "exe 启动后自行退出(exit $($p.ExitCode)),输出见上" }
+              throw "exe 启动后健康检查 300 秒未就绪,输出见上"
+            }
+            $login = Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:8891/" -TimeoutSec 5
+            if ($login.StatusCode -ne 200) { throw "登录页返回 $($login.StatusCode)" }
+            Write-Host "smoke ok: health 200 / login page 200"
+          } finally {
+            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: 打包 zip
+        shell: pwsh
+        run: Compress-Archive -Path dist/good-dental-clinic.exe -DestinationPath dist/good-dental-clinic-windows.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: good-dental-windows
+          path: |
+            dist/good-dental-clinic.exe
+            dist/good-dental-clinic-windows.zip
+
+      - name: 打标签时挂到 Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/good-dental-clinic.exe
+            dist/good-dental-clinic-windows.zip

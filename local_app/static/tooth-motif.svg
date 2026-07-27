@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="140" viewBox="0 0 120 140" fill="none">
+  <defs>
+    <linearGradient id="enamel" x1="18" y1="12" x2="103" y2="130" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity="0.96"/>
+      <stop offset="1" stop-color="#79B8C0" stop-opacity="0.34"/>
+    </linearGradient>
+  </defs>
+  <path d="M60 12C40 0 18 8 13 31C8 56 23 66 29 90C36 117 39 130 50 130C59 130 56 95 66 95C76 95 73 130 82 130C93 130 96 117 103 90C109 66 124 56 119 31C114 8 92 0 72 12C67 15 65 15 60 12Z"
+        fill="url(#enamel)" stroke="#73AEB7" stroke-opacity="0.58" stroke-width="1.5"/>
+  <path d="M33 29C46 37 74 37 87 29" stroke="#73AEB7" stroke-opacity="0.28" stroke-width="1.2" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,3 @@
+# 开发/测试依赖：跑 README 的测试命令前先 pip install -r requirements-dev.txt
+-r requirements.txt
+httpx>=0.27          # fastapi.testclient(Starlette TestClient) 必需，运行服务本身不需要

@@ -1,0 +1,17 @@
+# 运行数据(患者库/影像/备份/日志)绝不进库
+data/raw/
+data/masked/
+*.db
+*.sqlite
+*.sqlite3
+local_app/data/
+local_app/backups/
+local_app/logs/
+logs/
+
+# 系统与构建产物
+.DS_Store
+__pycache__/
+*.pyc
+dist/
+build/

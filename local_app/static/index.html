@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>口腔门诊 · 本地系统</title><!-- 诊所名启动后由 app.js 按配置刷新 -->
+  <!-- PWA：手机"添加到主屏幕"→图标一点直接进(全屏、记住登录) -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="口腔门诊">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" content="#dfeff0">
+  <link rel="apple-touch-icon" href="/icon-180.png">
+  <link rel="icon" href="/icon.svg?v=2026-06-26-merged" type="image/svg+xml">
+  <!-- APP_ASSET_VERSION: 2026-07-22-ocr-main -->
+  <link rel="stylesheet" href="/styles.css?v=2026-07-27-charge-items">
+  <link rel="stylesheet" href="/customer_hub_v2.css?v=2026-07-22-ocr-main">
+  <link rel="stylesheet" href="/access_center.css?v=2026-07-19-access-tree">
+</head>
+<body class="theme-pearl">
+  <div class="app-shell">
+    <aside class="side-nav" aria-label="本地门诊模块">
+      <div class="brand-block">
+        <img class="brand-mark" src="/tooth-motif.svg?v=2026-07-15-pearl-a1" alt="">
+        <span class="brand-copy"><strong>本地牙科</strong><span>本地诊所系统</span></span>
+        <span class="app-version" id="appVersion" title="当前加载的前端资源版本（缓存新鲜度）"></span>
+      </div>
+      <nav>
+        <button type="button" class="nav-item active" data-workspace-view="today">今日工作</button>
+        <button type="button" class="nav-item" data-workspace-view="patients">患者管理</button>
+        <button type="button" class="nav-item" data-workspace-view="appointments">预约管理</button>
+        <button type="button" class="nav-item" data-workspace-view="return-visits" data-perm="patient.profile.view">客户通</button>
+        <button type="button" class="nav-item" data-workspace-view="sterilization" data-perm-any="instrument.view,instrument.manage,sterilization_order.view,sterilization_order.manage,sterilize.manage">消毒管理</button>
+        <button type="button" class="nav-item" data-workspace-view="warehouse" data-perm-any="warehouse.inventory.view,warehouse.item.view,warehouse.supplier.view,warehouse.stock_in.view,warehouse.stock_out.view,warehouse.stocktake.view,warehouse.view">库存管理</button>
+        <button type="button" class="nav-item" data-workspace-view="data-reports" data-perm-any="report.finance.view,report.arrears.view,report.cashier.view,report.performance.view,report.operations.view,report.view">数据报表</button>
+        <button type="button" class="nav-item" data-workspace-view="config" data-perm-any="clinic_settings.manage,staff.view,account.view,account.open,account.security,master_data.view,audit.view,recycle.view,settings.manage,staff.manage,user.manage,role.manage,master_data.manage,sync.manage,recycle.manage">配置管理</button>
+        <button type="button" class="nav-item" data-workspace-view="ai-drafts">AI 草稿箱</button>
+        <button type="button" class="nav-item" data-workspace-view="inspection">工作检查</button>
+      </nav>
+    </aside>
+    <section class="main-shell">
+      <header class="topbar">
+        <div class="workbar">
+          <h1 id="workspaceTitle">今日工作台</h1>
+          <span id="workspaceSubtitle"></span>
+        </div>
+        <input id="q" autocomplete="off" placeholder="搜索姓名 / 电话 / 患者ID / 客户ID">
+        <div class="topbar-right">
+          <span id="statusText"></span>
+          <span id="userChip" class="user-chip" hidden>
+            <span id="userChipName"></span>
+            <button type="button" id="logoutBtn" class="plain-button">登出</button>
+          </span>
+        </div>
+      </header>
+      <section id="todayWorkPanel" class="today-work-panel" aria-label="今日工作台待办"></section>
+      <section id="modulePanel" class="module-panel" hidden></section>
+      <section id="aiDraftsPanel" class="ai-drafts-panel" aria-label="AI 草稿箱" hidden></section>
+      <main id="patientWorkspace" class="workspace" hidden>
+        <aside id="patientList" class="patient-list"></aside>
+        <section class="content-column">
+          <section id="auditPanel" class="audit-panel" aria-label="审计记录"></section>
+        </section>
+      </main>
+      <section id="patientWorkspacePage" class="workspace-page" hidden>
+        <header class="workspace-header">
+          <button type="button" class="plain-button workspace-back" onclick="closePatientWorkspace()">← 返回</button>
+          <span class="workspace-breadcrumb" id="workspaceBreadcrumb"></span>
+        </header>
+        <div class="workspace-layout">
+          <aside class="workspace-rail" id="workspaceRail" aria-label="患者档案">患者档案载入中...</aside>
+          <section class="workspace-main">
+            <nav class="workspace-tabs" aria-label="患者工作区标签">
+              <button type="button" class="workspace-tab active" data-workspace-tab="profile" onclick="switchWorkspaceTab(this.dataset.workspaceTab)">基本资料</button>
+              <button type="button" class="workspace-tab" data-workspace-tab="visits" onclick="switchWorkspaceTab(this.dataset.workspaceTab)">就诊</button>
+              <button type="button" class="workspace-tab" data-workspace-tab="medical" onclick="switchWorkspaceTab(this.dataset.workspaceTab)">病历<span class="workspace-tab-count" data-workspace-count="medical" hidden></span></button>
+              <button type="button" class="workspace-tab" data-workspace-tab="oral-exam" onclick="switchWorkspaceTab(this.dataset.workspaceTab)">口腔检查</button>
+              <button type="button" class="workspace-tab" data-workspace-tab="plan" onclick="switchWorkspaceTab(this.dataset.workspaceTab)">治疗计划</button>
+              <button type="button" class="workspace-tab" data-workspace-tab="treatments" onclick="switchWorkspaceTab(this.dataset.workspaceTab)">处置<span class="workspace-tab-count" data-workspace-count="treatments" hidden></span></button>
+              <button type="button" class="workspace-tab" data-workspace-tab="surgery" onclick="switchWorkspaceTab(this.dataset.workspaceTab)">手术</button>
+              <button type="button" class="workspace-tab" data-workspace-tab="lab-orders" onclick="switchWorkspaceTab(this.dataset.workspaceTab)">技工单</button>
+              <button type="button" class="workspace-tab" data-workspace-tab="images" onclick="switchWorkspaceTab(this.dataset.workspaceTab)">影像<span class="workspace-tab-count" data-workspace-count="images" hidden></span></button>
+              <button type="button" class="workspace-tab" data-workspace-tab="billing" data-perm="billing.view" onclick="switchWorkspaceTab(this.dataset.workspaceTab)">收费<span class="workspace-tab-count" data-workspace-count="billing" hidden></span></button>
+              <button type="button" class="workspace-tab" data-workspace-tab="return-visits" onclick="switchWorkspaceTab(this.dataset.workspaceTab)">客户沟通</button>
+              <button type="button" class="workspace-tab" data-workspace-tab="member" onclick="switchWorkspaceTab(this.dataset.workspaceTab)">会员</button>
+              <button type="button" class="workspace-tab" data-workspace-tab="notes" onclick="switchWorkspaceTab(this.dataset.workspaceTab)">备注<span class="workspace-tab-count" data-workspace-count="notes" hidden></span></button>
+            </nav>
+            <section class="workspace-panel active" data-workspace-panel="profile">加载中...</section>
+            <section class="workspace-panel" data-workspace-panel="visits" hidden>加载中...</section>
+            <section class="workspace-panel" data-workspace-panel="medical" hidden>加载中...</section>
+            <section class="workspace-panel" data-workspace-panel="oral-exam" hidden>加载中...</section>
+            <section class="workspace-panel" data-workspace-panel="plan" hidden>加载中...</section>
+            <section class="workspace-panel" data-workspace-panel="treatments" hidden>加载中...</section>
+            <section class="workspace-panel" data-workspace-panel="surgery" hidden>加载中...</section>
+            <section class="workspace-panel" data-workspace-panel="lab-orders" hidden>加载中...</section>
+            <section class="workspace-panel" data-workspace-panel="images" hidden>加载中...</section>
+            <section class="workspace-panel" data-workspace-panel="billing" hidden>加载中...</section>
+            <section class="workspace-panel" data-workspace-panel="return-visits" hidden>加载中...</section>
+            <section class="workspace-panel" data-workspace-panel="member" hidden>加载中...</section>
+            <section class="workspace-panel" data-workspace-panel="notes" hidden>加载中...</section>
+          </section>
+        </div>
+      </section>
+    </section>
+  </div>
+  <div id="medicalEditorOverlay" class="editor-overlay" hidden>
+    <div class="editor-overlay-head">
+      <strong>病历填写</strong>
+      <button type="button" class="plain-button" onclick="closeMedicalEditorOverlay()">×</button>
+    </div>
+    <div class="editor-overlay-body" data-editor-overlay-body></div>
+  </div>
+  <div id="toothModal" class="modal-backdrop" hidden>
+    <section class="tooth-modal official-tooth-modal" role="dialog" aria-modal="true" aria-label="选择牙位">
+      <div class="modal-head">
+        <strong>选择牙位</strong>
+        <button type="button" class="plain-button" onclick="closeToothSelector()">×</button>
+      </div>
+      <div id="toothGrid" class="tooth-grid"></div>
+      <div class="modal-actions">
+        <span id="toothSelectionText"></span>
+        <button type="button" class="tooth-confirm-btn" onclick="applyToothSelection()">确定</button>
+        <button type="button" class="plain-button" onclick="closeToothSelector()">取消</button>
+      </div>
+    </section>
+  </div>
+  <div id="treatmentOrderModal" class="modal-backdrop" hidden>
+    <section class="order-editor" role="dialog" aria-modal="true" aria-label="处置编辑">
+      <div class="modal-head">
+        <strong id="treatmentOrderTitle">新增处置</strong>
+        <button type="button" class="plain-button" onclick="closeTreatmentOrder()">×</button>
+      </div>
+      <div id="treatmentOrderBody" class="order-body"></div>
+      <div class="modal-actions">
+        <span id="treatmentOrderStatus"></span>
+        <button type="button" class="plain-button" onclick="saveTreatmentOrder()">保存处置（待划价）</button>
+        <button type="button" class="tooth-confirm-btn" onclick="saveTreatmentOrder(true)">开单并划价</button>
+        <button type="button" class="plain-button" onclick="closeTreatmentOrder()">取消</button>
+      </div>
+    </section>
+  </div>
+  <div id="consentModal" class="modal-backdrop" hidden>
+    <section class="consent-modal" role="dialog" aria-modal="true" aria-label="知情同意书">
+      <div class="modal-head"><strong>知情同意书</strong><button type="button" class="plain-button" onclick="closeConsentForm()">×</button></div>
+      <div class="consent-body">
+        <div id="consentSigned" class="consent-signed"></div>
+        <div class="consent-pick">
+          <button type="button" id="consentPickBtn" class="consent-pick-btn" onclick="openConsentPicker()">📋 选择同意书</button>
+          <label>付款方式 <select id="consentPayMethod" class="ord-input" onchange="updateConsentFee()">
+            <option value="现金">现金</option><option value="微信">微信</option><option value="支付宝">支付宝</option>
+            <option value="银行卡">银行卡</option><option value="医保">医保</option><option value="其他">其他</option>
+          </select></label>
+        </div>
+        <div id="consentRecommend" class="consent-recommend" hidden></div>
+        <div id="consentPicker" class="consent-picker" hidden></div>
+        <div id="consentText" class="consent-text">请选择同意书模板</div>
+        <div class="consent-signs">
+          <div class="consent-sign">
+            <div class="cs-label">患者签名 <button type="button" class="plain-button" onclick="clearSignPad('consentPatientSign')">清除</button></div>
+            <canvas id="consentPatientSign" class="sign-pad" width="320" height="120"></canvas>
+          </div>
+          <div class="consent-sign">
+            <div class="cs-label">医生签名 <button type="button" class="plain-button" onclick="clearSignPad('consentDoctorSign')">清除</button></div>
+            <canvas id="consentDoctorSign" class="sign-pad" width="320" height="120"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <span id="consentStatus"></span>
+        <button type="button" class="plain-button" onclick="printConsent()">打印</button>
+        <button type="button" class="tooth-confirm-btn" onclick="submitConsent()">签署并保存</button>
+        <button type="button" class="plain-button" onclick="closeConsentForm()">取消</button>
+      </div>
+    </section>
+  </div>
+  <div id="appointmentModal" class="modal-backdrop" hidden>
+    <section class="appt-modal appt-modal-wide" role="dialog" aria-modal="true" aria-label="新增预约">
+      <div class="modal-head"><strong id="apptModalTitle">新增预约</strong><button type="button" class="plain-button" onclick="closeNewAppointment()">×</button></div>
+      <div class="appt-dialog">
+        <div class="appt-col appt-col-left">
+          <label class="appt-field" id="apptPatientField">患者
+            <input id="apptPatientSearch" class="ord-input" placeholder="搜患者姓名/手机号" autocomplete="off">
+          </label>
+          <div id="apptPatientResults" class="appt-patient-results" hidden></div>
+          <div id="apptPatientPicked" class="appt-patient-picked" hidden></div>
+          <div id="apptChartNo" class="appt-chartno" hidden></div>
+          <div id="apptCalendar" class="appt-calendar"></div>
+          <div id="apptQuickDates" class="appt-quickdates"></div>
+          <div class="appt-field">预约类型
+            <span class="appt-radios">
+              <label><input type="radio" name="apptType" value="普通预约" checked>普通预约</label>
+              <label><input type="radio" name="apptType" value="待确定预约">待确定预约</label>
+            </span>
+          </div>
+          <label class="appt-field">预约医生 <input id="apptDoctor" class="ord-input" data-staff-role="医生" placeholder="医生姓名"></label>
+          <label class="appt-field">咨询师 <input id="apptConsultant" class="ord-input" data-staff-role="咨询师" placeholder="可空"></label>
+          <div class="appt-field">就诊类型
+            <span class="appt-radios">
+              <label><input type="radio" name="apptVisitType" value="初诊" checked>初诊</label>
+              <label><input type="radio" name="apptVisitType" value="复诊">复诊</label>
+              <label><input type="radio" name="apptVisitType" value="点诊">点诊</label>
+            </span>
+          </div>
+          <label class="appt-field">预约人 <input id="apptBookedBy" class="ord-input" placeholder="可空"></label>
+          <div class="appt-field">登记方式
+            <span class="appt-radios">
+              <label><input type="radio" name="apptRegisterType" value="预约" checked>预约</label>
+              <label><input type="radio" name="apptRegisterType" value="到店">到店登记</label>
+            </span>
+          </div>
+          <label class="appt-field">患者来源 <input id="apptSource" class="ord-input" placeholder="可空"></label>
+          <label class="appt-field">预约备注 <textarea id="apptRemark" class="ord-input" rows="2" placeholder="可空"></textarea></label>
+        </div>
+        <div class="appt-col appt-col-mid">
+          <div class="appt-col-title">预约时段* <span id="apptTimelineDate" class="appt-col-sub"></span></div>
+          <div id="apptTimeline" class="appt-timeline"></div>
+        </div>
+        <div class="appt-col appt-col-right">
+          <div class="appt-col-title">预约项目*</div>
+          <input id="apptItemSearch" class="ord-input appt-item-search" placeholder="输入项目名称查询" oninput="filterApptItemGrid(this.value)" autocomplete="off">
+          <div id="apptItemGrid" class="appt-item-grid"></div>
+          <input id="apptItem" class="ord-input" placeholder="其他项目(可自填，与勾选合并)">
+        </div>
+      </div>
+      <div class="modal-actions">
+        <span id="apptSelectedSlot" class="appt-selected-slot"></span>
+        <span id="apptStatus"></span>
+        <input type="hidden" id="apptStart"><input type="hidden" id="apptEnd">
+        <button type="button" class="tooth-confirm-btn" id="apptSubmitBtn" onclick="submitNewAppointment()">保存预约</button>
+        <button type="button" class="plain-button" onclick="closeNewAppointment()">取消</button>
+      </div>
+    </section>
+  </div>
+  <div id="apptSettingsModal" class="modal-backdrop" hidden>
+    <section class="appt-modal" role="dialog" aria-modal="true" aria-label="预约界面设置">
+      <div class="modal-head"><strong>预约界面设置</strong><button type="button" class="plain-button" onclick="closeApptSettings()">×</button></div>
+      <div class="appt-body">
+        <label class="appt-field">诊所名称 <input id="setClinicName" class="ord-input" type="text" placeholder="就诊诊所名（回访卡等处显示）"></label>
+        <label class="appt-field">营业开始 <input id="setBizStart" class="ord-input" type="time"></label>
+        <label class="appt-field">营业结束 <input id="setBizEnd" class="ord-input" type="time"></label>
+        <label class="appt-field">最小单位（分钟）
+          <select id="setMinSlot" class="ord-input">
+            <option value="5">5</option><option value="10">10</option><option value="15">15</option>
+            <option value="20">20</option><option value="30">30</option><option value="60">60</option>
+          </select>
+        </label>
+        <label class="appt-field appt-field-row"><input id="setShowDoctor" type="checkbox"> 按医生分泳道列</label>
+      </div>
+      <div class="modal-actions">
+        <span id="apptSettingsStatus"></span>
+        <button type="button" class="tooth-confirm-btn" onclick="saveApptSettings()">保存设置</button>
+        <button type="button" class="plain-button" onclick="closeApptSettings()">取消</button>
+      </div>
+    </section>
+  </div>
+  <div id="dispatchModal" class="modal-backdrop" hidden>
+    <section class="appt-modal" role="dialog" aria-modal="true" aria-label="新建送消单">
+      <div class="modal-head"><strong>新建送消单</strong><button type="button" class="plain-button" onclick="closeNewDispatch()">×</button></div>
+      <div class="appt-body">
+        <label class="appt-field">科室 <input id="dispatchDept" class="ord-input" placeholder="送消科室"></label>
+        <label class="appt-field">送消人 <input id="dispatchDispatcher" class="ord-input" placeholder="送消人姓名"></label>
+        <div class="appt-field">器械（勾选并填数量）</div>
+        <div id="dispatchInstrList" class="dispatch-instr-list"></div>
+      </div>
+      <div class="modal-actions">
+        <span id="dispatchStatus"></span>
+        <button type="button" class="tooth-confirm-btn" onclick="submitNewDispatch()">保存送消单</button>
+        <button type="button" class="plain-button" onclick="closeNewDispatch()">取消</button>
+      </div>
+    </section>
+  </div>
+  <div id="payModal" class="modal-backdrop" hidden>
+    <section class="pay-modal" role="dialog" aria-modal="true" aria-label="收款">
+      <div class="modal-head"><strong>收款</strong><button type="button" class="plain-button" onclick="closePayModal()">×</button></div>
+      <div class="pay-body">
+        <div class="pay-meta">
+          <span>账单编号 <b id="payBillNo">—</b></span>
+          <label class="pay-cashier">收银员 <input id="payCashier" class="pay-input" data-staff-role="前台" placeholder="收银员"></label>
+        </div>
+        <div id="payDetail" class="pay-detail"></div>
+        <div class="pay-sums">
+          <span>应收 <b id="paySumDue">0</b></span>
+          <span>已收 <b id="paySumPaid">0</b></span>
+          <span>欠款 <b id="payRemaining">0</b></span>
+          <span>找零 <b id="payChange">0</b></span>
+        </div>
+        <label class="pay-field">本次收款金额
+          <input id="payAmount" class="pay-input" inputmode="decimal" placeholder="金额" oninput="payUpdateChange()">
+        </label>
+        <label class="pay-field">收费方式
+          <span class="pay-method-line">
+            <select id="payMethod" class="pay-input"></select>
+            <button type="button" id="payMethodGear" class="plain-button" title="自定义付款方式" onclick="openPayMethodSettings()">⚙️</button>
+          </span>
+        </label>
+        <div class="pay-split">
+          <button type="button" class="plain-button" onclick="payAddSplit()">+ 多方式拆分</button>
+          <div id="paySplitRows"></div>
+          <div id="paySplitSum" class="pay-split-sum" hidden>拆分合计 <b id="paySplitSumVal">0</b></div>
+        </div>
+        <label class="pay-field">发票号 <input id="payInvoiceNo" class="pay-input" placeholder="选填"></label>
+        <label class="pay-field">发票备注 <input id="payInvoiceRemark" class="pay-input" placeholder="选填"></label>
+        <label class="pay-field">备注 <input id="payRemark" class="pay-input" placeholder="选填"></label>
+      </div>
+      <div class="modal-actions">
+        <span id="payStatus"></span>
+        <button type="button" class="tooth-confirm-btn" onclick="guardSubmit(this, submitBillPayment)">确认收款</button>
+        <button type="button" class="plain-button" onclick="closePayModal()">取消</button>
+      </div>
+    </section>
+  </div>
+  <!-- 付款方式设置(收款弹窗⚙️进入):增删/排序,billing.pay 可改 -->
+  <div id="payMethodSettingsModal" class="modal-backdrop" hidden>
+    <section class="pay-modal" role="dialog" aria-modal="true" aria-label="付款方式设置">
+      <div class="modal-head"><strong>付款方式设置</strong><button type="button" class="plain-button" onclick="closePayMethodSettings()">×</button></div>
+      <div class="pay-body">
+        <div id="pmList" class="pm-list"></div>
+        <div class="pm-add">
+          <input id="pmNewName" class="pay-input" placeholder="新付款方式名(如 微信)" maxlength="20" onkeydown="if(event.key==='Enter')pmAdd()">
+          <button type="button" class="plain-button" onclick="pmAdd()">添加</button>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <span id="pmStatus"></span>
+        <button type="button" class="tooth-confirm-btn" onclick="pmSave()">保存</button>
+        <button type="button" class="plain-button" onclick="closePayMethodSettings()">取消</button>
+      </div>
+    </section>
+  </div>
+  <div id="orderPriceModal" class="modal-backdrop" hidden>
+    <section class="order-editor" role="dialog" aria-modal="true" aria-label="划价">
+      <div class="modal-head"><strong>划价</strong><button type="button" class="plain-button" onclick="closePriceOrder()">×</button></div>
+      <div id="orderPriceBody" class="order-body"></div>
+      <div class="modal-actions">
+        <span id="orderPriceStatus"></span>
+        <button type="button" class="tooth-confirm-btn" onclick="guardSubmit(this, submitPriceOrder)">确认划价（生成待收费单）</button>
+        <button type="button" class="plain-button" onclick="closePriceOrder()">取消</button>
+      </div>
+    </section>
+  </div>
+  <div id="handlePickerModal" class="modal-backdrop" hidden>
+    <section class="handle-picker" role="dialog" aria-modal="true" aria-label="选择处置">
+      <div class="modal-head">
+        <strong>处置列表</strong>
+        <button type="button" class="plain-button" onclick="closeHandlePicker()">×</button>
+      </div>
+      <div class="hp-toolbar">
+        <input id="hpSearch" type="text" placeholder="搜索 处置名称 / 编码" oninput="onHandlePickerSearch(this.value)">
+      </div>
+      <div class="hp-body">
+        <aside class="hp-cats" id="hpCats"></aside>
+        <div class="hp-list" id="hpList"></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="plain-button" onclick="closeHandlePicker()">取消</button>
+      </div>
+    </section>
+  </div>
+  <!-- 影像组图查看浮层(image_grouping.js 渲染;z-index 低于 lightbox,双击缩略图可压上 lightbox) -->
+  <div id="imageGroupingOverlay" class="ig-overlay" hidden></div>
+  <div id="rvCardOverlay" class="rv-card-overlay" hidden></div>
+  <div id="imageLightbox" class="modal-backdrop image-lightbox" hidden>
+    <button type="button" class="image-lightbox-close" aria-label="关闭" onclick="closeImageLightbox()">×</button>
+
+    <!-- 贴屏边的感应条：鼠标靠近 / 触屏点拉手 → 弹出对应边栏 -->
+    <div class="lb-edge lb-edge-left" id="lbEdgeLeft"><span class="lb-edge-handle">片</span></div>
+    <div class="lb-edge lb-edge-right" id="lbEdgeRight"><span class="lb-edge-handle">具</span></div>
+
+    <!-- 左边栏：按日期折叠的选片器（默认收起） -->
+    <aside class="lb-sidebar lb-date-sidebar" id="lbDateSidebar" aria-label="按日期选片">
+      <div class="lb-sidebar-title">按日期选片</div>
+      <div class="lb-date-accordion" id="lbDateAccordion"></div>
+    </aside>
+
+    <!-- 右边栏：竖排工具（默认收起；本期仅基础工具） -->
+    <aside class="lb-sidebar lb-tool-sidebar" id="lbToolSidebar" aria-label="影像工具">
+      <div class="lb-sidebar-title">工具</div>
+      <div class="lb-tools" id="lbAnnotTools">
+        <button type="button" data-lb-tool="arrow" onclick="setLightboxTool('arrow')">箭头</button>
+        <button type="button" data-lb-tool="pen" onclick="setLightboxTool('pen')">红笔</button>
+        <button type="button" data-lb-tool="measure" onclick="setLightboxTool('measure')">测量</button>
+        <button type="button" data-lb-tool="markL" onclick="setLightboxTool('markL')">标 L</button>
+        <button type="button" data-lb-tool="markR" onclick="setLightboxTool('markR')">标 R</button>
+        <button type="button" data-lb-tool="eraser" onclick="setLightboxTool('eraser')">橡皮</button>
+        <button type="button" onclick="clearLightboxAnnotation()">清除</button>
+        <button type="button" onclick="exportLightboxAnnotated()">导出</button>
+      </div>
+      <div class="lb-tool-sep"></div>
+      <div class="lb-zoom-row">
+        <button type="button" onclick="zoomLightbox(-1)">－</button>
+        <span id="lbZoomLabel" class="lb-zoom">100%</span>
+        <button type="button" onclick="zoomLightbox(1)">＋</button>
+      </div>
+      <div class="lb-view-row">
+        <button type="button" onclick="rotateLightbox()" title="旋转90°">旋转</button>
+        <button type="button" onclick="flipLightbox('x')" title="水平翻转">翻↔</button>
+        <button type="button" onclick="flipLightbox('y')" title="垂直翻转">翻↕</button>
+        <button type="button" onclick="saveLightboxOrient()" title="把当前旋转/镜像永久写回图片文件">保存旋转</button>
+      </div>
+      <div class="lb-window">
+        <label>亮度<input type="range" id="lbBright" min="50" max="150" value="100" oninput="setLbAdjust()"></label>
+        <label>对比<input type="range" id="lbContrast" min="50" max="150" value="100" oninput="setLbAdjust()"></label>
+      </div>
+      <button type="button" onclick="zoomLightbox(0)">复位</button>
+      <div class="lb-tool-sep"></div>
+      <button type="button" id="lbCompareBtn" onclick="toggleCompareMode()">对比</button>
+    </aside>
+
+    <figure class="image-lightbox-stage" role="dialog" aria-modal="true" aria-label="影像查看">
+      <div class="lb-panes" id="lbPanes">
+        <button type="button" class="image-lightbox-nav image-lightbox-prev" aria-label="上一张" onclick="stepImageLightbox(-1)">‹</button>
+        <button type="button" class="image-lightbox-nav image-lightbox-next" aria-label="下一张" onclick="stepImageLightbox(1)">›</button>
+        <div class="lb-pane active" id="lbPaneA" onclick="setCompareActiveSlot('A')"
+             ondragover="lbDragOver(event)" ondragleave="lbDragLeave(event)" ondrop="lbDrop(event,'A')">
+          <div class="lb-canvas-wrap" id="lbWrapA">
+            <img id="imageLightboxImg" alt="" draggable="false">
+            <canvas id="lbCanvasA"></canvas>
+          </div>
+        </div>
+        <div class="lb-pane" id="lbPaneB" hidden onclick="setCompareActiveSlot('B')"
+             ondragover="lbDragOver(event)" ondragleave="lbDragLeave(event)" ondrop="lbDrop(event,'B')">
+          <div class="lb-canvas-wrap" id="lbWrapB"><img id="imageLightboxImgB" alt=""></div>
+        </div>
+      </div>
+      <figcaption id="imageLightboxCaption" class="image-lightbox-caption"></figcaption>
+    </figure>
+  </div>
+  <script src="/vendor/echarts.min.js?v=2026-06-26-merged"></script>
+  <script src="/helpers.js?v=2026-07-17-workspace-leave-guard"></script>
+  <script src="/dict.js?v=2026-06-26-merged"></script>
+  <script src="/referral_source.js?v=2026-07-05-appprompt548"></script>
+  <script src="/follow_ups.js?v=2026-06-26-merged"></script>
+  <script src="/today_work.js?v=2026-07-22-ocr-main"></script>
+  <script src="/today_inspection.js?v=2026-07-14-tokens0"></script>
+  <script src="/billing_module.js?v=2026-07-15-reporterr803"></script>
+  <script src="/patient_module.js?v=2026-07-05-split"></script>
+  <script src="/customer_hub_v2_contract.js?v=2026-07-22-dialog-followup1"></script>
+  <script src="/customer_hub_v2_followup_date.js?v=2026-07-22-dialog-followup1"></script>
+  <script src="/customer_hub_v2.js?v=2026-07-22-dialog-followup1"></script>
+  <script src="/module_views.js?v=2026-07-22-ocr-main"></script>
+  <script src="/return_visit_card.js?v=2026-07-20-attachment-saga1"></script>
+  <script src="/audit_log.js?v=2026-07-27-charge-items"></script>
+  <script src="/endoscope_capture.js?v=2026-07-04-endohelper7"></script>
+  <script src="/workspace_billing.js?v=2026-07-16-accessv3"></script>
+  <script src="/workspace_lightbox.js?v=2026-07-16-ctstudies"></script>
+  <script src="/workspace_tabs.js?v=2026-07-17-workspace-leave-guard"></script>
+  <script src="/image_grouping.js?v=2026-07-04-endorec"></script>
+  <script src="/medical_editor.js?v=2026-07-17-r3snapshot"></script>
+  <script src="/tooth_chart.js?v=2026-06-26-merged"></script>
+  <script src="/treatment_plan_editor.js?v=2026-07-27-charge-items"></script>
+  <script src="/staff_manager.js?v=2026-07-19-access-tree"></script>
+  <script src="/config_center.js?v=2026-07-19-access-tree"></script>
+  <script src="/role_permissions.js?v=2026-07-19-access-tree"></script>
+  <script src="/consent_form.js?v=2026-06-29-sweep3"></script>
+  <script src="/treatment_order_editor.js?v=2026-07-08-clinicname"></script>
+  <script src="/lab_order_editor.js?v=2026-07-08-bjdate541"></script>
+  <script src="/appointment_editor.js?v=2026-07-08-bjdate541"></script>
+  <script src="/appointment_grid.js?v=2026-07-08-bjdate541"></script>
+  <script src="/appointment_views.js?v=2026-07-08-bjdate541"></script>
+  <script src="/sterilization.js?v=2026-07-05-appprompt548"></script>
+  <script src="/warehouse.js?v=2026-07-08-staffpick420"></script>
+  <script src="/date_range_picker.js?v=2026-07-10-rvcard1"></script>
+  <script src="/store_stats.js?v=2026-07-14-tokens0"></script>
+  <script src="/reports.js?v=2026-07-14-tokens0"></script>
+  <script src="/charge_items.js?v=2026-07-27-charge-items"></script>
+  <script src="/sterilize_dispatch.js?v=2026-07-05-appprompt548"></script>
+  <script src="/consult_surgery.js?v=2026-07-09-cs-fix2"></script>
+  <script src="/call_recordings.js?v=2026-07-20-attachment-saga1"></script>
+  <script src="/communications.js?v=2026-07-20-attachment-saga1"></script>
+  <script src="/oral_exam_tab.js?v=2026-07-08-staffpick420"></script>
+  <script src="/member_account.js?v=2026-07-17-r4reqid"></script>
+  <script src="/patient_tags.js?v=2026-06-26-merged"></script>
+  <script src="/patient_workspace.js?v=2026-07-26-rail-revisit-btn"></script>
+  <script src="/ai_drafts.js?v=2026-06-26-merged"></script>
+  <script src="/account_manager.js?v=2026-07-19-access-tree"></script>
+  <script src="/recycle_bin.js?v=2026-07-05-nav617"></script>
+  <script src="/app.js?v=2026-07-17-workspace-leave-guard"></script>
+</body>
+</html>

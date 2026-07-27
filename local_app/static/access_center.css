@@ -1,0 +1,664 @@
+.access-center-shell {
+  min-width: 0;
+}
+
+.access-center-shell * {
+  min-width: 0;
+}
+
+.access-center-shell > .panel-head {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.access-center-shell > .panel-body {
+  min-width: 0;
+}
+
+.access-center-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.access-center-staff {
+  min-width: 0;
+}
+
+.access-center-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.access-center-overview-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.access-center-overview-card span {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.access-center-overview-card strong {
+  color: var(--accent-dark);
+  font-size: var(--text-xl);
+  font-variant-numeric: tabular-nums;
+}
+
+.access-center-loading,
+.access-center-error,
+.access-staff-empty {
+  padding: var(--space-5);
+  color: var(--muted);
+  text-align: center;
+}
+
+.access-center-error,
+.access-center-form-error {
+  color: var(--danger);
+}
+
+.access-staff-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.access-staff-search {
+  flex: 2 1 260px;
+}
+
+.access-staff-role-filter,
+.access-staff-employment-filter,
+.access-staff-account-filter {
+  flex: 1 1 150px;
+}
+
+.access-staff-add {
+  flex: 0 0 auto;
+}
+
+.access-staff-list-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.access-staff-group {
+  min-width: 760px;
+}
+
+.access-staff-group + .access-staff-group {
+  border-top: 1px solid var(--line);
+}
+
+.access-staff-group-title {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  color: var(--accent-dark);
+  background: var(--accent-soft);
+  font-size: var(--text-sm);
+}
+
+.access-staff-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--line);
+}
+
+.access-staff-row.is-left {
+  color: var(--muted);
+  background: var(--surface-2);
+  opacity: 0.78;
+}
+
+.access-staff-row-main {
+  display: grid;
+  grid-template-columns:
+    minmax(100px, 0.8fr)
+    minmax(110px, 0.9fr)
+    minmax(150px, 1.2fr)
+    minmax(190px, 1.5fr)
+    minmax(110px, 0.9fr)
+    52px;
+  gap: var(--space-2);
+  align-items: center;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.access-staff-row-main:hover {
+  color: var(--accent-dark);
+}
+
+.access-staff-name {
+  font-weight: 700;
+}
+
+.access-staff-role,
+.access-staff-meta,
+.access-staff-sensitive,
+.access-staff-account,
+.access-staff-employment {
+  overflow-wrap: anywhere;
+  font-size: var(--text-sm);
+}
+
+.access-staff-role,
+.access-staff-account {
+  display: grid;
+  gap: 2px;
+}
+
+.access-staff-role-tag.is-secondary,
+.access-staff-admin-state {
+  color: var(--muted);
+}
+
+.access-staff-meta,
+.access-staff-sensitive {
+  color: var(--muted);
+}
+
+.access-staff-edit {
+  white-space: nowrap;
+}
+
+.access-center-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: rgba(16, 24, 40, 0.45);
+}
+
+.access-center-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+
+.access-center-modal-head,
+.access-center-modal-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface);
+}
+
+.access-center-modal-head {
+  border-bottom: 1px solid var(--line);
+}
+
+.access-center-modal-head h2 {
+  margin: 0;
+  font-size: var(--text-xl);
+}
+
+.access-center-modal-actions {
+  justify-content: flex-end;
+  border-top: 1px solid var(--line);
+}
+
+.access-center-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4);
+}
+
+.access-center-modal-body > :first-child {
+  margin-top: 0;
+}
+
+.access-center-modal-body > :last-child {
+  margin-bottom: 0;
+}
+
+.access-center-modal-body label {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.access-center-modal-body .access-center-form-error {
+  padding: var(--space-2) 0 0;
+}
+
+.access-staff-form-grid {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4);
+}
+
+.access-staff-form-grid label {
+  display: grid;
+  gap: var(--space-1);
+  align-content: start;
+}
+
+.access-staff-secondary-roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.access-staff-role-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.access-staff-form-note {
+  grid-column: 1 / -1;
+}
+
+.access-staff-form-note textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+
+.access-center-form-error {
+  flex: 0 0 auto;
+  min-height: 20px;
+  padding: 0 var(--space-4) var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.access-center-modal > p,
+.access-center-modal > ul,
+.access-center-modal > label {
+  margin-right: var(--space-4);
+  margin-left: var(--space-4);
+}
+
+.access-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(16, 24, 40, 0.45);
+}
+
+.access-sheet-panel {
+  position: fixed;
+  inset: 0 0 0 auto;
+  z-index: 81;
+  width: min(560px, 100vw);
+  height: 100%;
+  overflow: auto;
+  padding: 0 var(--space-4) var(--space-5);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+
+.access-sheet-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.access-sheet-head h2 {
+  margin: 0 0 var(--space-1);
+}
+
+.access-sheet-head > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.access-sheet-section {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.access-sheet-section h3 {
+  margin: 0 0 var(--space-2);
+}
+
+.access-sheet-section p {
+  overflow-wrap: anywhere;
+}
+
+.access-sheet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.access-role-center {
+  min-width: 0;
+}
+
+.access-role-layout {
+  display: grid;
+  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr) minmax(260px, 320px);
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.access-role-roles,
+.access-role-main,
+.access-role-impact,
+.access-role-system-capabilities {
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.access-role-roles {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
+}
+
+.access-role-roles [data-rp-region="roles"] {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.access-role-roles .rp-v3-role {
+  display: grid;
+  gap: var(--space-1);
+  width: 100%;
+  text-align: left;
+}
+
+.access-role-roles .rp-v3-role[aria-pressed="true"] {
+  color: var(--accent-dark);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.access-role-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.access-role-toolbar,
+.access-role-status,
+.access-role-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.access-role-toolbar {
+  justify-content: space-between;
+}
+
+.access-role-toolbar > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.access-role-toolbar label {
+  display: flex;
+  flex: 1 1 220px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.access-role-toolbar [data-rp-region="search"] {
+  flex: 1 1 180px;
+}
+
+.access-role-toolbar [data-rp-search] {
+  width: 100%;
+}
+
+.access-role-status {
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.access-role-actions {
+  min-width: 0;
+}
+
+.access-role-save {
+  max-width: 100%;
+  white-space: normal;
+}
+
+.access-role-tree {
+  min-width: 0;
+}
+
+.access-role-tree-root {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.access-role-tnode {
+  min-width: 0;
+}
+
+.access-role-trow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.access-role-trow:hover {
+  background: var(--accent-soft);
+}
+
+.access-role-trow input[type="checkbox"] {
+  flex: 0 0 auto;
+}
+
+.access-role-tarrow {
+  flex: 0 0 auto;
+  min-width: 1.75rem;
+  padding: 0 var(--space-1);
+  text-align: center;
+}
+
+.access-role-tcheck {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+}
+
+.access-role-tname {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.access-role-trow-module .access-role-tname {
+  font-weight: 600;
+}
+
+.access-role-tcount {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.access-role-tkids {
+  display: grid;
+  gap: 0;
+  padding-left: 26px;
+}
+
+.access-role-trow-leaf {
+  align-items: baseline;
+}
+
+.access-role-tleaf-label {
+  flex: 0 0 auto;
+}
+
+.access-role-tleaf-desc {
+  flex: 1 1 240px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.access-role-risk-tag {
+  flex: 0 0 auto;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.access-role-risk-sensitive {
+  color: var(--warn);
+  background: var(--warn-soft);
+}
+
+.access-role-risk-high {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.access-role-impact {
+  align-self: start;
+}
+
+.access-role-impact ul {
+  margin: var(--space-1) 0 var(--space-2);
+  padding-left: var(--space-4);
+  overflow-wrap: anywhere;
+}
+
+.access-role-system-capabilities {
+  margin-top: var(--space-4);
+}
+
+.access-role-system-capabilities ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.access-role-system-capabilities li {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+@media (max-width: 1180px) {
+  .access-role-layout {
+    grid-template-columns: 210px minmax(0, 1fr);
+  }
+
+  .access-role-impact {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .access-center-overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .access-center-modal-backdrop {
+    padding: var(--space-2);
+  }
+
+  .access-center-modal {
+    width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+  }
+
+  .access-staff-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .access-staff-form-note {
+    grid-column: auto;
+  }
+
+  .access-sheet-panel {
+    width: 100vw;
+  }
+
+  .access-role-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .access-role-impact {
+    grid-column: auto;
+  }
+
+  .access-role-tkids {
+    padding-left: 18px;
+  }
+}

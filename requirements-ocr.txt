@@ -1,0 +1,13 @@
+# 拍照建档 OCR —— 可选依赖，仅 macOS。
+#
+# 大多数情况**不用装**：macOS 系统自带的 python3（/usr/bin/python3，即 Xcode 命令行工具那个）
+# 已经预装了 pyobjc，Vision 框架开箱可用。本诊所生产环境就是这么跑的。
+#
+# 只有当你用 Homebrew / pyenv / conda 装的 Python 跑本项目时，才需要：
+#     pip install -r requirements-ocr.txt
+#
+# 不装也不影响任何现有功能：识别引擎缺失时，「拍照识别」入口自动隐藏，接口返回 503。
+# 非 macOS（Windows / Linux）装不上，也不需要装。
+
+pyobjc-framework-Vision>=10
+pyobjc-framework-Quartz>=10
