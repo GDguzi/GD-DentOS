@@ -40,7 +40,7 @@ SCHEMA_PATH = APP_DIR / "schema.sql"
 DEFAULT_DB_PATH = Path(os.environ.get("DENTAL_DB") or (APP_DIR / "data" / "clinic.sqlite3"))
 
 # 诊所名唯一真相源：存 app_settings key='clinic'；未配置时用中性默认(不硬编码具体诊所)。
-DEFAULT_CLINIC_NAME = "口腔门诊部"
+DEFAULT_CLINIC_NAME = "GD · DentOS"
 
 
 def clinic_display_name(db_path=DEFAULT_DB_PATH):

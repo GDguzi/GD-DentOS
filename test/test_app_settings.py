@@ -64,7 +64,7 @@ class AppSettingsTest(unittest.TestCase):
     def test_clinic_default_and_update(self):
         with tempfile.TemporaryDirectory() as tmp:
             client = self._client(tmp)
-            self.assertEqual(client.get("/api/settings/clinic").json()["name"], "口腔门诊部")   # 中性默认
+            self.assertEqual(client.get("/api/settings/clinic").json()["name"], "GD · DentOS")   # 中性默认
             r = client.put("/api/settings/clinic", json={"name": "测试口腔诊所"})
             self.assertEqual(r.status_code, 200)
             self.assertEqual(client.get("/api/settings/clinic").json()["name"], "测试口腔诊所")

@@ -435,7 +435,7 @@ function openReceiptPrint(opts) {
       .tot{display:flex;justify-content:space-between;font-size:13px;margin-top:8px;font-weight:700;}
       .foot{text-align:center;color:#8a96a3;font-size:11px;margin-top:14px;}
     </style></head><body onload="window.print()">
-    <h2>${escapeHtml(window.CLINIC_NAME || "口腔门诊部")}</h2>
+    <h2>${escapeHtml(window.CLINIC_NAME || "GD · DentOS")}</h2>
     <div class="sub">${escapeHtml(opts.subtitle || "收费凭单")}</div>
     <div class="meta">${metaLines.join("<br>")}</div>
     <table><thead><tr><th>项目</th><th>牙位</th><th class="r">单价</th><th class="r">数量</th><th class="r">金额</th></tr></thead><tbody>${rows || '<tr><td colspan="5">（无明细）</td></tr>'}</tbody></table>

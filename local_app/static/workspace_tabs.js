@@ -245,7 +245,7 @@ function renderWorkspaceMedicalCardBody(row) {
   return `
     <div class="medical-card-head official-card-head">
       <span class="card-head-field">就诊时间：<strong>${escapeHtml(formatVisitTimeText(row.visit_time || row.updated_at || ""))}</strong></span>
-      <span class="card-head-field">就诊诊所：${escapeHtml(window.CLINIC_NAME || "口腔门诊部")}</span>
+      <span class="card-head-field">就诊诊所：${escapeHtml(window.CLINIC_NAME || "GD · DentOS")}</span>
       ${row.doctor_name ? `<span class="card-head-field">医生：${escapeHtml(row.doctor_name)}</span>` : ""}
       ${nurse ? `<span class="card-head-field">护士：${escapeHtml(nurse)}</span>` : ""}
       ${row.record_type ? `<span class="record-type-stamp">${escapeHtml(row.record_type)}</span>` : ""}
@@ -501,7 +501,7 @@ function toggleAppointmentEdit(appointmentId) {
   if (edit) edit.hidden = !edit.hidden;
 }
 
-let RV_CLINIC = "口腔门诊部";   // 就诊诊所名(从 /api/settings/clinic 读，可在设置里改；默认=后端中性默认)
+let RV_CLINIC = "GD · DentOS";   // 就诊诊所名(从 /api/settings/clinic 读，可在设置里改；默认=后端中性默认)
 
 // 同步来的回访文本常带转义的 \n 和包裹引号 → 还原换行、去引号后安全渲染
 function rvText(s) {
