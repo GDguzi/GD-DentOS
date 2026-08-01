@@ -1,5 +1,5 @@
 """应用设置：预约界面设置（营业时间/最小单位/是否分医生列），驱动预约天/周视图网格。
-规格：docs/官方规格/预约.md「预约界面设置」。单店一份配置，存通用 KV 表。"""
+单店一份配置，存通用 KV 表。"""
 import json
 import re
 from pathlib import Path
