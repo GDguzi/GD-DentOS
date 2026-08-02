@@ -67,6 +67,20 @@ jobs:
             dist/good-dental-clinic.exe
             dist/good-dental-clinic-windows.zip
 
+      # Word 版说明书由同名 markdown 现转，保证随包发出的永远是最新内容
+      - name: 生成 Word 版说明书
+        shell: bash
+        run: |
+          set -euo pipefail
+          pandoc=$(command -v pandoc || true)
+          if [ -z "${pandoc}" ]; then
+            choco install pandoc -y --no-progress >/dev/null
+            pandoc="/c/Program Files/Pandoc/pandoc.exe"
+          fi
+          "${pandoc}" docs/产品手册.md -o dist/产品手册.docx
+          "${pandoc}" docs/常见问题解答.md -o dist/常见问题解答.docx
+          "${pandoc}" README.md -o dist/使用说明.docx
+
       - name: 打标签时挂到 Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
@@ -74,10 +88,13 @@ jobs:
           files: |
             dist/good-dental-clinic.exe
             dist/good-dental-clinic-windows.zip
+            dist/产品手册.docx
+            dist/常见问题解答.docx
+            dist/使用说明.docx
 
       # 同一份 exe 同步一份到 Gitee 发行版（国内用户打不开 GitHub）。
       # 需在仓库 Secrets 配 GITEE_TOKEN（Gitee 个人设置 → 私人令牌，勾 projects 权限）；没配则跳过。
-      - name: 同步 exe 到 Gitee 发行版
+      - name: 同步安装包与说明书到 Gitee 发行版
         if: startsWith(github.ref, 'refs/tags/')
         shell: bash
         env:
@@ -98,7 +115,8 @@ jobs:
           # 已存在同名附件就跳过，避免重跑挂出两份
           have=$(curl -sf "${API}/releases/${id}/attach_files?access_token=${GITEE_TOKEN}" \
                  | python -c "import json,sys;print(' '.join(a['name'] for a in json.load(sys.stdin)))")
-          for f in dist/good-dental-clinic.exe dist/good-dental-clinic-windows.zip; do
+          for f in dist/good-dental-clinic.exe dist/good-dental-clinic-windows.zip \
+                   dist/产品手册.docx dist/常见问题解答.docx dist/使用说明.docx; do
             n=$(basename "$f")
             case " ${have} " in *" ${n} "*) echo "Gitee 已有 ${n}，跳过"; continue;; esac
             curl -sf -X POST "${API}/releases/${id}/attach_files" \
