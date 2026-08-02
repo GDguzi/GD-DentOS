@@ -1,6 +1,7 @@
-name: build-windows-exe
+name: build-release
 
-# Windows 一键 exe 自动构建：打 v* 标签自动构建并挂到 Release；也可在 Actions 页手动触发。
+# 一键包自动构建：打 v* 标签自动出 Windows exe + macOS 包，挂到 GitHub Release
+# 并同步到 Gitee 发行版；也可在 Actions 页手动触发（手动触发只构建、不发布）。
 on:
   workflow_dispatch:
   push:
@@ -10,7 +11,7 @@ permissions:
   contents: write   # 打标签时创建 Release 需要;默认令牌只读会报 Resource not accessible
 
 jobs:
-  build:
+  windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -62,41 +63,95 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: good-dental-windows
+          name: pkg-windows
           path: |
             dist/good-dental-clinic.exe
             dist/good-dental-clinic-windows.zip
 
-      # Word 版说明书由同名 markdown 现转，保证随包发出的永远是最新内容
-      - name: 生成 Word 版说明书
-        shell: bash
+  macos:
+    # macos-latest 是 Apple 芯片(arm64)机器，产物只适用于 M 系列 Mac；
+    # 老款 Intel Mac 走源码方式（README 快速开始）。
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 安装依赖与 PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: 打包一键包
+        run: pyinstaller packaging/macos/good-dental-mac.spec --distpath dist --workpath build --clean --noconfirm
+
+      - name: 冒烟——启动、健康检查、登录页 200
         run: |
           set -euo pipefail
-          pandoc=$(command -v pandoc || true)
-          if [ -z "${pandoc}" ]; then
-            choco install pandoc -y --no-progress >/dev/null
-            pandoc="/c/Program Files/Pandoc/pandoc.exe"
-          fi
-          "${pandoc}" docs/产品手册.md -o dist/产品手册.docx
-          "${pandoc}" docs/常见问题解答.md -o dist/常见问题解答.docx
-          "${pandoc}" README.md -o dist/使用说明.docx
+          mkdir -p smoke && cp dist/good-dental-clinic smoke/
+          cd smoke
+          # BROWSER=/usr/bin/true：CI 无桌面，别让 webbrowser.open 卡住
+          BROWSER=/usr/bin/true DENTAL_PORT=8892 ./good-dental-clinic > out.log 2>&1 &
+          pid=$!
+          ok=0
+          for i in $(seq 1 300); do
+            kill -0 $pid 2>/dev/null || break
+            if curl -sf -o /dev/null http://127.0.0.1:8892/api/health; then ok=1; break; fi
+            sleep 1
+          done
+          if [ "$ok" != "1" ]; then grep -v "已建管理员" out.log || true; kill $pid 2>/dev/null || true; exit 1; fi
+          curl -sf -o /dev/null http://127.0.0.1:8892/ || { kill $pid 2>/dev/null || true; exit 1; }
+          echo "smoke ok: health 200 / login page 200"
+          kill $pid 2>/dev/null || true
 
-      - name: 打标签时挂到 Release
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: 打包 zip（改名 .command 才能双击启动）
+        run: |
+          set -euo pipefail
+          cp dist/good-dental-clinic dist/good-dental-clinic.command
+          chmod +x dist/good-dental-clinic.command
+          cd dist && zip -q good-dental-clinic-mac.zip good-dental-clinic.command
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkg-macos
+          path: dist/good-dental-clinic-mac.zip
+
+  release:
+    needs: [windows, macos]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest   # 中文文件名在 Linux 上收发正常，Windows runner 的 curl 读不了
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: art
+
+      - name: 收拢产物 + 现转 Word 说明书
+        run: |
+          set -euo pipefail
+          mkdir -p dist && find art -type f -exec mv {} dist/ \;
+          command -v pandoc >/dev/null || sudo apt-get install -y -qq pandoc
+          pandoc docs/产品手册.md -o dist/产品手册.docx
+          pandoc docs/常见问题解答.md -o dist/常见问题解答.docx
+          pandoc README.md -o dist/使用说明.docx
+          ls -lh dist
+
+      # GitHub 附件名不能用中文——action 会改名成 default.docx 并报 404（v0.1.2 踩过）。
+      # Word 版只挂 Gitee，GitHub 侧受众看 markdown 即可。
+      - name: 挂到 GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          # 注意：GitHub 附件名不能用中文——action 上传后会改名成 default.docx 并报
-          # "Not Found - update-a-release-asset"（v0.1.2 首跑踩过）。Word 版只挂 Gitee，
-          # 那边中文名正常；GitHub 侧受众看 markdown 即可。
           files: |
             dist/good-dental-clinic.exe
             dist/good-dental-clinic-windows.zip
+            dist/good-dental-clinic-mac.zip
 
-      # 同一份 exe 同步一份到 Gitee 发行版（国内用户打不开 GitHub）。
+      # 同一批产物同步到 Gitee 发行版（国内用户打不开 GitHub）。
       # 需在仓库 Secrets 配 GITEE_TOKEN（Gitee 个人设置 → 私人令牌，勾 projects 权限）；没配则跳过。
-      - name: 同步安装包与说明书到 Gitee 发行版
-        if: startsWith(github.ref, 'refs/tags/')
-        shell: bash
+      - name: 同步到 Gitee 发行版
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           GITEE_REPO: gubaoye/GD-DentOS
@@ -104,19 +159,19 @@ jobs:
           set -euo pipefail
           if [ -z "${GITEE_TOKEN:-}" ]; then echo "未配置 GITEE_TOKEN，跳过 Gitee 同步"; exit 0; fi
           API="https://gitee.com/api/v5/repos/${GITEE_REPO}"
-          jget() { python -c "import json,sys;print(json.load(sys.stdin)$1)"; }
+          jget() { python3 -c "import json,sys;d=json.load(sys.stdin);print(d$1 if d else '')"; }
           id=$(curl -sf "${API}/releases/tags/${GITHUB_REF_NAME}?access_token=${GITEE_TOKEN}" | jget "['id']" || true)
           if [ -z "${id}" ]; then
             id=$(curl -sf -X POST "${API}/releases" \
               -F "access_token=${GITEE_TOKEN}" -F "tag_name=${GITHUB_REF_NAME}" \
-              -F "name=${GITHUB_REF_NAME}" -F "body=Windows 一键版，下载 exe 双击即用。安装见 docs/产品手册.md。" \
+              -F "name=${GITHUB_REF_NAME}" -F "body=Windows / macOS 一键版，下载即用。安装见 docs/产品手册.md。" \
               -F "target_commitish=main" \
               | jget "['id']") || { echo "Gitee 建发行版失败——先把标签推到 Gitee：git push <gitee远程> ${GITHUB_REF_NAME}"; exit 1; }
           fi
           # 已存在同名附件就跳过，避免重跑挂出两份
           have=$(curl -sf "${API}/releases/${id}/attach_files?access_token=${GITEE_TOKEN}" \
-                 | python -c "import json,sys;print(' '.join(a['name'] for a in json.load(sys.stdin)))")
-          for f in dist/good-dental-clinic.exe dist/good-dental-clinic-windows.zip \
+                 | python3 -c "import json,sys;print(' '.join(a['name'] for a in json.load(sys.stdin)))")
+          for f in dist/good-dental-clinic.exe dist/good-dental-clinic-windows.zip dist/good-dental-clinic-mac.zip \
                    dist/产品手册.docx dist/常见问题解答.docx dist/使用说明.docx; do
             n=$(basename "$f")
             case " ${have} " in *" ${n} "*) echo "Gitee 已有 ${n}，跳过"; continue;; esac
