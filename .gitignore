@@ -15,3 +15,6 @@ __pycache__/
 *.pyc
 dist/
 build/
+
+# Word 版说明书由发版流水线现转，不进仓库
+*.docx
