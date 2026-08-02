@@ -110,6 +110,7 @@ jobs:
             id=$(curl -sf -X POST "${API}/releases" \
               -F "access_token=${GITEE_TOKEN}" -F "tag_name=${GITHUB_REF_NAME}" \
               -F "name=${GITHUB_REF_NAME}" -F "body=Windows 一键版，下载 exe 双击即用。安装见 docs/产品手册.md。" \
+              -F "target_commitish=main" \
               | jget "['id']") || { echo "Gitee 建发行版失败——先把标签推到 Gitee：git push <gitee远程> ${GITHUB_REF_NAME}"; exit 1; }
           fi
           # 已存在同名附件就跳过，避免重跑挂出两份
