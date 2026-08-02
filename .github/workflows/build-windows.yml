@@ -74,3 +74,34 @@ jobs:
           files: |
             dist/good-dental-clinic.exe
             dist/good-dental-clinic-windows.zip
+
+      # 同一份 exe 同步一份到 Gitee 发行版（国内用户打不开 GitHub）。
+      # 需在仓库 Secrets 配 GITEE_TOKEN（Gitee 个人设置 → 私人令牌，勾 projects 权限）；没配则跳过。
+      - name: 同步 exe 到 Gitee 发行版
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_REPO: gubaoye/GD-DentOS
+        run: |
+          set -euo pipefail
+          if [ -z "${GITEE_TOKEN:-}" ]; then echo "未配置 GITEE_TOKEN，跳过 Gitee 同步"; exit 0; fi
+          API="https://gitee.com/api/v5/repos/${GITEE_REPO}"
+          jget() { python -c "import json,sys;print(json.load(sys.stdin)$1)"; }
+          id=$(curl -sf "${API}/releases/tags/${GITHUB_REF_NAME}?access_token=${GITEE_TOKEN}" | jget "['id']" || true)
+          if [ -z "${id}" ]; then
+            id=$(curl -sf -X POST "${API}/releases" \
+              -F "access_token=${GITEE_TOKEN}" -F "tag_name=${GITHUB_REF_NAME}" \
+              -F "name=${GITHUB_REF_NAME}" -F "body=Windows 一键版，下载 exe 双击即用。安装见 docs/产品手册.md。" \
+              | jget "['id']") || { echo "Gitee 建发行版失败——先把标签推到 Gitee：git push <gitee远程> ${GITHUB_REF_NAME}"; exit 1; }
+          fi
+          # 已存在同名附件就跳过，避免重跑挂出两份
+          have=$(curl -sf "${API}/releases/${id}/attach_files?access_token=${GITEE_TOKEN}" \
+                 | python -c "import json,sys;print(' '.join(a['name'] for a in json.load(sys.stdin)))")
+          for f in dist/good-dental-clinic.exe dist/good-dental-clinic-windows.zip; do
+            n=$(basename "$f")
+            case " ${have} " in *" ${n} "*) echo "Gitee 已有 ${n}，跳过"; continue;; esac
+            curl -sf -X POST "${API}/releases/${id}/attach_files" \
+              -F "access_token=${GITEE_TOKEN}" -F "file=@${f}" -o /dev/null
+            echo "已上传到 Gitee：${n}"
+          done
