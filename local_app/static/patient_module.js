@@ -178,7 +178,7 @@ function renderTodayCard(a) {
     </div>`;
 }
 
-// 可折叠分组(对标官方∧/∨)：空组也显示(如 今日点诊 0)
+// 可折叠分组：空组也显示(如 今日点诊 0)
 function renderTodayGroup(label, list) {
   const folded = !!(patientCenterState.todayFold && patientCenterState.todayFold[label]);
   const header = `<button type="button" class="pc-today-grouphd" data-today-fold="${escapeAttr(label)}">

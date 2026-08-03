@@ -1,4 +1,4 @@
-// 预约·天视图泳道排班网格(对标 SaaS)：左小月历 + 主区「时间轴行 × 医生泳道列」。
+// 预约·天视图泳道排班网格：左小月历 + 主区「时间轴行 × 医生泳道列」。
 // 预约块按 start/end 落格、状态配色；点块弹患者卡片；点空格新增预约预填医生+时段。
 // 取数：/api/settings/appointment(营业时间/最小单位/医生列) + /api/staff-members?role=医生 + /api/appointments?date=
 

@@ -44,7 +44,7 @@ function staffByRole(role) {
   return (staffCache || []).filter(m => m.role === role || (m.roles || []).includes(role));
 }
 
-// 选人 datalist 机制(对标 dict.js 的 data-dict)：给 <input data-staff-role="医生"> 自动挂
+// 选人 datalist 机制(同 dict.js 的 data-dict)：给 <input data-staff-role="医生"> 自动挂
 // 员工建议项，可搜可自由填(外院医生/临时名字照填)，契合"都可以填"。多岗位走 staffByRole 匹配。
 async function ensureStaffDatalist(role) {
   await ensureStaff();

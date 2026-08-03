@@ -1,4 +1,4 @@
-"""对账日历(对标 SaaS)：某月每天 收/支/合 + 月合计。用户拍板 支=当日退费。"""
+"""对账日历：某月每天 收/支/合 + 月合计。用户拍板 支=当日退费。"""
 import json
 import tempfile
 import unittest

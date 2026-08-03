@@ -59,7 +59,7 @@ class QueueStatusTest(unittest.TestCase):
             self.assertEqual(a1b["arrived_at"], arrived_first)  # 到达时刻不被覆盖
 
     def test_visit_stage_flow_and_revert(self):
-        # 就诊状态流(对标官方)：确认→到达→分诊→完成治疗→离开 + 回退清时间戳
+        # 就诊状态流：确认→到达→分诊→完成治疗→离开 + 回退清时间戳
         with tempfile.TemporaryDirectory() as tmp:
             client = self._setup(tmp)
             def put(s):

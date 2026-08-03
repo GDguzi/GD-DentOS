@@ -1,4 +1,4 @@
-// 预约·月视图 + 列表视图(对标 SaaS)。复用 appointment_grid.js 的 localISO/apptBlockClass/apptStatusLabel。
+// 预约·月视图 + 列表视图。复用 appointment_grid.js 的 localISO/apptBlockClass/apptStatusLabel。
 // 月视图：7列月历格,格内堆当天预约条,点格→天视图。列表视图：筛选条+表格+操作。
 
 let _apptMonthToken = 0;
@@ -98,7 +98,7 @@ function bindMonthView(container) {
     }));
 }
 
-// ====== 列表视图(对标 SaaS 表格) ======
+// ====== 列表视图 ======
 async function loadAppointmentListView() {
   if (!modulePanel) return;
   const token = ++_apptListToken;

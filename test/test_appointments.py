@@ -167,7 +167,7 @@ class AppointmentApiTest(unittest.TestCase):
             self.assertEqual(row["cancel_reason"], "患者临时有事")
 
     def test_create_with_visit_type_and_extras(self):
-        # 预约对标③：创建带就诊类型 + 待确定/咨询师/患者来源(落 source_json)
+        # 预约用例③：创建带就诊类型 + 待确定/咨询师/患者来源(落 source_json)
         import json as _json
         with tempfile.TemporaryDirectory() as tmp:
             db, client = self._client(tmp)

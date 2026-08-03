@@ -310,7 +310,7 @@ def create_reports_router(db_path):
     @router.get("/api/reports/cashier-query")
     def cashier_query_detail(date_from: str = "", date_to: str = "", doctor: str = "", source: str = "", method: str = "", operator: str = ""):
         require_access("report.cashier.view")
-        """收银查询(对标 SaaS)：逐笔收款 + 付款方式 + 处置类别分摊，按日期/医生/来源/方式/收银员筛。"""
+        """收银查询：逐笔收款 + 付款方式 + 处置类别分摊，按日期/医生/来源/方式/收银员筛。"""
         df, dt_ = _cashier_query_window(date_from, date_to)
         with connect(db_path) as conn:
             rows = build_cashier_rows(conn, df, dt_, doctor.strip(), source.strip(), method.strip(), operator.strip())

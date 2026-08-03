@@ -167,10 +167,10 @@ def build_cashier_rows(conn, date_from, date_to, doctor="", source="", method=""
 
 
 def arrears_flows(conn, date_from, date_to):
-    """欠款流水(对标 SaaS 收入统计的期初/期末欠款 + 每日新增/补交欠款)。
+    """欠款流水(收入统计口径：期初/期末欠款 + 每日新增/补交欠款)。
 
     欠款绝对值以 **bills.paid_fee 口径** 锚定(= 现有 bill_net_arrears_sql，与全项目一致、SaaS 同步维护)——
-    不用 payments 表逐笔重建(实测本地约 195 万收款无有效账单可挂[空 bill_id 的预交/储值等]，
+    不用 payments 表逐笔重建(存在大量收款无有效账单可挂[空 bill_id 的预交/储值等]，
     重建会把欠款虚高一个数量级)。口径：
     - 净应收 = total_fee − 优惠(DiscountFee)，仅有效账单(排作废)；当前欠款 = Σ(净应收 − paid_fee)。
     - 期末欠款(date_to) = 当前欠款 + 期后收款(pay_time>date_to) − 期后新开账单净应收(bill_time>date_to)
@@ -288,7 +288,7 @@ def income_payload(conn, date_from, date_to):
         d = day_map.setdefault(r["day"], {"date": r["day"], "count": 0, "amount": 0.0, "methods": {}, "receivable": 0.0})
         d["receivable"] = r["receivable"]
 
-    # 欠款流水(对标 SaaS 收入统计：期初/期末欠款 + 每日新增/补交欠款)
+    # 欠款流水(收入统计口径：期初/期末欠款 + 每日新增/补交欠款)
     flows = arrears_flows(conn, date_from, date_to)
     for day_key, f in flows["per_day"].items():
         d = day_map.setdefault(day_key, {"date": day_key, "count": 0, "amount": 0.0, "methods": {}, "receivable": 0.0})
@@ -539,7 +539,7 @@ def age_from_birthday(birthday):
 
 
 def daily_settlement_rows(conn, start, end, consultant):
-    """日结报表明细(对标 SaaS)：每条就诊(病历)一行 + 患者信息 + 该就诊账单财务。
+    """日结报表明细：每条就诊(病历)一行 + 患者信息 + 该就诊账单财务。
     就诊→账单同 _doctor_perf(study 精确→同患者同日退化)。会员/储值等本地无数据的列留空(禁止兜底)。"""
     disc = bill_discount_sql("")
     active = active_bill_clause("state")
@@ -680,7 +680,7 @@ def emr_text(content_json, key):
 
 
 def clinic_log_rows(conn, start, end, doctor):
-    """门诊日志(对标 SaaS)：每条就诊一行。就诊日期/病历号/姓名/年龄/医生/科室/就诊类型/家庭住址/
+    """门诊日志：每条就诊一行。就诊日期/病历号/姓名/年龄/医生/科室/就诊类型/家庭住址/
     临床初步判断(病历 DG 诊断)/临床诊断措施(病历 TR 治疗)/病人去向。科室、病人去向本地无字段→留空(禁止兜底)。"""
     rows = conn.execute(
         """

@@ -42,7 +42,7 @@ function setAppointmentStatusFilter(value) {
 
 async function loadAppointmentModule() {
   if (!modulePanel) return;
-  // 四视图均对标 SaaS：天=泳道网格 / 周=7天网格 / 月=月历 / 列表=表格
+  // 四视图：天=泳道网格 / 周=7天网格 / 月=月历 / 列表=表格
   if (appointmentView === "day" && typeof loadAppointmentDayGrid === "function") return loadAppointmentDayGrid();
   if (appointmentView === "week" && typeof loadAppointmentWeekView === "function") return loadAppointmentWeekView();
   if (appointmentView === "month" && typeof loadAppointmentMonthView === "function") return loadAppointmentMonthView();

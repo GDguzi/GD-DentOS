@@ -146,7 +146,7 @@ function renderCardItems(items) {
   return groups.map(g => medicalSubjectBlock(g.label, g.entries)).join("");
 }
 
-// 顶部「+ 新建病历」：对标官方——弹全屏「病历填写」覆盖层（sentinel record_id "new"）。
+// 顶部「+ 新建病历」：弹全屏「病历填写」覆盖层（sentinel record_id "new"）。
 async function openNewMedicalRecord() {
   openMedicalEditorOverlay({
     record_id: "new",
@@ -162,7 +162,7 @@ function cancelNewMedicalRecord() {
   closeMedicalEditorOverlay();
 }
 
-// 全屏病历填写覆盖层（对标官方：左模板树+右详细病历数据+底部操作条）
+// 全屏病历填写覆盖层（左模板树+右详细病历数据+底部操作条）
 function openMedicalEditorOverlay(row) {
   const overlay = document.getElementById("medicalEditorOverlay");
   const body = overlay ? overlay.querySelector("[data-editor-overlay-body]") : null;
@@ -270,7 +270,7 @@ function workspaceMedicalCardEl(recordId) {
   return document.querySelector(`[data-medical-card="${cssEscape(recordId)}"]`);
 }
 
-// 「修改」：对标官方——弹全屏「病历填写」覆盖层编辑该病历。
+// 「修改」：弹全屏「病历填写」覆盖层编辑该病历。
 function editWorkspaceMedicalCard(recordId) {
   const row = findWorkspaceMedicalRecord(recordId);
   if (!row) return;
@@ -511,7 +511,7 @@ function rvText(s) {
   return escapeHtml(t).replace(/\n/g, "<br>");
 }
 
-// 患者档案回访卡(对标官方"回访就诊")：头部(时间/回访人/诊所/斜章/操作)+正文(就诊时间/回访内容/回访类型)
+// 患者档案回访卡：头部(时间/回访人/诊所/斜章/操作)+正文(就诊时间/回访内容/回访类型)
 function renderReturnVisit(row) {
   const id = escapeAttr(row.return_visit_id);
   const revision = escapeAttr(row.revision);

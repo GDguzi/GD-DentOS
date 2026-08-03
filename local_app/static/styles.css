@@ -926,7 +926,7 @@ select,
 .tq-op.done { background: var(--accent); color: var(--white); }
 .tq-op.done:hover { filter: brightness(1.04); }
 .tq-op.owe { background: var(--danger-soft); color: var(--danger); font-weight: 600; }
-/* 就诊状态流(对标官方)：连体状态步 + 下一步高亮 + ⋯次级菜单 */
+/* 就诊状态流：连体状态步 + 下一步高亮 + ⋯次级菜单 */
 .tq-step { flex: 0 0 36px; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; border: 0; background: var(--white); padding: 3px 0; font-size: 11px; color: var(--muted); cursor: pointer; border-right: 1px solid var(--line); white-space: nowrap; text-align: center; transition: background .12s, color .12s; }
 .tq-ic { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; display: block; }
 .tq-lbl { font-size: 9.5px; line-height: 1.1; }
@@ -1278,7 +1278,7 @@ select,
   flex: 1;
 }
 
-/* === 患者管理中心：三 tab + 分类栏 + 卡片(对标官方) === */
+/* === 患者管理中心：三 tab + 分类栏 + 卡片 === */
 .patient-center-tabs {
   gap: 4px;
   border-bottom: 1px solid var(--line);
@@ -3536,7 +3536,7 @@ textarea {
 .tooth-item-form textarea { min-height: 50px; }
 .tooth-item-form-actions { display: flex; gap: 10px; align-items: center; }
 
-/* === 病历编辑器官方版面 (对标 docs/官方UI截图/04) === */
+/* === 病历编辑器全屏版面 === */
 .official-editor .editor-topbar {
   display: flex;
   align-items: center;
@@ -3662,7 +3662,7 @@ textarea {
 }
 .editor-save-btn:hover { background: var(--accent-dark); }
 
-/* === 官方版牙位选择器 (对标 docs/官方UI截图/05) === */
+/* === 牙位选择器弹窗 === */
 .official-tooth-modal { min-width: 680px; max-width: 720px; }
 /* 覆盖旧版四象限两列网格：官方版上下两排牙弓 */
 .official-tooth-modal .tooth-grid {
@@ -3706,7 +3706,7 @@ textarea {
   cursor: pointer;
 }
 
-/* === 全屏病历填写覆盖层 (对标官方弹出新页面) === */
+/* === 全屏病历填写覆盖层  === */
 .editor-overlay {
   position: fixed;
   inset: 0;
@@ -4027,7 +4027,7 @@ body.editor-overlay-open { overflow: hidden; }
 .bill-pay-row { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
 .bill-pay-btn { padding: 3px 14px; border: 1px solid var(--accent); border-radius: 6px; background: var(--accent); color: var(--white); font-size: 13px; cursor: pointer; }
 .bill-pay-btn:hover { filter: brightness(1.05); }
-/* 账单列表表格(对标官方收费页) */
+/* 账单列表表格 */
 .bill-table-wrap { overflow-x: auto; }
 .bill-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .bill-table th, .bill-table td { padding: 8px 10px; border-bottom: 1px solid #eef1f4; text-align: left; white-space: nowrap; }
@@ -4323,7 +4323,7 @@ body.editor-overlay-open { overflow: hidden; }
 .appt-item-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 10px; margin-bottom: 6px; }
 .appt-item-opt { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--ink); font-weight: 400; cursor: pointer; white-space: nowrap; }
 
-/* ===== 新增预约弹窗:三栏(日历+时段表+项目)对标官方 ===== */
+/* ===== 新增预约弹窗:三栏(日历+时段表+项目) ===== */
 .appt-modal-wide { width: min(1040px, 97vw); }
 /* 高度+滚动放在每一栏(非容器):否则 grid 列高=内容高、超出被容器裁掉、缺 min-height:0 列也滚不动 */
 /* #543:78vh 是拍脑袋的固定值,没扣 modal-head/modal-actions 高度,720p 下三者叠加超 90vh,
@@ -4467,7 +4467,7 @@ body.editor-overlay-open { overflow: hidden; }
 .appt-rec-item { color: var(--muted); }
 .appt-resched-badge { font-size: 12px; color: var(--warn); background: #fff3e0; border: 1px solid #ffd9a8; border-radius: 10px; padding: 1px 8px; white-space: nowrap; }
 .appt-rec-edit { padding-top: 8px; border-top: 1px dashed var(--line); margin-top: 4px; }
-/* 回访就诊卡(对标官方) */
+/* 回访就诊卡 */
 .rv-card { border: 1px solid var(--line); border-radius: 8px; padding: 0; margin-bottom: 12px; overflow: hidden; }
 .rv-card-head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 10px 14px; background: #f7faf9; border-bottom: 1px solid var(--line); position: relative; }
 .rv-card-time { color: var(--accent-dark); font-weight: 700; font-size: 15px; }
@@ -4758,7 +4758,7 @@ body.editor-overlay-open { overflow: hidden; }
 .rpt-note { font-size: 12px; color: var(--muted); margin: 0 2px 12px; }
 .rpt-filter .ord-input { max-width: 200px; }
 
-/* === 店内统计：SaaS 风格左竖菜单 + 内容区(对标本店统计截图) === */
+/* === 店内统计：左竖菜单 + 内容区 === */
 /* 不设 overflow:hidden——会裁掉日期选择器等绝对定位弹层；圆角靠子元素自身处理。 */
 .rpt-shell { display: flex; min-height: 560px; background: var(--white); border: 1px solid var(--line); border-radius: 12px; }
 .rpt-sidenav { flex: 0 0 168px; background: #fafbfc; border-right: 1px solid #eef1ef; padding: 12px 10px;

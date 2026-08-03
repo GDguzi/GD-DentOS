@@ -129,7 +129,7 @@ def create_today_work_router(db_path):
                     "and coalesce(amount, 0) > 0 and coalesce(state, '') != '1' limit 1",
                     (pid, work_date),
                 ).fetchone() is not None
-                # 卡片状态标签(对标官方今日卡)：影像/未来预约/回访/分组
+                # 卡片状态标签：影像/未来预约/回访/分组
                 appt["has_image"] = conn.execute(
                     "select 1 from patient_images where patient_identity = ? limit 1", (pid,)
                 ).fetchone() is not None

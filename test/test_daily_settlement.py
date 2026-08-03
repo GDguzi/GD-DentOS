@@ -1,4 +1,4 @@
-"""日结报表明细(对标 SaaS)：每条就诊一行 + 患者信息 + 账单财务。"""
+"""日结报表明细：每条就诊一行 + 患者信息 + 账单财务。"""
 import json
 import tempfile
 import unittest

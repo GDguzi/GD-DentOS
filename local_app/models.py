@@ -15,7 +15,7 @@ class PatientSnapshot:
     address: Optional[str] = None
 
 
-# 就诊状态流(对标官方)：待确认0 → 预约确认1 → 预约到达2 → 预约分诊3 → 完成治疗4 → 患者离开5；
+# 就诊状态流：待确认0 → 预约确认1 → 预约到达2 → 预约分诊3 → 完成治疗4 → 患者离开5；
 # 已取消=-1。历史值归一(SaaS同步来的数字 0/1/2/3、中文 已预约/已到诊/已完成/已取消)。
 def appt_stage(status):
     s = str(status or "").strip()

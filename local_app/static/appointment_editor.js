@@ -5,7 +5,7 @@ let _apptPicked = null;       // 选中的患者 {patient_identity, display_name
 let _apptSearchSeq = 0;       // 患者搜索请求序号，防乱序覆盖
 let _apptEditId = null;       // 非空=编辑既有预约(PUT)，空=新增(POST)(#275 双击改约)
 
-// 预约项目常用清单(对标官方勾选网格)；勾选项 + 自填"其他项目"合并为 item_name
+// 预约项目常用清单；勾选项 + 自填"其他项目"合并为 item_name
 const APPT_ITEMS = [
   "补交欠款", "拍片", "牙疼", "检查", "洁牙", "复查", "咨询正畸", "正畸复诊",
   "调节义齿", "拆托槽", "粘托槽", "戴保持器", "间隙保持器", "矫治器",
@@ -30,7 +30,7 @@ function filterApptItemGrid(q) {
 }
 window.filterApptItemGrid = filterApptItemGrid;
 
-// ---------- 日历 + 快捷日期 + 时段表(对标官方新增预约) ----------
+// ---------- 日历 + 快捷日期 + 时段表 ----------
 let _apptDate = "";        // 选中日期 YYYY-MM-DD
 let _apptTime = "";        // 选中时刻 HH:MM
 let _apptCalMonth = null;  // 日历当前显示月(Date,该月1号)
@@ -314,7 +314,7 @@ function pickApptPatient(el) {
   if (results) { results.hidden = true; results.innerHTML = ""; }
   if (search) search.value = "";
   if (picked) { picked.hidden = false; picked.textContent = `已选患者：${_apptPicked.display_name || _apptPicked.patient_identity}`; }
-  const chartEl = document.getElementById("apptChartNo");   // 显示病历号(对标官方)
+  const chartEl = document.getElementById("apptChartNo");   // 显示病历号
   if (chartEl) {
     const chart = el.dataset.chart || "";
     if (chart) { chartEl.hidden = false; chartEl.textContent = `病历号：${chart}`; }

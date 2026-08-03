@@ -1,4 +1,4 @@
-"""门诊日志(对标 SaaS)：每条就诊一行 + 病历正文(诊断/措施) + 住址。"""
+"""门诊日志：每条就诊一行 + 病历正文(诊断/措施) + 住址。"""
 import json
 import tempfile
 import unittest

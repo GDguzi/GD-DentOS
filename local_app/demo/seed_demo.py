@@ -59,7 +59,7 @@ HANDLE_CATALOG = [
 TREAT_ITEMS = [(name, code, price) for (code, name, unit, price, ft) in HANDLE_CATALOG
                if code in ("RCT1", "RCT3", "RESIN", "GIC", "SCAL", "EXT", "PFM", "IMPL")]
 TEETH = ["11", "12", "13", "14", "16", "21", "24", "26", "36", "37", "46", "47"]
-# 影像类型(对标真实:patient_images.category=机位/类型;image_download_tasks.image_type)
+# 影像类型(与生产字段对应:patient_images.category=机位/类型;image_download_tasks.image_type)
 IMAGE_KINDS = [("口内照", "Intraoral"), ("全景片", "Panoramic"),
                ("根尖片", "Periapical"), ("正畸组图", "Ortho")]
 

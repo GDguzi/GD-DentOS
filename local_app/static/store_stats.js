@@ -1,4 +1,4 @@
-// 店内统计前端（对标 SaaS「本店统计」）。挂在「配置管理 → 报表」tab 体系内，由 reports.js 分发。
+// 店内统计前端。挂在「配置管理 → 报表」tab 体系内，由 reports.js 分发。
 // 医生/护士/助理/咨询师 收费统计共用本文件一套渲染，role 参数区分。
 
 const _rolePerfState = {};   // role -> {from, to, staff}
@@ -85,7 +85,7 @@ async function fetchRolePerf(target, role) {
     </table></div>`;
 }
 
-// ===== 收入统计(对标 SaaS：日×收款方式 + 应收款项/实际收款/新增欠款/补交欠款 + 期初/期末欠款) =====
+// ===== 收入统计(日×收款方式 + 应收款项/实际收款/新增欠款/补交欠款 + 期初/期末欠款) =====
 let _incStatFrom = "", _incStatTo = "";
 
 function loadIncomeStatTab(body) {
@@ -147,7 +147,7 @@ async function fetchIncomeStat(target) {
     </table></div>`;
 }
 
-// ===== 日结报表明细(对标 SaaS：每条就诊一行 + 患者信息 + 账单财务) =====
+// ===== 日结报表明细(每条就诊一行 + 患者信息 + 账单财务) =====
 let _dsFrom = "", _dsTo = "";
 
 function loadDailySettlementTab(body) {
@@ -201,7 +201,7 @@ async function fetchDailySettlement(target) {
   target.innerHTML = head + `<div style="overflow-x:auto"><table class="data-table"><thead><tr>${th}</tr></thead><tbody>${trs}${totalRow}</tbody></table></div>`;
 }
 
-// ===== 门诊日志(对标 SaaS：每条就诊一行，就诊管理性质) =====
+// ===== 门诊日志(每条就诊一行，就诊管理性质) =====
 let _clFrom = "", _clTo = "";
 
 function loadClinicLogTab(body) {
@@ -249,7 +249,7 @@ async function fetchClinicLog(target, params) {
   target.innerHTML = head + `<div style="overflow-x:auto"><table class="data-table"><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table></div>`;
 }
 
-// ===== 对账日历(对标 SaaS：月历视图，每天 收/支/合) =====
+// ===== 对账日历(月历视图，每天 收/支/合) =====
 let _rcMonth = "";   // YYYY-MM，空=北京当月
 
 function loadReconcileCalendarTab(body) {

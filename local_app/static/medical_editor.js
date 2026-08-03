@@ -1,4 +1,4 @@
-// 病历编辑器：对标官方"病历填写"版面（docs/官方UI截图/04/05）。
+// 病历编辑器："病历填写"版面。
 // 左栏 = 病历模版目录树 + 科目导航；右栏 = 详细病历数据（文本科目 + 带牙位的条目科目）。
 // 检查/诊断/治疗方案/治疗 四类条目存 medical_record_items（牙位×类型×内容），
 // 文本科目仍存 content_json（保存时与原 JSON 合并，未知科目键不丢失）。
@@ -181,7 +181,7 @@ function applyRecordTypeVisibility(input) {
   });
 }
 
-// 条目科目块：整体文本（如有）+ 逐牙条目行 + 右侧"+"（对标官方每行牙位格+加号）
+// 条目科目块：整体文本（如有）+ 逐牙条目行 + 右侧"+"
 function itemSubjectBlock(subject, content, initialRows = []) {
   // 检查/诊断/治疗：没有已存条目时默认摆一行空条目，牙位选择器直接可见可点（治疗方案除外）
   const rows = initialRows.length
@@ -408,7 +408,7 @@ async function loadEditorRecordItems(editor, recordId) {
   }
 }
 
-// ---------- 牙位选择器（对标官方"选择牙位"弹窗，docs/官方UI截图/05） ----------
+// ---------- 牙位选择器 ----------
 
 function toothQuadrants() {
   return [
@@ -465,7 +465,7 @@ function fdiToDeciduousSelection(codes) {
   return selection;
 }
 
-// 牙形 SVG 图标（切牙/尖牙/前磨牙/磨牙），下牙弓垂直镜像——对标官方牙列图
+// 牙形 SVG 图标（切牙/尖牙/前磨牙/磨牙），下牙弓垂直镜像
 function toothIconSvg(num, upper) {
   const n = Number(num);
   let path;
@@ -575,7 +575,7 @@ function toggleDeciduousSelection(quadrant, letter) {
   renderToothGrid();
 }
 
-// 解剖面/多生牙：插入到当前条目行的内容输入框（对标官方把牙面记进条目）
+// 解剖面/多生牙：插入到当前条目行的内容输入框
 function insertToothAnnotation(text) {
   if (!activeToothItemRow || !activeToothItemRow.isConnected) return;
   const input = activeToothItemRow.querySelector(".item-content");

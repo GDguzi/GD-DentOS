@@ -217,7 +217,7 @@ function renderBillingModuleRow(row) {
   `;
 }
 
-// 患者管理中心：今日 / 全部 / 最近 三 tab + 分类栏 + 卡片(对标官方原系统)
+// 患者管理中心：今日 / 全部 / 最近 三 tab + 分类栏 + 卡片
 // 全部 tab 为主从式：左分类树(可折叠展开该组患者) + 右选中患者主页信息
 
 Object.assign(window, {

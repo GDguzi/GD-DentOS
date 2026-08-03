@@ -511,7 +511,7 @@ function setTodayQueueFilter(filter) {
   if (latestTodayWorkData) renderTodayWork(latestTodayWorkData);
 }
 
-// 就诊状态流(对标官方)：预约确认→到达→分诊→完成治疗→患者离开，做完即深色，下一步高亮，
+// 就诊状态流：预约确认→到达→分诊→完成治疗→患者离开，做完即深色，下一步高亮，
 // 点已完成阶段=回退到该阶段(后端清后续时间戳)。处置/收费/病历等放进"⋯"次级菜单。
 // #101 用 data-* + 事件委托，不把 ID 拼进 inline onclick。
 // 小图标(线性SVG,跟随 currentColor,沿用 .tq-step 绿色风格)；文字进 title 悬浮提示
@@ -642,7 +642,7 @@ async function deleteAppointment(appointmentId) {
 }
 window.deleteAppointment = deleteAppointment;
 
-// 次级操作菜单(对标官方)：处置记录/收费信息/病历信息/患者流失/取消预约/再次预约
+// 次级操作菜单：处置记录/收费信息/病历信息/患者流失/取消预约/再次预约
 let _qMoreEl = null;
 function closeQueueMore() { if (_qMoreEl) { _qMoreEl.remove(); _qMoreEl = null; } }
 function openQueueMore(anchor, aid, pid) {

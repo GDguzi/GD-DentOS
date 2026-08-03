@@ -74,7 +74,7 @@ function renderWorkspaceBillingTab(panel) {
   }
 }
 
-// 表格式账单行(对标官方账单列表) + 可展开详情(诊疗项目 + 各笔付款及方式)
+// 表格式账单行 + 可展开详情(诊疗项目 + 各笔付款及方式)
 function renderBillTableRow(b, items, pays) {
   // 应收=net_receivable(后端算:总价-优惠;本地单已是净额)，欠费=应收-已收
   const netReceivable = b.net_receivable != null ? Number(b.net_receivable) : (b.total_fee || 0);
@@ -163,7 +163,7 @@ function billStateClass(s, total, paid) {
   return "";
 }
 
-// #14：收费单卡片化（对标处置单卡，清爽极简）。items=本单诊疗项目明细
+// #14：收费单卡片化（同处置单卡，清爽极简）。items=本单诊疗项目明细
 function renderBill(row, items) {
   const payable = row.state === "pending" || row.state === "partial";
   const remaining = (row.total_fee || 0) - (row.paid_fee || 0);
@@ -413,7 +413,7 @@ function confirmBillPayment(billId, remaining, onDone) {
   payUpdateChange();
   loadPayBillDetail(billId);
 }
-// 退费弹框（对标官方）：仅本地已结清单(local-bill-)。按整单(填总退款额) / 按处置(逐项勾选填额)。
+// 退费弹框：仅本地已结清单(local-bill-)。按整单(填总退款额) / 按处置(逐项勾选填额)。
 async function confirmBillRefund(billId, onDone) {
   if (!billId || billId.indexOf("local-bill-") !== 0) {
     alert("仅本地账单可退费，不能退 SaaS 同步单"); return;
