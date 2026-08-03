@@ -30,7 +30,7 @@ def _make_bill(client, total=1000):
 
 class BillDetailTest(unittest.TestCase):
     def test_get_bill_returns_items_and_totals(self):
-        # GET /api/bills/{id} 返回账单+明细(单价/数量/总价/减免)
+        # #8：GET /api/bills/{id} 返回账单+明细(单价/数量/总价/减免)
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             oid = client.post("/api/patients/p1/treatment-orders", json={
@@ -54,7 +54,7 @@ class BillDetailTest(unittest.TestCase):
             self.assertEqual(client.get("/api/bills/nope").status_code, 404)
 
     def test_cashier_stored_in_payment(self):
-        # 收银员落到 payment.source_json
+        # #8：收银员落到 payment.source_json
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             bill = _make_bill(client, 500)
@@ -114,7 +114,7 @@ class BillingPayTest(unittest.TestCase):
             self.assertEqual(resp.status_code, 409)
 
     def test_nan_inf_amount_rejected(self):
-        # nan/inf 非有限金额返回 400 而非 500
+        # #23：nan/inf 非有限金额返回 400 而非 500
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             bill = _make_bill(client, 100)
@@ -124,7 +124,7 @@ class BillingPayTest(unittest.TestCase):
                 self.assertEqual(conn.execute("select count(*) from payments").fetchone()[0], 0)
 
     def test_pay_method_recorded(self):
-        # 收费方式落库
+        # #24：收费方式落库
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             bill = _make_bill(client, 100)
@@ -149,21 +149,21 @@ class BillingPayTest(unittest.TestCase):
             self.assertIn("confirm_payment", actions)
 
 
-class ImportedDiscountRemainingTest(unittest.TestCase):
-    """外部导入打折单(DiscountFee 带千分位逗号)的收费弹框 remaining 必须扣折扣,
+class SaasDiscountRemainingTest(unittest.TestCase):
+    """#584:SaaS 同步打折单(DiscountFee 带千分位逗号)的收费弹框 remaining 必须扣折扣,
     与欠费清单 bill_net_arrears_sql 同口径——已结清的打折单不得显示虚欠。"""
 
-    def test_get_bill_remaining_deducts_import_discount(self):
+    def test_get_bill_remaining_deducts_saas_discount(self):
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             with connect(db) as conn:
                 conn.execute(
                     "insert into bills(bill_id, patient_identity, total_fee, paid_fee, state, "
                     "bill_time, source_json, updated_at) values "
-                    "('imported-disc-1', 'p1', 5000, 3600, '0', '2026-07-01 10:00:00', "
+                    "('saas-disc-1', 'p1', 5000, 3600, '0', '2026-07-01 10:00:00', "
                     "'{\"DiscountFee\": \"1,400.00\"}', '2026-07-01 10:00:00')")
                 conn.commit()
-            d = client.get("/api/bills/imported-disc-1").json()
+            d = client.get("/api/bills/saas-disc-1").json()
             self.assertEqual(d["remaining"], 0, f"5000-1400折扣-3600实收=0,不得虚欠: {d}")
             self.assertEqual(d["discount"], 1400)
 
@@ -178,7 +178,7 @@ class ImportedDiscountRemainingTest(unittest.TestCase):
 
 
 class PaymentIdempotencyTest(unittest.TestCase):
-    """收退款幂等——同号同载荷重放返回首次结果,同号异载荷 409,缺号 400。"""
+    """#800:收退款幂等——同号同载荷重放返回首次结果,同号异载荷 409,缺号 400。"""
 
     def _pay_body(self, amount, rid, method="现金"):
         return {"methods": [{"method": method, "amount": amount}], "request_id": rid}
@@ -259,7 +259,7 @@ class PaymentIdempotencyTest(unittest.TestCase):
 
 
 class EmptyPayMethodTest(unittest.TestCase):
-    """空付款方式必拒——空方式落库进不了任何现金/微信桶,账目对不上。"""
+    """#801:空付款方式必拒——空方式落库进不了任何现金/微信桶,账目对不上。"""
 
     def test_empty_method_400(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -288,7 +288,7 @@ class EmptyPayMethodTest(unittest.TestCase):
 
 
 class IdempotencyCrossTargetTest(unittest.TestCase):
-    """同请求号复用到别的账单/动作不得重放,须 409。"""
+    """#800 P1:同请求号复用到别的账单/动作不得重放,须 409。"""
 
     def test_same_request_id_different_bill_409(self):
         with tempfile.TemporaryDirectory() as tmp:

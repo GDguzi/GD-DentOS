@@ -22,7 +22,7 @@ def create_bills_router(db_path):
         pageno: int = 1,
         pagesize: int = 50,
     ):
-        require_perm("billing.view")   # 账单列表含金额/欠款,按 billing.view 守卫(护士/技师/助理等无权)
+        require_perm("billing.view")   # #482：账单列表含金额/欠款,按 billing.view 守卫(护士/技师/助理等无权)
         date = date.strip()
         if date:
             valid_date_param(date, "date")

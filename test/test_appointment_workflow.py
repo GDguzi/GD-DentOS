@@ -104,7 +104,7 @@ class ConflictTest(unittest.TestCase):
             self.assertFalse(r.json().get("conflict"))
 
     def test_touching_boundary_no_conflict(self):
-        # 端点相接(09:30 接 09:30)正常连排，不应误判冲突
+        # #132 端点相接(09:30 接 09:30)正常连排，不应误判冲突
         with tempfile.TemporaryDirectory() as tmp:
             db, c, pid = _client(tmp)
             _appt(c, pid, "王医生", "2026-06-20 09:00", "2026-06-20 09:30")
@@ -114,7 +114,7 @@ class ConflictTest(unittest.TestCase):
             self.assertFalse(r.json().get("conflict"))
 
     def test_same_room_different_doctor_conflict(self):
-        # 同诊室不同医生同时段也冲突
+        # #133 同诊室不同医生同时段也冲突
         with tempfile.TemporaryDirectory() as tmp:
             db, c, pid = _client(tmp)
             _appt(c, pid, "王医生", "2026-06-20 09:00", "2026-06-20 09:30", room="1诊室")
@@ -125,7 +125,7 @@ class ConflictTest(unittest.TestCase):
             self.assertEqual(n, 1)
 
     def test_room_persisted(self):
-        # room 不再被丢弃
+        # #133 room 不再被丢弃
         with tempfile.TemporaryDirectory() as tmp:
             db, c, pid = _client(tmp)
             aid = _appt(c, pid, "王医生", "2026-06-20 11:00", "2026-06-20 11:30", room="2诊室").json()["appointment"]["appointment_id"]
@@ -134,7 +134,7 @@ class ConflictTest(unittest.TestCase):
             self.assertEqual(room, "2诊室")
 
     def test_noshow_clears_arrival_timestamp(self):
-        # 已到诊后标爽约 → 清掉到达时间戳，避免矛盾记录
+        # #134 已到诊后标爽约 → 清掉到达时间戳，避免矛盾记录
         with tempfile.TemporaryDirectory() as tmp:
             db, c, pid = _client(tmp)
             aid = _appt(c, pid, "王医生", "2026-06-20 14:00", "2026-06-20 14:30").json()["appointment"]["appointment_id"]

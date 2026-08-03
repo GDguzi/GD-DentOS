@@ -53,7 +53,7 @@ class PearlGlassHomeUiTests(unittest.TestCase):
         ]:
             with self.subTest(callback=callback):
                 self.assertIn(callback, self.today)
-        self.assertIn('${todayWorkKpiStrip(summary)}', self.today)
+        self.assertIn('${todaySaasKpiStrip(summary)}', self.today)
         self.assertIn('${renderTodayQueue(data.appointments || [])}', self.today)
         self.assertIn('todayMoneyOrMask(summary.today_unpaid_amount)', self.today)
         self.assertIn(

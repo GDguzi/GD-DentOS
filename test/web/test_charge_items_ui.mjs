@@ -33,7 +33,7 @@ function chargeSandbox({
   documentImpl = null,
 }) {
   const sandbox = {
-    __isSystemAdmin: admin,
+    hasPerm: (perm) => admin === true && perm === "master_data.manage",
     fetch: fetchImpl,
     document: documentImpl || {getElementById: () => null, querySelector: () => null},
     confirm: () => true,
@@ -46,7 +46,7 @@ function chargeSandbox({
         .replaceAll('"', "&quot;");
     },
     escapeAttr(value) {
-      return sandbox.escapeHtml(value).replaceAll("'", "&;");
+      return sandbox.escapeHtml(value).replaceAll("'", "&#39;");
     },
   };
   sandbox.window = sandbox;
@@ -213,9 +213,9 @@ test("管理员和非管理员使用不同数据源与写操作语义", async ()
     },
   });
   assert.strictEqual(regular.__ciTest.ciCanManage(), false);
-  regular.__isSystemAdmin = 1;
+  regular.hasPerm = () => 1;
   assert.strictEqual(regular.__ciTest.ciCanManage(), false, "truthy 值不得获得管理权限");
-  regular.__isSystemAdmin = "true";
+  regular.hasPerm = () => "true";
   assert.strictEqual(regular.__ciTest.ciCanManage(), false, "字符串 true 不得获得管理权限");
   const readonly = JSON.parse(JSON.stringify(await regular.__ciTest.ciFetchItems()));
   assert.deepStrictEqual(regularUrls, ["/api/handle-items"]);
@@ -638,7 +638,7 @@ test("收费项目变更会失效处置选择器缓存并更新静态资源版�
   assert.strictEqual(sandbox.__cache.generation, 1);
 
   const versionedResources = [
-    '<link rel="stylesheet" href="/styles.css?v=2026-07-27-charge-items">',
+    '<link rel="stylesheet" href="/styles.css?v=2026-08-02-quick-checkin-1">',
     '<script src="/audit_log.js?v=2026-07-27-charge-items"></script>',
     '<script src="/treatment_plan_editor.js?v=2026-07-27-charge-items"></script>',
     '<script src="/charge_items.js?v=2026-07-27-charge-items"></script>',

@@ -60,7 +60,7 @@ class StaffCrudTest(unittest.TestCase):
             self.assertEqual(client.delete("/api/staff-members/nope").status_code, 404)
 
     def test_update_soft_deleted_returns_404(self):
-        # 编辑后删除同一人,stale PUT 不能写进已软删行
+        # #231：编辑后删除同一人,stale PUT 不能写进已软删行
         with tempfile.TemporaryDirectory() as tmp:
             _, client = _client(tmp)
             sid = client.post("/api/staff-members", json={"name": "王医生", "role": "医生"}).json()["staff_id"]
@@ -84,7 +84,7 @@ class StaffCrudTest(unittest.TestCase):
             self.assertEqual(r.status_code, 200)
             sid = r.json()["staff_id"]
             self.assertEqual(r.json()["job_no"], "D001")
-            # 档案明细只从受控的 staff-admin/list 读(选人接口 /api/staff-members 不回隐私字段,见 )
+            # 档案明细只从受控的 staff-admin/list 读(选人接口 /api/staff-members 不回隐私字段,见 #291)
             m = client.get("/api/staff-admin/list").json()["members"][0]
             self.assertEqual(m["title"], "主治医师")
             self.assertEqual(m["license_no"], "1102000")

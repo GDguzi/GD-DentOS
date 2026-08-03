@@ -45,7 +45,7 @@ class IncomeReportTest(unittest.TestCase):
         self.assertEqual(data["total_count"], 3)
 
     def test_multi_method_payment_split_consistent(self):
-        # 多方式收款(PaidDetail)在收入统计/今日营收/工作台三处口径一致——按真实方式拆分,不整体记'多种'
+        # #559:多方式收款(PaidDetail)在收入统计/今日营收/工作台三处口径一致——按真实方式拆分,不整体记'多种'
         import json
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "clinic.sqlite3"
@@ -104,7 +104,7 @@ class CashierReportTest(unittest.TestCase):
         self.assertEqual(data["records"][0]["display_name"], "张三")
 
     def test_cashier_date_range_and_by_patient(self):
-        # 日期区间 + 按患者聚合
+        # 复审#4：日期区间 + 按患者聚合
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = _setup(tmpdir)
             client = TestClient(create_app(db_path))
@@ -141,7 +141,7 @@ class StaffWorkloadTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path, client = self._client(tmpdir)
             # 王医生+李护士 配台2单(根管800 / 充填200+200)，赵医生 配台1单(种植1000)
-            # 统计只算已划价单，故 price_now=True 一步开单并划价
+            # #56：统计只算已划价单，故 price_now=True 一步开单并划价
             client.post("/api/patients/p1/treatment-orders", json={
                 "doctor_name": "王医生", "nurse_name": "李护士", "price_now": True,
                 "items": [{"item_name": "根管", "unit_price": 800, "quantity": 1}]})
@@ -176,7 +176,7 @@ class StaffWorkloadTest(unittest.TestCase):
             self.assertEqual(data["staff"], [])
 
     def test_unpriced_order_excluded(self):
-        # 未划价(recorded)处置不计入绩效金额(总价仅为录入原价)
+        # #56：未划价(recorded)处置不计入绩效金额(总价仅为录入原价)
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path, client = self._client(tmpdir)
             client.post("/api/patients/p1/treatment-orders", json={
@@ -198,7 +198,7 @@ if __name__ == "__main__":
 
 class IncomeMonthlyTest(unittest.TestCase):
     def test_monthly_grouping_and_cancel_exclusion(self):
-        # 按月聚合,口径同 income——排作废原单(CancelMark非空且金额≥0),保留退费负数冲减
+        # #657:按月聚合,口径同 income——排作废原单(CancelMark非空且金额≥0),保留退费负数冲减
         import json as _json
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = _setup(tmpdir)

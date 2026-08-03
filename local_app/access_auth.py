@@ -13,7 +13,14 @@ from local_app import access_session_service as session_service
 
 ACCESS_COOKIE_NAME = "dl_access_session"
 _LEGACY_COOKIE_NAMES = ("dl_session", "dental_auth")
-_POLLING_PATHS = frozenset()  # 高频轮询豁免路径(当前无)
+_POLLING_PATHS = frozenset(
+    {
+        "/api/sync/align/status",
+        "/api/sync/full-now/status",
+        "/api/sync/reconcile-now/status",
+        "/api/sync/run-now/status",
+    }
+)
 _STATIC_SUFFIXES = (".js", ".css", ".png", ".svg", ".webmanifest")
 
 _current_access_user = contextvars.ContextVar("current_access_user", default=None)

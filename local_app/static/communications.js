@@ -51,7 +51,7 @@ function renderCommunications(panel, data, callsData) {
     const recs = (callsByComm[c.communication_id] || []).map(k =>
       `<audio controls preload="none" src="/api/calls/${encodeURIComponent(k.call_id)}/recording" style="display:block;margin-top:6px;max-width:320px"></audio>`).join("");
     const cid = escapeAttr(c.communication_id);
-    // 补传入口:新增时附件上传失败(或事后想补)可在此卡片补传,不必重建记录
+    // #722 补传入口:新增时附件上传失败(或事后想补)可在此卡片补传,不必重建记录
     const reattach = c.channel === "wechat"
       ? `<div class="cs-reattach" style="margin-top:6px"><input type="file" accept="image/*" multiple data-reshot="${cid}">
            <button type="button" onclick="reattachCommImages('${cid}', ${Number(c.revision)})">补传截图</button></div>`
@@ -118,7 +118,7 @@ async function saveCommunication() {
   const form = commFormEl();
   if (!form) return;
   const status = form.querySelector("[data-comm-status]");
-  // 表单字段一律 data-field(field()/area() 与内联控件同口径),读取只认这一个属性
+  // #735 表单字段一律 data-field(field()/area() 与内联控件同口径),读取只认这一个属性
   const get = k => (form.querySelector(`[data-field="${k}"]`)?.value || "").trim();
   const channel = get("channel");
   const payload = {
@@ -142,7 +142,7 @@ async function saveCommunication() {
   const created = await res.json();
   const commId = created.communication_id;
   let contextRevision = Number(created.revision);
-  // 附件:微信传截图 / 电话传录音(弱关联到本条沟通)。逐个检查响应,失败必须明确提示,
+  // 附件:微信传截图 / 电话传录音(弱关联到本条沟通)。#720 逐个检查响应,失败必须明确提示,
   // 不能主记录存了、截图/录音(核心沟通证据)静默丢了还按成功重载。
   let attachFail = 0;
   try {
@@ -181,7 +181,7 @@ async function saveCommunication() {
     }
   } catch { attachFail++; }
   if (attachFail > 0) {
-    // 附件失败:主记录已存,重载后到该记录卡片用「补传截图/补传录音」重试(不必重建重复记录)
+    // #722 附件失败:主记录已存,重载后到该记录卡片用「补传截图/补传录音」重试(不必重建重复记录)
     alert("沟通记录已保存，但有 " + attachFail + " 个附件（截图/录音）上传失败。\n请在下方该记录卡片用「补传」重新上传，不用重建记录。");
   }
   if (pid !== workspacePatientId) return;
@@ -197,7 +197,7 @@ function reloadCommunicationsSub() {
 }
 
 async function setCommDeal(commId, revision, value) {
-  // 禁止静默假保存:失败必须告警并重载(把下拉回滚到服务端真值)
+  // #702 禁止静默假保存:失败必须告警并重载(把下拉回滚到服务端真值)
   if (!Number.isInteger(revision) || revision < 1) {
     alert("数据版本已失效，请刷新后重试");
     reloadCommunicationsSub();
@@ -232,14 +232,14 @@ async function deleteCommunication(commId, revision) {
       method: "DELETE", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ expected_revision: revision }),
     });
-  } catch { alert("删除失败（网络异常），请重试"); return; }   // 不吞错
+  } catch { alert("删除失败（网络异常），请重试"); return; }   // #702 不吞错
   if (res.status === 409) {
     alert("数据已被其他操作更新，请确认最新内容后重试");
     reloadCommunicationsSub();
     return;
   }
   if (!res.ok) { alert("删除失败（" + res.status + "）"); return; }
-  // 后端删盘失败会返回 files_failed>0(截图还在磁盘,已记审计待清理),明确告警不当成功掩盖
+  // #721 后端删盘失败会返回 files_failed>0(截图还在磁盘,已记审计待清理),明确告警不当成功掩盖
   const body = await res.json().catch(() => ({}));
   if (body && body.files_failed > 0) {
     alert("记录已删除，但有 " + body.files_failed + " 张微信截图未能从磁盘删除（已记审计待清理），请联系管理员。");
@@ -248,7 +248,7 @@ async function deleteCommunication(commId, revision) {
   if (typeof loadAuditLogs === "function") await loadAuditLogs();
 }
 
-// 卡片补传:附件上传失败(或事后补)时对已存在的沟通记录补传截图/录音,不必重建记录
+// #722 卡片补传:附件上传失败(或事后补)时对已存在的沟通记录补传截图/录音,不必重建记录
 async function reattachCommImages(commId, revision) {
   const page = workspacePageEl();
   const input = page && page.querySelector(`[data-reshot="${commId}"]`);

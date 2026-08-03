@@ -1,13 +1,13 @@
-// 配台人员：人员管理(增删改) + 处置配台下拉 + 记住上次选择。
+// 配台人员 (#4)：人员管理(增删改) + 处置配台下拉 + 记住上次选择。
 // 角色：医生/护士/咨询师/助理。后端 /api/staff-members CRUD。
 
 const STAFF_ROLES = ["医生", "护士", "咨询师", "助理"];
 // 诊所全部岗位(对齐后端 staff.ROLES)：员工管理页用于多岗位勾选 + 分组显示
-// 按权限树蓝本补齐岗位(增 客服/助理2)。去「技师」,技工职能并入助理/前台。
+// #420:按权限树蓝本补齐岗位(增 客服/助理2)。#502:去「技师」,技工职能并入助理/前台。
 const ALL_STAFF_ROLES = ["医生", "护士", "咨询师", "助理", "前台", "收银员", "主任", "管理员", "客服", "助理2"];
 // 主岗位优先级(多岗位时取第一个命中的做 role，临床优先)
 const ROLE_PRIORITY = ["医生", "护士", "咨询师", "助理", "助理2", "前台", "收银员", "客服", "主任", "管理员"];
-// 岗位→账号角色映射(开通登录时默认带出)。主任/收银员/客服/助理2 用各自独立角色,不再并到 admin/assistant/reception。
+// 岗位→账号角色映射(开通登录时默认带出)。#420:主任/收银员/客服/助理2 用各自独立角色,不再并到 admin/assistant/reception。
 const ROLE_TO_ACCT = {
   "管理员": "admin", "主任": "director", "医生": "doctor", "护士": "nurse",
   "助理": "assistant", "助理2": "assistant2", "咨询师": "consultant",
@@ -27,7 +27,7 @@ const STAFF_TEAM_LS = "dental_team_last";   // 记住上次配台
 let staffCache = null;
 let _smTarget = "staffManagerBody";   // 人员管理渲染目标容器(弹框 或 配置管理整页)
 let _smRenderRevision = 0;
-let _smEditId = null;                  // 正在编辑的员工 staff_id(null=新增态)
+let _smEditId = null;                  // #224 正在编辑的员工 staff_id(null=新增态)
 
 async function ensureStaff(force) {
   if (staffCache && !force) return staffCache;
@@ -39,7 +39,7 @@ async function ensureStaff(force) {
 }
 
 function staffByRole(role) {
-  if (role === "*") return staffCache || [];   // 二批:经手人/领用人/收银员筛选等不限岗位,全员候选
+  if (role === "*") return staffCache || [];   // #420二批:经手人/领用人/收银员筛选等不限岗位,全员候选
   // 多岗位：主岗位 role 命中 或 roles 列表含该角色(与后端 ?role= 口径一致)
   return (staffCache || []).filter(m => m.role === role || (m.roles || []).includes(role));
 }
@@ -86,7 +86,7 @@ function rememberTeam(team) {
 function lastTeam() {
   try { return JSON.parse(localStorage.getItem(STAFF_TEAM_LS) || "{}") || {}; } catch { return {}; }
 }
-// 把"上次配台"过滤为仍在职人员——离职/停用的不带入新单(否则继续记到新业务、污染绩效)。
+// #52：把"上次配台"过滤为仍在职人员——离职/停用的不带入新单(否则继续记到新业务、污染绩效)。
 // 需先 ensureStaff() 载入人员库。
 function activeTeam(team) {
   const out = {};
@@ -378,7 +378,7 @@ function renderStaffManager() {
     return;
   }
   const addButton = _accessStaffCanEdit()
-    ? '<button type="button" class="tooth-confirm-btn access-staff-add" onclick="openStaffForm(null)">添加人员</button>'
+    ? '<button type="button" class="tooth-confirm-btn access-staff-add" onclick="openStaffForm(null)">新增员工</button>'
     : "";
   box.innerHTML = `
     <section class="access-center-staff">
@@ -428,7 +428,7 @@ function _accessStaffFormHtml() {
   return `
     <div class="access-center-modal-backdrop" role="presentation">
       <section class="access-center-modal" role="dialog" aria-modal="true" aria-labelledby="accessStaffFormTitle">
-        <header class="access-center-modal-head"><h2 id="accessStaffFormTitle">${member ? "编辑人员" : "添加人员"}</h2><button id="accessStaffFormClose" type="button" class="plain-button" onclick="closeStaffForm()"${_accessStaffState.formPending ? " disabled" : ""}>关闭</button></header>
+        <header class="access-center-modal-head"><h2 id="accessStaffFormTitle">${member ? "编辑人员" : "新增员工"}</h2><button id="accessStaffFormClose" type="button" class="plain-button" onclick="closeStaffForm()"${_accessStaffState.formPending ? " disabled" : ""}>关闭</button></header>
         <div class="access-staff-form-grid">
           <label>姓名 *<input id="accessStaffName" class="ord-input" value="${value("name")}"></label>
           <label>主岗位 *<select id="accessStaffPrimaryRole" class="ord-input">${roleOptions}</select></label>
@@ -463,6 +463,12 @@ function openStaffForm(staffId) {
   _accessStaffState.formRevision += 1;
   _smEditId = staffId || null;
   renderStaffFormModal();
+}
+
+function openNewStaffForm() {
+  if (_accessStaffState.loadState !== "ready" || !_accessStaffCanEdit()) return false;
+  openStaffForm(null);
+  return _accessStaffState.formOpen === true;
 }
 
 function renderStaffFormModal() {
@@ -899,7 +905,7 @@ async function deleteStaff(staffId) {
     const res = await fetch(`/api/staff-members/${encodeURIComponent(staffId)}`, {method: "DELETE"});
     if (!res.ok) return;
   } catch { return; }
-  if (staffId === _smEditId) _smEditId = null;   // 删的是当前编辑对象→立即退出编辑态
+  if (staffId === _smEditId) _smEditId = null;   // #231 删的是当前编辑对象→立即退出编辑态
   await ensureStaff(true);
   await ensureStaffAccts();   // 删员工级联停用了账号，刷新账号状态
   refreshOrderTeamSelects();
@@ -916,7 +922,7 @@ function refreshOrderTeamSelects() {
 Object.assign(window, {
   ensureStaff, staffOptionsHtml, bindStaffInputs, rememberTeam, lastTeam, activeTeam,
   openStaffManager, closeStaffManager, renderStaffInto, staffPinyinInitials,
-  openStaffForm, renderStaffFormModal, saveStaffForm, closeStaffForm,
+  openStaffForm, openNewStaffForm, renderStaffFormModal, saveStaffForm, closeStaffForm,
   openStaffDetails, renderStaffDetails, closeStaffDetails, accessStaffSetFilter,
   addStaff, deleteStaff, editStaff, cancelEditStaff, openStaffAccount,
   beginStaffDeparture, confirmStaffDeparture, beginStaffReinstate, confirmStaffReinstate,

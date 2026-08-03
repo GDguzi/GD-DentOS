@@ -151,7 +151,7 @@ def create_return_visit_ops_router(db_path, images_dir):
         raise HTTPException(status_code=500, detail="attachment_operation_failed") from None
 
     def _unlink_all(rels, return_visit_id, patient_identity):
-        """删盘：返回 (成功, 失败)；失败落 delete_return_visit_image_failed 审计(带 patient_identity )，不静默。"""
+        """删盘：返回 (成功, 失败)；失败落 delete_return_visit_image_failed 审计(带 patient_identity #719)，不静默。"""
         images_root = images_dir.resolve()
         removed = failed = 0
         for rel in rels:

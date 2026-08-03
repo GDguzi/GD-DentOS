@@ -59,20 +59,20 @@ class TodayCollectionTest(unittest.TestCase):
             self.assertEqual(data["pending_total"], 300)
 
     def test_by_method_uses_pay_type_column(self):
-        # 同步收款只有 pay_type 列(source_json无pay_method)→仍按pay_type透视,不落"未填"
+        # 看板#211:同步收款只有 pay_type 列(source_json无pay_method)→仍按pay_type透视,不落"未填"
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             with connect(db) as conn:
                 conn.execute("insert into payments(payment_id,patient_identity,bill_id,pay_time,amount,state,pay_type,source_json,updated_at) "
-                             "values ('pp','p1','','2026-06-10 09:00',500,'paid','云闪付','{}','2026-06-10')")
+                             "values ('pp','p1','','2026-06-10 09:00',500,'paid','扫码付','{}','2026-06-10')")
                 conn.commit()
             data = client.get("/api/reports/today-collection?date=2026-06-10").json()
             methods = {m["method"]: m["amount"] for m in data["by_method"]}
-            self.assertEqual(methods.get("云闪付"), 500)
+            self.assertEqual(methods.get("扫码付"), 500)
             self.assertNotIn("未填", methods)
 
     def test_voided_payment_excluded(self):
-        # 作废原单(source_json.CancelMark非空且金额≥0)不计入实收
+        # #1：作废原单(source_json.CancelMark非空且金额≥0)不计入实收
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             b1 = _order_paid(client, 100, [(100, "现金")])
@@ -89,7 +89,7 @@ class TodayCollectionTest(unittest.TestCase):
             self.assertEqual(data["count"], 1)
 
     def test_pending_filtered_by_date(self):
-        # 待收按当天账单过滤
+        # #39：待收按当天账单过滤
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             oid = client.post("/api/patients/p1/treatment-orders", json={
@@ -114,11 +114,11 @@ class TodayCollectionTest(unittest.TestCase):
             self.assertEqual(client.get("/api/reports/today-collection?date=99999999").status_code, 400)
 
 
-class ImportedStatePendingTest(unittest.TestCase):
-    """today-collection 的待收不能只认本地 state('pending'/'partial')——
-    当天 外部导入来的未结单 state 是数字码,须按净欠费>0口径统计(与工作台/收费管理一致)。"""
+class SaasStatePendingTest(unittest.TestCase):
+    """#574:today-collection 的待收不能只认本地 state('pending'/'partial')——
+    当天 SaaS 同步来的未结单 state 是数字码,须按净欠费>0口径统计(与工作台/收费管理一致)。"""
 
-    def test_pending_includes_imported_numeric_state_bill(self):
+    def test_pending_includes_saas_numeric_state_bill(self):
         from local_app.timeutil import today_str
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
@@ -127,12 +127,12 @@ class ImportedStatePendingTest(unittest.TestCase):
                 conn.execute(
                     "insert into bills(bill_id, patient_identity, total_fee, paid_fee, state, "
                     "bill_time, source_json, updated_at) values "
-                    f"('imported-pend-1', 'p1', 300, 100, '1', '{day} 09:00:00', '{{}}', '{day} 09:00:00')")
-                # 作废的 外部系统 单(state=900)不得计入
+                    f"('saas-pend-1', 'p1', 300, 100, '1', '{day} 09:00:00', '{{}}', '{day} 09:00:00')")
+                # 作废的 SaaS 单(state=900)不得计入
                 conn.execute(
                     "insert into bills(bill_id, patient_identity, total_fee, paid_fee, state, "
                     "bill_time, source_json, updated_at) values "
-                    f"('imported-void-1', 'p1', 999, 0, '900', '{day} 09:30:00', '{{}}', '{day} 09:30:00')")
+                    f"('saas-void-1', 'p1', 999, 0, '900', '{day} 09:30:00', '{{}}', '{day} 09:30:00')")
                 conn.commit()
             d = client.get(f"/api/reports/today-collection?date={day}").json()
             self.assertEqual(d["pending_count"], 1, d)

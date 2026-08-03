@@ -1,4 +1,4 @@
-// 今日事项简表被后端 limit 截断时(生日50/共68),角标要用总数并注明「显示前 N 条」,
+// #487:今日事项简表被后端 limit 截断时(生日50/共68),角标要用总数并注明「显示前 N 条」,
 // 入口数和右侧角标不能无解释地不一致。沙箱 eval renderTodaySimpleShell 验证。
 import { test } from "node:test";
 import assert from "node:assert";

@@ -1,4 +1,4 @@
-// 预约·天视图泳道排班网格(对标行业通用口径)：左小月历 + 主区「时间轴行 × 医生泳道列」。
+// 预约·天视图泳道排班网格(对标 SaaS)：左小月历 + 主区「时间轴行 × 医生泳道列」。
 // 预约块按 start/end 落格、状态配色；点块弹患者卡片；点空格新增预约预填医生+时段。
 // 取数：/api/settings/appointment(营业时间/最小单位/医生列) + /api/staff-members?role=医生 + /api/appointments?date=
 
@@ -14,7 +14,7 @@ function apptBaseDate() {
     ? workDate.value : localDateValue();
 }
 
-// 状态(含历史数字码)→标签/配色，复用 today_work 的 formatAppointmentStatus
+// 状态(含SaaS数字码)→标签/配色，复用 today_work 的 formatAppointmentStatus
 function apptStatusLabel(status) {
   return (typeof formatAppointmentStatus === "function") ? formatAppointmentStatus(status) : String(status || "");
 }
@@ -42,7 +42,7 @@ const APPT_STATUS_COLOR = [
 ];
 function apptBlockClass(status) {
   const s = String(status || "").trim();
-  if (APPT_STATUS_CODE[s]) return APPT_STATUS_CODE[s];          // 历史数字码
+  if (APPT_STATUS_CODE[s]) return APPT_STATUS_CODE[s];          // SaaS 数字码
   for (const [kws, cls] of APPT_STATUS_COLOR) if (kws.some(k => s.includes(k))) return cls;
   return "appt-blk-booked";   // 默认/0 已预约蓝
 }
@@ -65,7 +65,7 @@ async function loadAppointmentDayGrid() {
   modulePanel.innerHTML = `<div class="module-loading">排班载入中...</div>`;
   let settings, doctors, appts;
   try {
-    // 天视图也要带状态过滤(状态 chip),否则点了 chip 高亮但网格仍显示全部状态
+    // #122：天视图也要带状态过滤(状态 chip),否则点了 chip 高亮但网格仍显示全部状态
     const sQ = (typeof appointmentStatusFilter !== "undefined" && appointmentStatusFilter)
       ? `&status=${encodeURIComponent(appointmentStatusFilter)}` : "";
     const [rS, rD, rA] = await Promise.all([
@@ -273,7 +273,7 @@ function bindDayGrid(container, appts) {
       openNewAppointment({doctor: cell.dataset.cellDoctor || "", start: `${apptBaseDate()} ${cell.dataset.cellTime}`});
     }));
   // 预约块:指针拖拽改约(跟手实时移动+落点高亮,比原生 drag 顺滑);没拖动=点击弹卡片;
-  // 双击=进编辑弹窗回填。
+  // 双击=进编辑弹窗回填(#275)。
   const byId = {};
   (appts || []).forEach(a => { byId[a.appointment_id] = a; });
   container.querySelectorAll("[data-appt-block]").forEach(blk => {
@@ -371,20 +371,36 @@ function _apptMinRange(a) {
   return [s, en];
 }
 
+// 预约块与时间格在同一 CSS Grid 上叠放；仅允许穿透同网格预约块，避免穿过 sticky 表头等覆盖层。
+function apptDropCellAtPoint(x, y, grid) {
+  const stack = document.elementsFromPoint(x, y);
+  const top = stack[0];
+  if (!top || !top.closest) return null;
+  const directCell = top.closest("[data-cell-time]");
+  if (directCell) return !grid || top.closest(".appt-grid") === grid ? directCell : null;
+  const coverBlock = top.closest("[data-appt-block]");
+  if (!coverBlock || (grid && coverBlock.closest(".appt-grid") !== grid)) return null;
+  for (const el of stack.slice(1)) {
+    const cell = el && el.closest ? el.closest("[data-cell-time]") : null;
+    if (cell && (!grid || el.closest(".appt-grid") === grid)) return cell;
+  }
+  return null;
+}
+
 // 指针拖拽:实时跟手移动预约块,松手按光标下的格改约;移动距离<阈值视为点击弹卡片
 function startApptBlockDrag(e, blk, byId, appts) {
   if (e.button !== 0) return;
   const startX = e.clientX, startY = e.clientY;
   const id = blk.dataset.apptBlock, dur = parseInt(blk.dataset.apptDur, 10) || 30;
-  const origTransform = blk.style.transform;   // 并排块的 translateX,松手要还原而非清空
+  const grid = blk.closest(".appt-grid");
+  const origTransform = blk.style.transform;   // 并排块的 translateX,松手要还原而非清空(#361)
   let dragging = false, lastCell = null;
   const onMove = ev => {
     const dx = ev.clientX - startX, dy = ev.clientY - startY;
     if (!dragging && Math.hypot(dx, dy) < 5) return;   // 阈值内不算拖动
     if (!dragging) { dragging = true; blk.classList.add("appt-block-dragging"); blk.style.pointerEvents = "none"; closeApptCard(); }
     blk.style.transform = `translate(${dx}px, ${dy}px)`;   // 实时跟手
-    const under = document.elementFromPoint(ev.clientX, ev.clientY);
-    const cell = under && under.closest ? under.closest("[data-cell-time]") : null;
+    const cell = apptDropCellAtPoint(ev.clientX, ev.clientY, grid);
     if (cell !== lastCell) {
       if (lastCell) lastCell.classList.remove("appt-cell-drophover");
       if (cell) cell.classList.add("appt-cell-drophover");
@@ -394,12 +410,12 @@ function startApptBlockDrag(e, blk, byId, appts) {
   const onUp = () => {
     document.removeEventListener("pointermove", onMove);
     document.removeEventListener("pointerup", onUp);
-    blk.style.transform = origTransform; blk.style.pointerEvents = ""; blk.classList.remove("appt-block-dragging");   // 还原并排 translateX,不清空
+    blk.style.transform = origTransform; blk.style.pointerEvents = ""; blk.classList.remove("appt-block-dragging");   // 还原并排 translateX,不清空(#361)
     if (lastCell) lastCell.classList.remove("appt-cell-drophover");
     if (!dragging) { showApptCard(byId[id], blk); return; }   // 没拖动=点击
     if (!lastCell) return;                                     // 拖到网格外,丢弃
     const cellTime = lastCell.dataset.cellTime, doctor = lastCell.dataset.cellDoctor || "";
-    // 落点冲突提醒:目标时段与同医生其他预约重叠则先确认
+    // 落点冲突提醒(#270):目标时段与同医生其他预约重叠则先确认
     const ns = hm2min(cellTime); const ne = ns + dur;
     const overlap = (appts || []).some(a => a.appointment_id !== id
       && (a.doctor_name || "").trim() === doctor.trim()

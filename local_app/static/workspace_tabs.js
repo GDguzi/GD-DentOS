@@ -30,7 +30,7 @@ function requireWorkspaceDetail(panel) {
 }
 
 // 单次重取患者详情并更新缓存（不重渲染左栏；竞态守卫同 loadWorkspacePatient）。
-// 连带拉一次 /summary 重算 tab 角标——此前只拉 detail，各保存流程(病历/回访等)调完
+// #544:连带拉一次 /summary 重算 tab 角标——此前只拉 detail，各保存流程(病历/回访等)调完
 // 这里角标却不重算(停在"病历0/回访0")，统一下沉到这里，各调用方不用各自记得再拉一次。
 // 网络异常返回 null，不让 rejection 沿 saveMedicalRecord 链路外溢。
 async function refreshWorkspaceDetail() {
@@ -170,7 +170,7 @@ function openMedicalEditorOverlay(row) {
   body.innerHTML = renderMedicalRecord(row);
   if (typeof bindStaffInputs === "function") bindStaffInputs(body);   // 病历医生选人 datalist
   overlay.hidden = false;
-  overlay.dataset.dirty = "";                 // 新开/重开编辑层→未脏
+  overlay.dataset.dirty = "";                 // 新开/重开编辑层→未脏(#335)
   body.oninput = markMedicalEditorDirty;      // 文本/日期输入即标脏
   body.onchange = markMedicalEditorDirty;     // 单选/下拉/datalist
   document.body.classList.add("editor-overlay-open");
@@ -178,14 +178,14 @@ function openMedicalEditorOverlay(row) {
   loadEditableRecordVersions(body);
 }
 
-// 脏标记:用户改过未保存→dataset.dirty=1。JS 直写字段(牙位/模板/快捷)不触发
+// #335 脏标记:用户改过未保存→dataset.dirty=1。JS 直写字段(牙位/模板/快捷)不触发
 // input 事件,那些地方各自调本函数补标。
 function markMedicalEditorDirty() {
   const overlay = document.getElementById("medicalEditorOverlay");
   if (overlay && !overlay.hidden) overlay.dataset.dirty = "1";
 }
 
-// 守卫式关闭:有未保存内容时先确认,避免「退出/×/切模块」静默丢病历。
+// #335 守卫式关闭:有未保存内容时先确认,避免「退出/×/切模块」静默丢病历。
 // force=true 由保存成功路径调用(此时已清脏),跳过确认。
 function closeMedicalEditorOverlay(force) {
   const overlay = document.getElementById("medicalEditorOverlay");
@@ -198,7 +198,7 @@ function closeMedicalEditorOverlay(force) {
   if (body) body.innerHTML = "";
   document.body.classList.remove("editor-overlay-open");
   closeToothSelector();
-  // 暂存(keepOpen)已创建记录,但取消/返回只关层、不重渲病历 tab → 列表仍「暂无病历」。
+  // 扫荡#393:暂存(keepOpen)已创建记录,但取消/返回只关层、不重渲病历 tab → 列表仍「暂无病历」。
   // 关层后按当前(暂存已 refreshWorkspaceDetail 过的)缓存重渲病历 tab。force=true 是保存成功路径,
   // 它自己会重渲,跳过避免双渲。
   if (!force) {
@@ -214,13 +214,13 @@ function medicalVisitDate(row) {
 
 // 展示态卡片：头部（就诊日期 + 类型徽标 + 医生 + 牙位徽标）+ content_json 科目分区。
 const MEDICAL_SECTION_ORDER = ["PC", "HPI", "PI", "Exam", "AE", "DG", "TR", "Plan", "DA", "Nurse"];
-// 外部导入的内部字段，不在病历卡展示
+// SaaS 同步的内部字段，不在病历卡展示
 const HIDDEN_CONTENT_KEYS = new Set(["EMRVersion", "EMRVERSION", "emrversion", "Nurse"]);
 
-// 单科目展示：外部系统结构化值解析成 牙位+文本 行；空 item 不渲染；普通值原样
+// 单科目展示：SaaS结构化值解析成 牙位+文本 行；空 item 不渲染；普通值原样
 function medicalCardSection(key, value) {
   const label = MEDICAL_SECTION_LABELS[key] || key;
-  const entries = parseImportedSubject(value);
+  const entries = parseSaasSubject(value);
   if (entries !== null) {
     if (!entries.length) return "";
     return medicalSubjectBlock(label, entries.map(e => ({teeth: e.teeth, text: e.text})));
@@ -245,7 +245,7 @@ function renderWorkspaceMedicalCardBody(row) {
   return `
     <div class="medical-card-head official-card-head">
       <span class="card-head-field">就诊时间：<strong>${escapeHtml(formatVisitTimeText(row.visit_time || row.updated_at || ""))}</strong></span>
-      <span class="card-head-field">就诊诊所：${escapeHtml(window.CLINIC_NAME || "GD · DentOS")}</span>
+      <span class="card-head-field">就诊诊所：${escapeHtml(window.CLINIC_NAME || "口腔门诊部")}</span>
       ${row.doctor_name ? `<span class="card-head-field">医生：${escapeHtml(row.doctor_name)}</span>` : ""}
       ${nurse ? `<span class="card-head-field">护士：${escapeHtml(nurse)}</span>` : ""}
       ${row.record_type ? `<span class="record-type-stamp">${escapeHtml(row.record_type)}</span>` : ""}
@@ -336,7 +336,7 @@ const CS_SUBTABS = ["回访", "沟通咨询", "面诊"];
 
 function renderWorkspaceReturnVisitsTab(panel) {
   if (!requireWorkspaceDetail(panel)) return;   // 无数据时保留其载入/失败提示，不覆盖
-  _csSubTab = "回访";   // 每次(重)载客户沟通 tab 都回到默认「回访」子tab,不跨患者残留(换患者 loadedTabs.clear 会重跑本函数),保「今日待回访/跟进」深链落回访
+  _csSubTab = "回访";   // #710 每次(重)载客户沟通 tab 都回到默认「回访」子tab,不跨患者残留(换患者 loadedTabs.clear 会重跑本函数),保「今日待回访/跟进」深链落回访
   panel.innerHTML = `
     <div class="module-subtabs cs-subtabs">
       ${CS_SUBTABS.map(k => `<button type="button" class="module-subtab" data-cs-sub="${k}">${k}</button>`).join("")}
@@ -355,7 +355,7 @@ function renderCsSubTabs(panel) {
 function loadCsSubTab(panel) {
   const body = panel.querySelector("[data-cs-sub-body]");
   if (!body) return;
-  body.dataset.csCur = _csSubTab;   // 竞态守卫:记下本次要渲染的子tab,异步渲染回来前若已切走则丢弃过期结果
+  body.dataset.csCur = _csSubTab;   // #709 竞态守卫:记下本次要渲染的子tab,异步渲染回来前若已切走则丢弃过期结果
   if (_csSubTab === "面诊") return renderWorkspaceConsultTab(body);   // 并入的原面诊，逻辑不变
   if (_csSubTab === "沟通咨询") return renderCommunicationsSub(body);   // 电话/微信沟通记录 + 截图 + 录音
   return renderCsReturnVisitsSub(body);
@@ -373,11 +373,11 @@ function showCustomerCommReturnVisit() {
 async function renderCsReturnVisitsSub(panel) {
   const data = requireWorkspaceDetail(panel);
   if (!data) return;
-  const pid = workspacePatientId;   // 竞态守卫：await 期间可能换患者
-  try { _rvStaffCache = (await (await fetch("/api/staff-members")).json()).members || []; } catch { _rvStaffCache = []; }  // 接口返回 members 不是 list
+  const pid = workspacePatientId;   // #19 竞态守卫：await 期间可能换患者
+  try { _rvStaffCache = (await (await fetch("/api/staff-members")).json()).members || []; } catch { _rvStaffCache = []; }  // #111 接口返回 members 不是 list
   try { const c = await (await fetch("/api/settings/clinic")).json(); if (c && c.name) RV_CLINIC = c.name; } catch { /* 用默认 */ }
   if (pid !== workspacePatientId || !workspaceData) return;   // 已换患者/离开 → 丢弃,不拿旧data渲染
-  if (panel.dataset.csCur && panel.dataset.csCur !== "回访") return;   // await 期间已切到别的子tab → 过期渲染不写回共享 body
+  if (panel.dataset.csCur && panel.dataset.csCur !== "回访") return;   // #709 await 期间已切到别的子tab → 过期渲染不写回共享 body
   const header = `
     <div class="rv-tab-head">
       <button type="button" class="rv-new-btn" onclick="showReturnVisitForm('回访')">＋ 新增回访</button>
@@ -455,13 +455,13 @@ function renderAppointment(row) {
   const statusBadge = (typeof appointmentStatusBadge === "function")
     ? appointmentStatusBadge(row.status)
     : `<span>${escapeHtml(row.status || "")}</span>`;
-  // 改约徽标：本地改过时间(当前 start_time ≠ 外部系统 原约 original_start_time,后端派生)→ 标"改约·原X"。
-  // 本地编辑只动 start_time 不动 导入原始镜像,故两者一比即知;同日显示时分,跨日显示月-日 时分。
+  // 改约徽标：本地改过时间(当前 start_time ≠ SaaS 原约 original_start_time,后端派生)→ 标"改约·原X"。
+  // 本地编辑只动 start_time 不动 SaaS 原始镜像,故两者一比即知;同日显示时分,跨日显示月-日 时分。
   const origHm = String(row.original_start_time || "").trim().slice(0, 16);
   const rescheduled = origHm && origHm !== start;
   const origShow = (origHm.slice(0, 10) === start.slice(0, 10)) ? origHm.slice(11) : origHm.slice(5);
   const reschedBadge = rescheduled
-    ? `<span class="appt-resched-badge" title="外部系统 原约：${escapeAttr(origHm)}，本地已改约">改约·原${escapeHtml(origShow)}</span>`
+    ? `<span class="appt-resched-badge" title="SaaS 原约：${escapeAttr(origHm)}，本地已改约">改约·原${escapeHtml(origShow)}</span>`
     : "";
   return `
     <div class="record-row appointment-editor" data-appointment-id="${id}">
@@ -501,7 +501,7 @@ function toggleAppointmentEdit(appointmentId) {
   if (edit) edit.hidden = !edit.hidden;
 }
 
-let RV_CLINIC = "GD · DentOS";   // 就诊诊所名(从 /api/settings/clinic 读，可在设置里改；默认=后端中性默认)
+let RV_CLINIC = "口腔门诊部";   // 就诊诊所名(从 /api/settings/clinic 读，可在设置里改；默认=后端中性默认)
 
 // 同步来的回访文本常带转义的 \n 和包裹引号 → 还原换行、去引号后安全渲染
 function rvText(s) {
@@ -642,7 +642,7 @@ async function saveAppointment(appointmentId) {
   }
   status.textContent = res.ok ? "已保存" : "保存失败";
   if (res.ok) {
-    evictVisitsCache();  // 预约改动影响就诊时间轴
+    evictVisitsCache();  // #57 预约改动影响就诊时间轴
     await loadRecordVersions("appointment", appointmentId, container.querySelector("[data-record-versions]"));
     await loadAuditLogs();
   }
@@ -679,7 +679,7 @@ async function saveReturnVisit(returnVisitId) {
   }
   status.textContent = res.ok ? "已保存" : "保存失败";
   if (res.ok) {
-    // 保存(含标记已回访)成功后重渲整个tab，让已回访状态/戳/按钮立即生效，
+    // #544:保存(含标记已回访)成功后重渲整个tab，让已回访状态/戳/按钮立即生效，
     // 不再停在编辑态；同 createReturnVisit 一致的收尾顺序。
     await refreshReturnVisitWorkspaceFromServer();
     if (typeof loadAuditLogs === "function") await loadAuditLogs();
@@ -735,7 +735,7 @@ async function renderWorkspaceTreatmentsTab(panel) {
 }
 
 function treatmentsToolbar() {
-  // 主流程是编辑挂号到诊自动生成的处置单(下方「本地处置单」卡的「编辑」),
+  // #371:主流程是编辑挂号到诊自动生成的处置单(下方「本地处置单」卡的「编辑」),
   // 故「+ 新增处置」弱化为次级按钮并改名「另开处置单」,只用于不挂号/补开独立单的场景,
   // 避免和自动单并行导致医生归属/业绩/收费责任人混淆。
   return '<div class="treatments-toolbar">'
@@ -1030,7 +1030,7 @@ async function renderWorkspaceVisitsTab(panel) {
     return;
   }
   panel.innerHTML = visits.map((v, i) => renderVisitDay(v, i === 0)).join("");
-  if (typeof bindStaffInputs === "function") bindStaffInputs(panel);   // 二批:预约历史编辑医生选人
+  if (typeof bindStaffInputs === "function") bindStaffInputs(panel);   // #420二批:预约历史编辑医生选人
 }
 
 // 单日就诊卡：默认最近一天展开，列出各类条目。

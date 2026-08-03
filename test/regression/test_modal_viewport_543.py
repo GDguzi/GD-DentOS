@@ -1,8 +1,8 @@
-"""回归:多个弹窗(新增预约/新增患者/预约设置/送消单/退费)在720p视口下
+"""#543 回归:多个弹窗(新增预约/新增患者/预约设置/送消单/退费)在720p视口下
 关键按钮(保存/确认收款/退费确认)被压出屏幕或需要滚动。`.pay-modal` 早就是
 正确的「flex列+内容可滚动+头尾固定」写法，其余弹窗没跟进，属逐个遗漏。
 静态检查 styles.css/workspace_tabs.js 里对应 CSS 规则是否已按同一套模式补齐。
-跑：python3 -m unittest test.test_modal_viewport -q
+跑：python3 -m unittest test.test_modal_viewport_543 -q
 """
 import unittest
 from pathlib import Path

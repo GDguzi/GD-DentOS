@@ -1,5 +1,5 @@
-"""知情同意书：模板列表/详情 + 签署件创建/检索。
-a 模板查询；b 签署件(填充+手写签名+内容哈希,防篡改;可信时间戳TSA二期接)。
+"""知情同意书 (#15)：模板列表/详情 + 签署件创建/检索。
+#15a 模板查询；#15b 签署件(填充+手写签名+内容哈希,防篡改;可信时间戳TSA二期接)。
 模板=诊所现行同意书正文；签署件=填充后正文快照+患者/医生手写签名+内容哈希。"""
 import json
 import re
@@ -12,7 +12,7 @@ from local_app.auth import audit_write, require_perm
 from local_app.db import begin_immediate, connect, new_id
 from local_app.versioning import stable_hash
 
-# 手写签名必须是 canvas 产生的 data:image base64，挡注入/超大
+# #63：手写签名必须是 canvas 产生的 data:image base64，挡注入/超大
 _SIGN_RE = re.compile(r"^data:image/(png|jpeg);base64,[A-Za-z0-9+/=]+$")
 _SIGN_MAX = 3_000_000
 
@@ -25,7 +25,7 @@ def _valid_sign(s):
 
 def _consent_hash(doc):
     """对签署件的实质内容算确定性哈希(防篡改)：患者/账单/处置单/模板归属 + 正文+字段+双方签名+模板名+签署时间。
-    纳入 patient_identity/bill_id/template_id；纳入 order_id，改任一项哈希即变；TSA(二期)对此哈希签发可信时间戳。"""
+    #59：纳入 patient_identity/bill_id/template_id；#74/#75：纳入 order_id，改任一项哈希即变；TSA(二期)对此哈希签发可信时间戳。"""
     return stable_hash({
         "patient_identity": doc.get("patient_identity", ""),
         "bill_id": doc.get("bill_id", ""),
@@ -77,7 +77,7 @@ def create_consent_forms_router(db_path):
         return {"template_id": r["template_id"], "name": r["name"], "category": r["category"],
                 "body": r["body"], "source": r["source"]}
 
-    # ---------- 签署件（b）：填充+手写签名 → 内容哈希入库 ----------
+    # ---------- 签署件（#15b）：填充+手写签名 → 内容哈希入库 ----------
     @router.post("/api/patients/{patient_identity}/consent-documents")
     def create_document(patient_identity: str, payload: dict):
         require_perm("consent.manage")
@@ -96,9 +96,9 @@ def create_consent_forms_router(db_path):
         else:
             if not patient_sign:
                 raise HTTPException(status_code=400, detail="缺少患者签名")
-            if not doctor_sign:  # 医疗知情同意书必须有医生签名
+            if not doctor_sign:  # #60：医疗知情同意书必须有医生签名
                 raise HTTPException(status_code=400, detail="缺少医生签名")
-            # 签名必须是 canvas 的 data:image base64，挡注入/超大负载
+            # #63：签名必须是 canvas 的 data:image base64，挡注入/超大负载
             if not _valid_sign(patient_sign):
                 raise HTTPException(status_code=400, detail="患者签名格式无效")
             if not _valid_sign(doctor_sign):
@@ -116,17 +116,17 @@ def create_consent_forms_router(db_path):
             begin_immediate(conn)   # 抢写锁:纸质签署去重在锁内做,防双击/多设备/重试重复落档
             if not conn.execute("select 1 from patients where patient_identity = ?", (patient_identity,)).fetchone():
                 raise HTTPException(status_code=404, detail="patient not found")
-            # 账单必须属于本患者，防止把同意书绑到别人的费用单
+            # #59：账单必须属于本患者，防止把同意书绑到别人的费用单
             if bill_id and not conn.execute(
                 "select 1 from bills where bill_id = ? and patient_identity = ?", (bill_id, patient_identity)
             ).fetchone():
                 raise HTTPException(status_code=400, detail="账单不存在或不属于该患者")
-            # 处置单必须属于本患者，未划价先签也能稳定追溯到处置单
+            # #74/#75：处置单必须属于本患者，未划价先签也能稳定追溯到处置单
             if order_id and not conn.execute(
                 "select 1 from treatment_orders where order_id = ? and patient_identity = ?", (order_id, patient_identity)
             ).fetchone():
                 raise HTTPException(status_code=400, detail="处置单不存在或不属于该患者")
-            # 声明的模板必须真实存在且启用(active=1)，停用/废弃模板不能用于新签署
+            # #17/#112：声明的模板必须真实存在且启用(active=1)，停用/废弃模板不能用于新签署
             if template_id and not conn.execute(
                 "select 1 from consent_templates where template_id = ? and active = 1", (template_id,)
             ).fetchone():
@@ -184,7 +184,7 @@ def create_consent_forms_router(db_path):
     @router.get("/api/patients/{patient_identity}/consent-documents")
     def list_documents(patient_identity: str):
         """该患者的签署件列表（不含签名图/正文，轻量）。"""
-        require_perm("consent.manage")   # 知情同意签署件读守卫用本模块对应权限
+        require_perm("consent.manage")   # #482：知情同意签署件读守卫用本模块对应权限
         with connect(db_path) as conn:
             rows = conn.execute(
                 "select document_id, template_id, template_name, bill_id, order_id, content_hash, tsa_token, status, signed_at "
@@ -201,7 +201,7 @@ def create_consent_forms_router(db_path):
     @router.get("/api/consent-documents/{document_id}")
     def get_document(document_id: str):
         """单份签署件完整内容（含正文+签名图+哈希），并核验哈希是否一致(防篡改)。"""
-        require_perm("consent.manage")   # 签署件完整内容读守卫用本模块对应权限
+        require_perm("consent.manage")   # #482：签署件完整内容读守卫用本模块对应权限
         with connect(db_path) as conn:
             r = conn.execute("select * from consent_documents where document_id = ?", (document_id,)).fetchone()
         if not r:

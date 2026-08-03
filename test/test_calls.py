@@ -17,7 +17,7 @@ class NormalizePhoneTest(unittest.TestCase):
     def test_strip_and_country_code(self):
         self.assertEqual(normalize_phone(" 138 0013 8000 "), "13800138000")
         self.assertEqual(normalize_phone("+8613800138000"), "13800138000")
-        self.assertEqual(normalize_phone("045186888888"), "45186888888")  # 去前导0
+        self.assertEqual(normalize_phone("075186888888"), "75186888888")  # 去前导0
         self.assertEqual(normalize_phone(""), "")
         self.assertEqual(normalize_phone(None), "")
 

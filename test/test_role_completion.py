@@ -1,5 +1,5 @@
-"""按权限树蓝本补齐角色/岗位 + 升级幂等补缺 + 新角色可建账号。
-产品决策去「技师」——预置 10 类,旧库 technician 由 migrate_technician_role 一次性迁移。
+"""#420:按权限树蓝本补齐角色/岗位 + 升级幂等补缺 + 新角色可建账号。
+#502:用户拍板去「技师」——预置 10 类,旧库 technician 由 migrate_technician_role 一次性迁移。
 合成库,只断言结构/计数,不碰真实库。"""
 import tempfile
 import unittest
@@ -24,7 +24,7 @@ class BlueprintRolesTest(unittest.TestCase):
         keys = {k for k, _, _ in auth.PRESET_ROLES}
         self.assertEqual(len(auth.PRESET_ROLES), 10)
         self.assertTrue(_NEW_KEYS <= keys, "应含主任/收银员/客服/助理2 独立角色")
-        self.assertNotIn("technician", keys, "技师角色已去除")
+        self.assertNotIn("technician", keys, "#502:技师角色已去除")
         # 每个新角色都要有默认权限定义(否则建出来是空权限角色)
         for k in _NEW_KEYS:
             self.assertIn(k, auth.DEFAULT_ROLE_PERMS, f"{k} 缺默认权限")
@@ -36,20 +36,20 @@ class BlueprintRolesTest(unittest.TestCase):
         self.assertEqual(len(staff_routes.ROLES), 10)
 
     def test_assistant_reception_absorb_lab_perms(self):
-        """技工功能并入——助理/助理2 带 lab_order.manage+warehouse.view,前台带 lab_order.manage。"""
+        """#502:技工功能并入——助理/助理2 带 lab_order.manage+warehouse.view,前台带 lab_order.manage。"""
         self.assertIn("lab_order.manage", auth.DEFAULT_ROLE_PERMS["assistant"])
         self.assertIn("warehouse.view", auth.DEFAULT_ROLE_PERMS["assistant"])
         self.assertIn("lab_order.manage", auth.DEFAULT_ROLE_PERMS["assistant2"])
         self.assertIn("lab_order.manage", auth.DEFAULT_ROLE_PERMS["reception"])
 
     def test_assistant_patient_create_edit(self):
-        """尾巴(产品决策:助理/助理2 带患者建档/编辑。"""
+        """#502尾巴(用户拍板 2026-07-02):助理/助理2 带患者建档/编辑。"""
         for role in ("assistant", "assistant2"):
             self.assertIn("patient.create", auth.DEFAULT_ROLE_PERMS[role])
             self.assertIn("patient.edit", auth.DEFAULT_ROLE_PERMS[role])
 
     def test_report_view_admin_only(self):
-        """(产品决策:业绩/门诊报表只有院长(admin)可查——任何预置角色默认不带 report.view。"""
+        """#512(用户拍板 2026-07-02):业绩/门诊报表只有院长(admin)可查——任何预置角色默认不带 report.view。"""
         for role, perms in auth.DEFAULT_ROLE_PERMS.items():
             self.assertNotIn("report.view", perms, f"{role} 不应默认带报表权限")
 
@@ -88,7 +88,7 @@ class UpgradeMigrationTest(unittest.TestCase):
 
 
 class TechnicianMigrationTest(unittest.TestCase):
-    """模拟带 technician 角色的旧库,验证一次性迁移。"""
+    """#502:模拟带 technician 角色的旧库,验证一次性迁移。"""
 
     def _seed_old_with_technician(self, db):
         now = auth.now_str()
@@ -157,7 +157,7 @@ class TechnicianMigrationTest(unittest.TestCase):
 
 
 class AbsorbedLabPermsUpgradeTest(unittest.TestCase):
-    """旧 6 角色库(从没建过 technician)直升当前 HEAD,助理/前台也必须补上技工权限。"""
+    """#507:旧 6 角色库(从没建过 technician)直升当前 HEAD,助理/前台也必须补上技工权限。"""
 
     def _seed_old6(self, db):
         now = auth.now_str()
@@ -165,7 +165,7 @@ class AbsorbedLabPermsUpgradeTest(unittest.TestCase):
             for key, name in _OLD_ROLES:
                 conn.execute("insert into roles(role_key, name, is_system, sort, created_at, updated_at) "
                              "values (?, ?, 1, 0, ?, ?)", (key, name, now, now))
-            # 前的老权限勾选(最小化)
+            # #420 前的老权限勾选(最小化)
             for r in ("assistant", "reception"):
                 conn.execute("insert into role_permissions(role_key, perm_key) values (?, 'patient.view')", (r,))
             conn.commit()
@@ -188,7 +188,7 @@ class AbsorbedLabPermsUpgradeTest(unittest.TestCase):
             self.assertIn("lab_order.manage", rec, "直升路径前台缺技工权限")
 
     def test_assistant_patient_perms_one_shot_upgrade(self):
-        """尾巴:存量库助理一次性补 patient.create/edit;有标记不找补。"""
+        """#502尾巴:存量库助理一次性补 patient.create/edit;有标记不找补。"""
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "clinic.sqlite3"
             init_db(db)
@@ -208,7 +208,7 @@ class AbsorbedLabPermsUpgradeTest(unittest.TestCase):
                     "and perm_key='patient.edit'").fetchone())
 
     def test_report_perm_revoke_one_shot(self):
-        """存量库一次性回收所有角色的 report.view;有标记后用户在矩阵单独授回不被再收。"""
+        """#512:存量库一次性回收所有角色的 report.view;有标记后用户在矩阵单独授回不被再收。"""
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "clinic.sqlite3"
             init_db(db)

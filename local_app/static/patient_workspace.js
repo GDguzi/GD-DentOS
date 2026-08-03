@@ -9,7 +9,7 @@ const VIP_KEYS = ["VIP", "VIP等级", "会员等级", "vip_level"];
 // 分组：medical=医疗警示（红色置顶）/ identity=身份信息 / contact=联系方式 /
 //       clinic=就诊信息 / finance=费用信息 / marketing=营销信息，
 // 未匹配的键进"其他字段"兜底组，键名直接做标签。
-// 同时收录中文键（旧/手填）和原系统 外部系统 的英文键（source_json 实际键名）。
+// 同时收录中文键（旧/手填）和原系统 SaaS 的英文键（source_json 实际键名）。
 const SOURCE_FIELD_GROUPS = {
   // —— 医疗警示 ——
   "过敏史": {group: "medical", label: "过敏史"},
@@ -93,7 +93,7 @@ const SOURCE_FIELD_GROUPS = {
   "referraldoct": {group: "referral", label: "转诊医生"},
   // —— 备注 ——
   "remark": {group: "note", label: "备注"},
-  // —— 导入患者详情/列表补充字段：补中文标签,避免落「其他字段」堆英文 ——
+  // —— 外部导入的患者详情/列表补充字段：补中文标签,避免落「其他字段」堆英文 ——
   "occupation": {group: "identity", label: "职业"},
   "patgroup": {group: "identity", label: "患者分组"},
   "allergichistory": {group: "medical", label: "过敏史"},
@@ -125,7 +125,7 @@ const SOURCE_HIDDEN_KEYS = new Set([
   // 拼音检索 / 内部指针ID / 排序码 / 标志位：显示出来是噪音
   "pinyin", "referraldatesort", "referraldoctidentity", "scheduleidentity",
   "userid", "visitsort", "wechat",
-  // 历史导入数据带来的内部/重复/噪音键：生日(已在身份/编辑区)、本店名(每人都一样)、
+  // 导入数据带来的内部/重复/噪音键：生日(已在身份/编辑区)、本店名(每人都一样)、
   // 患者照片URL、各类内部 id 与标志位、来源子码(可读的看 comefromconcat)
   "agebirthday", "birthday1", "chainpat", "clinicname", "name", "patgroupid",
   "picture", "registeridentity", "ybreadinfo",
@@ -177,7 +177,7 @@ function workspacePageEl() {
 
 async function showPatientWorkspacePage(identity, tab = "", host = null) {
   const renderRevision = ++_workspaceRenderRevision;
-  const hostChanged = _wsHost !== host;  // 宿主切换(内嵌↔全屏)即使同患者也要重渲到新宿主
+  const hostChanged = _wsHost !== host;  // #118 宿主切换(内嵌↔全屏)即使同患者也要重渲到新宿主
   _wsHost = host;                       // host=null → 全屏页；传入容器 → 内嵌该容器
   const page = workspacePageEl();
   if (!page) return;
@@ -281,7 +281,7 @@ function renderActiveWorkspaceTabIfPending() {
   }
 }
 
-// tab按钮文本(去掉角标数字span)当标题用，标签改名时自动跟着变，不用额外维护一份映射
+// #398/#547：tab按钮文本(去掉角标数字span)当标题用，标签改名时自动跟着变，不用额外维护一份映射
 function workspaceTabLabel(page, tab) {
   const btn = page.querySelector(`[data-workspace-tab="${cssEscape(tab)}"]`);
   if (!btn) return "";
@@ -318,7 +318,7 @@ function switchWorkspaceTab(tab) {
     workspaceLoadedTabs.add(tab);
     loadWorkspaceTabPanel(tab);
   }
-  // URL hash 和顶部 H1 跟着当前患者+tab 走，不再停在"今日工作台"/旧路由
+  // #398/#547：URL hash 和顶部 H1 跟着当前患者+tab 走，不再停在"今日工作台"/旧路由
   // (仅全屏页；内嵌右栏没有独立路由，不动 hash/H1)
   if (!_wsHost) {
     const next = `#patient/${encodeURIComponent(workspacePatientId)}/${encodeURIComponent(tab)}`;
@@ -429,7 +429,7 @@ function renderWorkspaceRail(p, summary) {
       ${pair("备注", sv("remark"))}
     </div>
   `;
-  // 头像上传用闭包绑定(pid 不拼进 inline JS,避免注入)
+  // #105 头像上传用闭包绑定(pid 不拼进 inline JS,避免注入)
   const av = rail.querySelector("[data-avatar-upload]");
   if (av) av.addEventListener("click", () => uploadPatientAvatar(pid));
   // 挂号/预约/分诊 快捷(闭包绑定,不拼内联JS)
@@ -438,13 +438,13 @@ function renderWorkspaceRail(p, summary) {
   if (typeof loadPatientTags === "function") loadPatientTags(pid);   // 专属标签(大客户经营)
 }
 
-// 患者档案左卡片：挂号/预约/分诊。复用预约弹框与分诊弹框。
+// 患者档案左卡片：挂号直接进今日候诊；预约/分诊仍复用各自弹框。
 async function railAction(act, pid, pname) {
   if (act === "followup") {
-    // 快速新建回访(按钮文案「回访」,产品决策,原「跟进」更名):跳客户沟通 tab →
+    // 快速新建回访(按钮文案「回访」,用户拍板 2026-07-26,原「跟进」更名):跳客户沟通 tab →
     // 强制落「回访」子tab → 展开"新增计划(待回访)"表单。复用回访机制,非群发。
     if (typeof switchWorkspaceTab === "function") switchWorkspaceTab("return-visits");
-    if (typeof showCustomerCommReturnVisit === "function") showCustomerCommReturnVisit();   // 面板可能已加载在面诊子tab,显式切回访否则下方轮询新增表单永远找不到
+    if (typeof showCustomerCommReturnVisit === "function") showCustomerCommReturnVisit();   // #710 面板可能已加载在面诊子tab,显式切回访否则下方轮询新增表单永远找不到
     let tries = 0;
     const open = () => {
       const page = (typeof workspacePageEl === "function") ? workspacePageEl() : null;
@@ -457,11 +457,18 @@ async function railAction(act, pid, pname) {
     open();
     return;
   }
-  if (act === "appt" || act === "reg") {
-    // 挂号=今日预约(预填09:00)；预约=普通新建。两者都预选当前患者
-    const prefill = act === "reg"
-      ? {start: (typeof localDateValue === "function" ? localDateValue() : "") + " 09:00"} : {};
-    if (typeof openNewAppointment === "function") openNewAppointment(prefill);
+  if (act === "reg") {
+    await checkInPatient({
+      patientIdentity: pid,
+      displayName: pname,
+      openTriageAfter: false,
+      switchToToday: true,
+      showSuccess: true,
+    });
+    return;
+  }
+  if (act === "appt") {
+    if (typeof openNewAppointment === "function") openNewAppointment({});
     if (typeof pickApptPatient === "function") pickApptPatient({dataset: {pid: pid, pname: pname, chart: ""}});
     return;
   }
@@ -504,9 +511,9 @@ function renderWorkspaceTabCounts(counts) {
   const hasBillingCount = Object.prototype.hasOwnProperty.call(counts, "bills");
   const mapping = {
     medical: counts.medical_records,
-    // 产品决策:处置 tab 不标数值(项目数/单数口径都易误读),看单直接进 tab
+    // #381 用户拍板:处置 tab 不标数值(项目数/单数口径都易误读),看单直接进 tab
     images: counts.images,
-    // 「客户沟通」含 回访/沟通咨询/面诊 三子tab,只标回访数会误导(有沟通没回访会显示0),去掉父tab角标
+    // #726 「客户沟通」含 回访/沟通咨询/面诊 三子tab,只标回访数会误导(有沟通没回访会显示0),去掉父tab角标
     notes: counts.local_notes,
   };
   Object.entries(mapping).forEach(([tab, count]) => {
@@ -722,7 +729,7 @@ function renderSourceGroups(raw) {
   if (!cards.length) return "";
   return `
     <section class="panel">
-      <div class="panel-head">原始档案<span>外部导入只读</span></div>
+      <div class="panel-head">原始档案<span>SaaS 同步只读</span></div>
       <div class="panel-body workspace-source-groups">${cards.join("")}</div>
     </section>
   `;

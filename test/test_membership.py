@@ -13,13 +13,13 @@ from local_app.db import connect, init_db
 def _client(tmpdir, login="boss"):
     db_path = Path(tmpdir) / "clinic.sqlite3"
     init_db(db_path)
-    auth.ensure_seed_roles(db_path)   # member-account 读按 billing.view 守卫,需种子角色权限,前台才有 billing.view
+    auth.ensure_seed_roles(db_path)   # #482:member-account 读按 billing.view 守卫,需种子角色权限,前台才有 billing.view
     with connect(db_path) as conn:
         conn.execute(
             "insert into patients(patient_identity, display_name, updated_at, current_hash) "
             "values ('p1', '测试患者', '2026-06-19 00:00:00', 'h1')"
         )
-        # 会员改钱/开关需管理员→测试建 admin boss + 前台 qt(qt 用于 403)
+        # 审查#15/#16：会员改钱/开关需管理员→测试建 admin boss + 前台 qt(qt 用于 403)
         auth.create_user(conn, "boss", "院长", "admin123", role="admin")
         auth.create_user(conn, "qt", "前台", "pw123456", role="reception")
         conn.commit()
@@ -53,7 +53,7 @@ class MemberTopupTest(unittest.TestCase):
                     400, f"amount={bad}")
 
     def test_subcent_amount_rejected(self):
-        # 四舍五入到分后为 0 的亚分额(0.004)应 400，不是 200 空操作
+        # 复审：四舍五入到分后为 0 的亚分额(0.004)应 400，不是 200 空操作
         with tempfile.TemporaryDirectory() as tmp:
             _, client = _client(tmp)
             self.assertEqual(
@@ -63,7 +63,7 @@ class MemberTopupTest(unittest.TestCase):
                 client.post("/api/patients/p1/member-account/topup", json={"amount": 0.01, "request_id": uuid.uuid4().hex}).status_code, 200)
 
     def test_concurrent_consume_no_overdraft(self):
-        # 并发同患者消费不能把余额扣成负数(写锁串行化)
+        # #165：并发同患者消费不能把余额扣成负数(写锁串行化)
         import threading
         with tempfile.TemporaryDirectory() as tmp:
             db_path, client = _client(tmp)
@@ -155,7 +155,7 @@ class MemberToggleTest(unittest.TestCase):
             self.assertTrue(client.get("/api/settings/features").json()["membership_enabled"])
 
     def test_string_false_disables(self):
-        # 前端可能传字符串 "false"，必须真关闭(不能 bool("false")=True 误判为开)
+        # #168：前端可能传字符串 "false"，必须真关闭(不能 bool("false")=True 误判为开)
         with tempfile.TemporaryDirectory() as tmp:
             _, client = _client(tmp)
             r = client.put("/api/settings/features", json={"membership_enabled": "false"})
@@ -192,7 +192,7 @@ if __name__ == "__main__":
 
 class MemberPermissionTest(unittest.TestCase):
     def test_non_admin_cannot_change_balance_or_toggle(self):
-        # 前台(reception)不能充值/退现/改会员开关 → 403
+        # 审查#15/#16：前台(reception)不能充值/退现/改会员开关 → 403
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp, login="qt")   # 前台登录
             self.assertEqual(client.post("/api/patients/p1/member-account/topup", json={"amount": 100, "request_id": uuid.uuid4().hex}).status_code, 403)
@@ -204,7 +204,7 @@ class MemberPermissionTest(unittest.TestCase):
 
 class MemberIdempotencyTest(unittest.TestCase):
     """审计R4：充值/消费/退储值幂等——同号同载荷重放首次结果只入账一次,
-    同号异载荷 409,缺号 400(复用 payment_requests 范式,口径对齐)。"""
+    同号异载荷 409,缺号 400(复用 #800 payment_requests 范式,口径对齐)。"""
 
     def test_topup_same_request_id_only_once(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -249,7 +249,7 @@ class MemberIdempotencyTest(unittest.TestCase):
             self.assertEqual(client.get("/api/patients/p1/member-account").json()["balance"], 100)
 
     def test_missing_request_id_400(self):
-        # 旧调用不带 request_id：按 口径改钱路径必填,缺号/空号一律 400,不落账
+        # 旧调用不带 request_id：按 #800 口径改钱路径必填,缺号/空号一律 400,不落账
         with tempfile.TemporaryDirectory() as tmp:
             _, client = _client(tmp)
             client.post("/api/patients/p1/member-account/topup",
@@ -262,7 +262,7 @@ class MemberIdempotencyTest(unittest.TestCase):
             self.assertEqual(client.get("/api/patients/p1/member-account").json()["balance"], 100)
 
     def test_failed_validation_does_not_burn_request_id(self):
-        # 与 同口径：校验失败(余额不足)不落幂等登记,改对金额后同号可重来
+        # 与 #800 同口径：校验失败(余额不足)不落幂等登记,改对金额后同号可重来
         with tempfile.TemporaryDirectory() as tmp:
             _, client = _client(tmp)
             client.post("/api/patients/p1/member-account/topup",
@@ -279,7 +279,7 @@ class MemberIdempotencyTest(unittest.TestCase):
 
 class MemberAuditInPatientViewTest(unittest.TestCase):
     def test_member_txn_appears_in_patient_audit(self):
-        # 会员充值流水要出现在患者审计页 + 审计是JSON
+        # 审查#24：会员充值流水要出现在患者审计页 + #23 审计是JSON
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             client.post("/api/patients/p1/member-account/topup", json={"amount": 500, "request_id": uuid.uuid4().hex})

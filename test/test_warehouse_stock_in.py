@@ -114,7 +114,7 @@ class WarehouseStockInTest(unittest.TestCase):
             self.assertEqual(unknown_item.status_code, 404)
 
     def test_create_rejects_nan_inf_negative_zero_qty(self):
-        # 数量 nan/inf/负/零 必须 400(不能绕过 require_positive_qty 污染库存)
+        # 动态扫#12/#21：数量 nan/inf/负/零 必须 400(不能绕过 require_positive_qty 污染库存)
         with tempfile.TemporaryDirectory() as tmpdir:
             _, client = _client(tmpdir)
             item_id, supplier_id = _seed_item_and_supplier(client)

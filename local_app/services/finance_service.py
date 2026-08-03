@@ -23,7 +23,7 @@ from local_app.timeutil import bj_now
 
 
 def method_parts(amount, detail):
-    """把一笔收款按 PaidDetail 拆成 [(方式,金额)],与工作台 today_pay_methods 同口径——
+    """#559：把一笔收款按 PaidDetail 拆成 [(方式,金额)],与工作台 today_pay_methods 同口径——
     多方式且拆分和≈整笔金额才拆,否则返回 None(调用方按 pay_type 整笔计)。"""
     parts = split_paid_detail(detail or "")
     amt = amount or 0
@@ -31,8 +31,10 @@ def method_parts(amount, detail):
         return parts
     return None
 
-# 收银查询付款方式列(对齐通用口径 实际用的)；处置类别动态来自 fee_type
-CASHIER_METHODS = ["现金", "微信", "支付宝", "银行卡", "云闪付", "社保卡", "医保", "其他"]
+# 收银查询付款方式列的「固定列顺序」，不是白名单：数据里出现而不在此列的方式(诊所自定义的
+# 第三方支付/会员卡等)照样会追加到后面，只是排在固定列之后。诊所专属方式走设置里的付款方式
+# 名单，不写死在这（开源剥离铁律）。处置类别动态来自 fee_type。
+CASHIER_METHODS = ["现金", "微信", "支付宝", "银行卡", "社保卡", "医保", "其他"]
 
 
 def valid_payment_clause(prefix=""):
@@ -112,8 +114,8 @@ def build_cashier_rows(conn, date_from, date_to, doctor="", source="", method=""
     for r in pays:
         amount = round(r["amount"] or 0, 2)
         info = bill_info.get(r["bill_id"])
-        # 本地退款流水自带项目归属(source_json.refund_items,退款那一刻固化)——
-        # 分类按归属精确记负数(只退检查=检查-300),不再按整单比例猜。老退款/导入的负数行
+        # #802:本地退款流水自带项目归属(source_json.refund_items,退款那一刻固化)——
+        # 分类按归属精确记负数(只退检查=检查-300),不再按整单比例猜。老退款/SaaS 负数行
         # 没有 refund_items(归属信息不存在),维持下面的比例口径。
         refund_alloc = None
         if (r["payment_record_type"] or "") == "refund":
@@ -165,9 +167,9 @@ def build_cashier_rows(conn, date_from, date_to, doctor="", source="", method=""
 
 
 def arrears_flows(conn, date_from, date_to):
-    """欠款流水(对标行业通用口径 收入统计的期初/期末欠款 + 每日新增/补交欠款)。
+    """欠款流水(对标 SaaS 收入统计的期初/期末欠款 + 每日新增/补交欠款)。
 
-    欠款绝对值以 **bills.paid_fee 口径** 锚定(= 现有 bill_net_arrears_sql，与全项目一致、外部导入维护)——
+    欠款绝对值以 **bills.paid_fee 口径** 锚定(= 现有 bill_net_arrears_sql，与全项目一致、SaaS 同步维护)——
     不用 payments 表逐笔重建(实测本地约 195 万收款无有效账单可挂[空 bill_id 的预交/储值等]，
     重建会把欠款虚高一个数量级)。口径：
     - 净应收 = total_fee − 优惠(DiscountFee)，仅有效账单(排作废)；当前欠款 = Σ(净应收 − paid_fee)。
@@ -180,8 +182,8 @@ def arrears_flows(conn, date_from, date_to):
     active = active_bill_clause()       # bills.state 有效
     active_b = active_bill_clause("b.state")
     cancel_p = valid_payment_clause("p.")
-    # ①:本地退款(payment_record_type='refund')不再冲减 bills.paid_fee → 也不得进欠款流水,
-    # 否则回推/补交把退款算成欠款变动。导入的负数行 record_type='' 不受影响(其 paid_fee 由导入源维护)。
+    # #813①:本地退款(payment_record_type='refund')不再冲减 bills.paid_fee → 也不得进欠款流水,
+    # 否则回推/补交把退款算成欠款变动。SaaS 负数行 record_type='' 不受影响(其 paid_fee 由 SaaS 维护)。
     no_refund = "coalesce(p.payment_record_type, '') <> 'refund'"
 
     # 当前欠款(paid_fee 口径，与 bill_net_arrears_sql 一致)
@@ -189,7 +191,7 @@ def arrears_flows(conn, date_from, date_to):
         f"select coalesce(sum(total_fee - {disc} - paid_fee), 0) from bills where {active}"
     ).fetchone()[0] or 0
     # 期后收款 − 期后新开账单净应收 → 回推到 date_to 末。
-    # pay_after 必须与 paid_fee 锚同一全集——只算「挂在有效账单上」的收款，
+    # #682：pay_after 必须与 paid_fee 锚同一全集——只算「挂在有效账单上」的收款，
     # 排除空 bill_id 预交/储值(它们不改任何账单 paid_fee，计入会把历史期末欠款虚高)。
     pay_after = conn.execute(
         f"""select coalesce(sum(p.amount), 0) from payments p join bills b on b.bill_id = p.bill_id
@@ -239,7 +241,7 @@ def arrears_flows(conn, date_from, date_to):
 
 def income_payload(conn, date_from, date_to):
     """收入统计数据(JSON/CSV 共用)：按天汇总实收 + 日×付款方式透视 + 应收 + 欠款流水。"""
-    # 逐笔取(含 PaidDetail),在 Python 里按方式拆分,与工作台 today_pay_methods 同口径
+    # #559：逐笔取(含 PaidDetail),在 Python 里按方式拆分,与工作台 today_pay_methods 同口径
     prows = conn.execute(
         """
         select substr(pay_time, 1, 10) as day,
@@ -248,7 +250,7 @@ def income_payload(conn, date_from, date_to):
                json_extract(iif(json_valid(source_json), source_json, '{}'), '$.PaidDetail') as detail
         from payments
         where substr(coalesce(pay_time, ''), 1, 10) between ? and ?
-          -- 作废口径：排「作废原单」(CancelMark 非空且金额≥0),保留退费负数冲减
+          -- #1 作废口径：排「作废原单」(CancelMark 非空且金额≥0),保留退费负数冲减
           and (coalesce(json_extract(iif(json_valid(source_json), source_json, '{}'), '$.CancelMark'), '') = ''
                or coalesce(amount, 0) < 0)
         order by day
@@ -274,7 +276,7 @@ def income_payload(conn, date_from, date_to):
         d = day_map.setdefault(r["day"], {"date": r["day"], "count": 0, "amount": 0.0, "methods": {}, "receivable": 0.0})
         d["count"] += 1                       # 每笔算 1(拆方式不虚增笔数)
         d["amount"] = round(d["amount"] + r["amt"], 2)
-        # 多方式收款按 PaidDetail 拆到真实方式(和工作台一致),拆不出按 pay_type 整笔计
+        # #559：多方式收款按 PaidDetail 拆到真实方式(和工作台一致),拆不出按 pay_type 整笔计
         parts = method_parts(r["amt"], r["detail"]) or [(r["method"], r["amt"])]
         for m, a in parts:
             d["methods"][m] = round(d["methods"].get(m, 0) + a, 2)
@@ -286,7 +288,7 @@ def income_payload(conn, date_from, date_to):
         d = day_map.setdefault(r["day"], {"date": r["day"], "count": 0, "amount": 0.0, "methods": {}, "receivable": 0.0})
         d["receivable"] = r["receivable"]
 
-    # 欠款流水(对标行业通用口径 收入统计：期初/期末欠款 + 每日新增/补交欠款)
+    # 欠款流水(对标 SaaS 收入统计：期初/期末欠款 + 每日新增/补交欠款)
     flows = arrears_flows(conn, date_from, date_to)
     for day_key, f in flows["per_day"].items():
         d = day_map.setdefault(day_key, {"date": day_key, "count": 0, "amount": 0.0, "methods": {}, "receivable": 0.0})
@@ -302,7 +304,7 @@ def income_payload(conn, date_from, date_to):
     methods = from_fixed + [m for m in seen if m not in CASHIER_METHODS]
     return {
         "date_from": date_from, "date_to": date_to, "days": days, "methods": methods,
-        "total_amount": round(sum(d["amount"] for d in days), 2),   # 
+        "total_amount": round(sum(d["amount"] for d in days), 2),   # 审查#28
         "total_count": sum(d["count"] for d in days),
         "total_receivable": round(sum(d["receivable"] for d in days), 2),
         "opening_arrears": flows["opening"], "closing_arrears": flows["closing"],
@@ -344,7 +346,7 @@ def pack_row(name, first, revisit):
     return {"name": name, "first": pack(first), "revisit": pack(revisit)}
 
 
-# 病历为轴的角色取名 SQL：医生=doctor_name 列；护士=病历 content_json.Nurse。
+# 病历为轴的角色取名 SQL：医生=doctor_name 列；护士=病历 content_json.Nurse(以病历实际存储为准)。
 _VISIT_ROLE_SQL = {
     "doctor": "trim(coalesce(doctor_name, ''))",
     "nurse": "trim(coalesce(json_extract(iif(json_valid(content_json), content_json, '{}'), '$.Nurse'), ''))",
@@ -470,7 +472,7 @@ def visit_perf(conn, start, end, staff, role):
             if net > 0:
                 c["deal"].add(meta[1])
 
-    if staff:   # 单人筛选:只留该人的行,不显示别人的钱/未归类(防串账)
+    if staff:   # 单人筛选:只留该人的行,不显示别人的钱/未归类(#678 防串账)
         cells = {k: val for k, val in cells.items() if k == staff}
         unclassified = blank_cell()
 
@@ -537,7 +539,7 @@ def age_from_birthday(birthday):
 
 
 def daily_settlement_rows(conn, start, end, consultant):
-    """日结报表明细(对标行业通用口径)：每条就诊(病历)一行 + 患者信息 + 该就诊账单财务。
+    """日结报表明细(对标 SaaS)：每条就诊(病历)一行 + 患者信息 + 该就诊账单财务。
     就诊→账单同 _doctor_perf(study 精确→同患者同日退化)。会员/储值等本地无数据的列留空(禁止兜底)。"""
     disc = bill_discount_sql("")
     active = active_bill_clause("state")
@@ -553,7 +555,7 @@ def daily_settlement_rows(conn, start, end, consultant):
         from medical_records m
         join patients p on p.patient_identity = m.patient_identity
         where substr(coalesce(m.visit_time, ''), 1, 10) between ? and ?
-          -- ②:不排除软删患者——财务史实(钱收了就是收了)与收入报表口径一致,软删只影响患者列表展示
+          -- #813②:不排除软删患者——财务史实(钱收了就是收了)与收入报表口径一致,软删只影响患者列表展示
           and trim(m.record_type) in ('初诊', '复诊')   -- 只算有类型的就诊,排除空类型草稿病历(否则同患者同日重复行)
         order by m.visit_time, m.record_id
         """,
@@ -573,7 +575,7 @@ def daily_settlement_rows(conn, start, end, consultant):
             study2visit.setdefault(v["sid"], v)
         pd2visit.setdefault((v["pid"], v["vd"]), v)
 
-    # 候选账单(有效)。每张账单**唯一归属一个就诊、只用一次**：study 精确优先，
+    # 候选账单(有效)。每张账单**唯一归属一个就诊、只用一次**(#683)：study 精确优先，
     # 否则同患者同日退化到当日最早就诊；都归不上则不计入(该就诊无对应账单财务留 0)。
     fin = {v["record_id"]: {"total": 0.0, "disc": 0.0, "paid": 0.0, "bills": []} for v in visits}
     for chunk in chunks(pids):
@@ -642,7 +644,7 @@ def daily_settlement_rows(conn, start, end, consultant):
 
 def emr_leaves(v):
     """递归把 EMR 字段的叶子文本抽出来(dict 取值、list 展开、标量转字符串)，过滤空值。
-    避免对 dict/list 直接 str() 把 Python 字面量({'name':..}/['a','b'])暴露到报表。"""
+    #687：避免对 dict/list 直接 str() 把 Python 字面量({'name':..}/['a','b'])暴露到报表。"""
     if v is None:
         return []
     if isinstance(v, str):
@@ -678,7 +680,7 @@ def emr_text(content_json, key):
 
 
 def clinic_log_rows(conn, start, end, doctor):
-    """门诊日志(对标行业通用口径)：每条就诊一行。就诊日期/病历号/姓名/年龄/医生/科室/就诊类型/家庭住址/
+    """门诊日志(对标 SaaS)：每条就诊一行。就诊日期/病历号/姓名/年龄/医生/科室/就诊类型/家庭住址/
     临床初步判断(病历 DG 诊断)/临床诊断措施(病历 TR 治疗)/病人去向。科室、病人去向本地无字段→留空(禁止兜底)。"""
     rows = conn.execute(
         """

@@ -59,7 +59,7 @@ class TreatmentOrderCreateTest(unittest.TestCase):
             self.assertEqual(bills, 0)  # 新增处置不出收费单
 
     def test_create_persists_tooth_codes_column(self):
-        # 牙位必须落进 treatment_items.tooth_codes 规范列(不只 source_json),否则丢牙位
+        # 扫荡#390:牙位必须落进 treatment_items.tooth_codes 规范列(不只 source_json),否则丢牙位
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             oid = _create(client).json()["order_id"]
@@ -80,7 +80,7 @@ class TreatmentOrderCreateTest(unittest.TestCase):
             self.assertEqual(client.post("/api/patients/nope/treatment-orders", json=_order_body()).status_code, 404)
 
     def test_non_integer_quantity_rejected(self):
-        # 数量非整数(如 "2.5"/2.9)拒绝报错,不静默按1/截断少收钱;整数值照常
+        # #557:数量非整数(如 "2.5"/2.9)拒绝报错,不静默按1/截断少收钱;整数值照常
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
 
@@ -91,7 +91,7 @@ class TreatmentOrderCreateTest(unittest.TestCase):
             self.assertEqual(post_qty("2.5"), 400)
             self.assertEqual(post_qty(2.9), 400)
             self.assertEqual(post_qty("abc"), 400)
-            self.assertEqual(post_qty("1e3"), 400)   # 科学计数法拒绝(复核🟡)
+            self.assertEqual(post_qty("1e3"), 400)   # 科学计数法拒绝(#557复核🟡)
             self.assertEqual(post_qty("2"), 200)     # 整数值字符串照常
             self.assertEqual(post_qty(3), 200)
             self.assertEqual(post_qty("2.0"), 200)   # 整数值的小数写法照常
@@ -109,7 +109,7 @@ class TreatmentOrderCreateTest(unittest.TestCase):
 
 class TreatmentOrderFeeTypeTest(unittest.TestCase):
     def test_create_stores_fee_type_and_list_returns_it(self):
-        # 开单时把处置的费用分类(fee_type)落到 treatment_items，列表也返回
+        # #7：开单时把处置的费用分类(fee_type)落到 treatment_items，列表也返回
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             resp = client.post("/api/patients/p1/treatment-orders", json={
@@ -134,7 +134,7 @@ class TreatmentOrderFeeTypeTest(unittest.TestCase):
 
 class TreatmentOrderStaffTest(unittest.TestCase):
     def test_create_stores_team_and_list_returns(self):
-        # 配台人员(护士/咨询师/助理)落库 + 列表返回
+        # #4：配台人员(护士/咨询师/助理)落库 + 列表返回
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             resp = client.post("/api/patients/p1/treatment-orders", json=_order_body(
@@ -156,7 +156,7 @@ class TreatmentOrderStaffTest(unittest.TestCase):
 
 class TreatmentOrderPriceNowTest(unittest.TestCase):
     def test_create_with_price_now_generates_pending_bill(self):
-        # 开单并划价 → 一步到位生成待收费单(全价)
+        # #3：开单并划价 → 一步到位生成待收费单(全价)
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             resp = client.post("/api/patients/p1/treatment-orders",
@@ -208,7 +208,7 @@ class TreatmentOrderPriceTest(unittest.TestCase):
             self.assertEqual(bill["total_fee"], 1200)
 
     def test_price_rounds_to_cents_and_bill_settles(self):
-        # 折后带小数厘的行金额必须取整到分,否则账单永远收不齐卡在 partial
+        # #550:折后带小数厘的行金额必须取整到分,否则账单永远收不齐卡在 partial
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             oid = client.post("/api/patients/p1/treatment-orders", json={
@@ -234,7 +234,7 @@ class TreatmentOrderPriceTest(unittest.TestCase):
                     "select state from bills where bill_id=?", (bill["bill_id"],)).fetchone()["state"], "paid")
 
     def test_refunded_bill_sets_effective_status_refunded(self):
-        # 账单退费后,处置单 effective_status 应为 refunded(不再停在"待收费"显示撤销)
+        # #379:账单退费后,处置单 effective_status 应为 refunded(不再停在"待收费"显示撤销)
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             oid, _ = self._make(client)
@@ -249,7 +249,7 @@ class TreatmentOrderPriceTest(unittest.TestCase):
             self.assertEqual(order["effective_status"], "refunded")  # 展示态变已退费
 
     def test_per_item_full_refund_sets_effective_status_refunded(self):
-        # 按处置(逐项)全退后,处置单 effective_status 也应为 refunded(不止整单退费分支)
+        # 扫荡#392:按处置(逐项)全退后,处置单 effective_status 也应为 refunded(不止整单退费分支)
         from local_app import auth
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
@@ -284,7 +284,7 @@ class TreatmentOrderPriceTest(unittest.TestCase):
             self.assertEqual(resp.json()["total_fee"], 300)
 
     def test_price_direct_amount_per_item(self):
-        # 每行直接填"本项金额"(折后实收价)，后端按 amount 落价，不用传折率
+        # #1：每行直接填"本项金额"(折后实收价)，后端按 amount 落价，不用传折率
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             oid, items = self._make(client)
@@ -306,7 +306,7 @@ class TreatmentOrderPriceTest(unittest.TestCase):
             self.assertEqual(lines[resin["item_id"]], 300)
 
     def test_price_free_flag_zeroes_line(self):
-        # 免单勾选(free:true) → 该行0，优先于 amount
+        # #1：免单勾选(free:true) → 该行0，优先于 amount
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             oid, items = self._make(client)
@@ -373,7 +373,7 @@ class TreatmentOrderPriceTest(unittest.TestCase):
             self.assertEqual(client.post("/api/treatment-orders/nope/price", json={}).status_code, 404)
 
     def test_nan_inf_rejected(self):
-        # nan/inf 非有限金额返回 400 而非 500
+        # #26：nan/inf 非有限金额返回 400 而非 500
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             r = client.post("/api/patients/p1/treatment-orders",
@@ -385,7 +385,7 @@ class TreatmentOrderPriceTest(unittest.TestCase):
             self.assertEqual(r2.status_code, 400)
 
     def test_all_free_settles_directly(self):
-        # 全免费/0元 → 直接已收费，不需走收款
+        # #27：全免费/0元 → 直接已收费，不需走收款
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             oid, items = self._make(client)
@@ -424,7 +424,7 @@ class TreatmentOrderVoidTest(unittest.TestCase):
             self.assertEqual(resp.status_code, 409)
 
     def test_void_refunded_bill_rejected(self):
-        # 已整单退费(state=refunded,paid_fee=0)的处置单不能再撤销,否则退费终态被覆盖
+        # 审查#2/#3：已整单退费(state=refunded,paid_fee=0)的处置单不能再撤销,否则退费终态被覆盖
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             oid = _create(client).json()["order_id"]
@@ -439,7 +439,7 @@ class TreatmentOrderVoidTest(unittest.TestCase):
             self.assertEqual(st, "refunded")   # 状态仍是 refunded,未被覆盖成 voided
 
     def test_void_zero_settled_rejected(self):
-        # 0元已结清(state=paid,paid_fee=0)不能撤销,绕过"已收费不能撤销"红线
+        # 审查#12：0元已结清(state=paid,paid_fee=0)不能撤销,绕过"已收费不能撤销"红线
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             oid = client.post("/api/patients/p1/treatment-orders", json={
@@ -449,7 +449,7 @@ class TreatmentOrderVoidTest(unittest.TestCase):
             self.assertEqual(resp.status_code, 409)
 
     def test_void_empty_reason_rejected(self):
-        # 撤销必须填理由，空理由(含API直传{})返回400
+        # #48：撤销必须填理由，空理由(含API直传{})返回400
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             oid = _create(client).json()["order_id"]
@@ -466,7 +466,7 @@ class TreatmentOrderVoidTest(unittest.TestCase):
             self.assertEqual(order["effective_status"], "paid")
 
     def test_void_records_reason_in_audit(self):
-        # 撤销填理由 → 记入审计
+        # #9：撤销填理由 → 记入审计
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             oid = _create(client).json()["order_id"]
@@ -479,7 +479,7 @@ class TreatmentOrderVoidTest(unittest.TestCase):
             self.assertIn("录错患者", new_json)
 
     def test_void_by_bill_voids_order(self):
-        # 收费处也能撤 → 经 bill_id 找到处置单撤销(未收费)
+        # #9：收费处也能撤 → 经 bill_id 找到处置单撤销(未收费)
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             oid = _create(client).json()["order_id"]
@@ -508,7 +508,7 @@ class TreatmentOrderVoidTest(unittest.TestCase):
 class TodayVisitGateTest(unittest.TestCase):
     """先挂号后处置：today-visit 端点 + 处置默认带挂号医生。"""
 
-    def _add_today_appt(self, db, doctor="陈医生", status="已到诊"):
+    def _add_today_appt(self, db, doctor="王医生", status="已到诊"):
         import datetime as _dt
         today = _dt.date.today().isoformat()
         with connect(db) as conn:
@@ -528,10 +528,10 @@ class TodayVisitGateTest(unittest.TestCase):
     def test_today_visit_true_with_doctor(self):
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
-            self._add_today_appt(db, doctor="陈医生")
+            self._add_today_appt(db, doctor="王医生")
             d = client.get("/api/patients/p1/today-visit").json()
             self.assertTrue(d["has_today"])
-            self.assertEqual(d["doctor_name"], "陈医生")
+            self.assertEqual(d["doctor_name"], "王医生")
 
     def test_today_visit_excludes_cancelled(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -540,7 +540,7 @@ class TodayVisitGateTest(unittest.TestCase):
             self.assertFalse(client.get("/api/patients/p1/today-visit").json()["has_today"])
 
     def test_today_visit_true_for_triaged_and_finished(self):
-        # 已分诊/已完成的今日预约同样算"今天已挂号",不得再弹挂号横幅
+        # #542:已分诊/已完成的今日预约同样算"今天已挂号",不得再弹挂号横幅
         for status in ("已分诊", "已完成"):
             with tempfile.TemporaryDirectory() as tmp:
                 db, client = _client(tmp)
@@ -550,8 +550,8 @@ class TodayVisitGateTest(unittest.TestCase):
                 self.assertTrue(d["arrived"])
 
     def test_today_visit_false_for_yesterday_appt(self):
-        # 机理留档:预约若落在昨天(如 修前前端用漂移时区建的日期),
-        # 后端按北京"今天"查不到→横幅误弹。日期口径由 前后端统一北京修复。
+        # #542 机理留档:预约若落在昨天(如 #541 修前前端用漂移时区建的日期),
+        # 后端按北京"今天"查不到→横幅误弹。日期口径由 #541 前后端统一北京修复。
         import datetime as _dt
         yesterday = (_dt.date.today() - _dt.timedelta(days=1)).isoformat()
         with tempfile.TemporaryDirectory() as tmp:
@@ -560,7 +560,7 @@ class TodayVisitGateTest(unittest.TestCase):
                 conn.execute(
                     "insert into appointments(appointment_id, patient_identity, start_time, "
                     "doctor_name, item_name, status, arrived_at, updated_at) "
-                    "values ('local-appt-y1', 'p1', ?, '陈医生', '洗牙', '已到诊', ?, ?)",
+                    "values ('local-appt-y1', 'p1', ?, '王医生', '洗牙', '已到诊', ?, ?)",
                     (yesterday + " 09:00:00", yesterday + " 09:05:00", yesterday + " 09:05:00"),
                 )
                 conn.commit()
@@ -570,18 +570,18 @@ class TodayVisitGateTest(unittest.TestCase):
         # 不传 doctor_name → 兜底取今日挂号医生
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
-            self._add_today_appt(db, doctor="陈医生")
+            self._add_today_appt(db, doctor="王医生")
             oid = _create(client, doctor_name="").json()["order_id"]
             with connect(db) as conn:
                 row = conn.execute("select doctor_name from treatment_orders where order_id = ?", (oid,)).fetchone()
                 item = conn.execute("select doctor_name from treatment_items where order_id = ?", (oid,)).fetchone()
-            self.assertEqual(row["doctor_name"], "陈医生")
-            self.assertEqual(item["doctor_name"], "陈医生")
+            self.assertEqual(row["doctor_name"], "王医生")
+            self.assertEqual(item["doctor_name"], "王医生")
 
     def test_explicit_doctor_not_overridden(self):
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
-            self._add_today_appt(db, doctor="陈医生")
+            self._add_today_appt(db, doctor="王医生")
             oid = _create(client, doctor_name="李医生").json()["order_id"]
             with connect(db) as conn:
                 row = conn.execute("select doctor_name from treatment_orders where order_id = ?", (oid,)).fetchone()
@@ -597,7 +597,7 @@ class TodayVisitGateTest(unittest.TestCase):
 
 
     def test_create_assigns_local_order_no(self):
-        # 本地处置单号 CZ+YYMMDD+流水(避开外部系统的B号),同日递增
+        # 本地处置单号 CZ+YYMMDD+流水(避开SaaS的B号),同日递增
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             r1 = _create(client).json()
@@ -650,7 +650,7 @@ class TreatmentOrderArrivalTest(unittest.TestCase):
             conn.commit()
 
     def test_ensure_arrival_skips_finished_visit(self):
-        # 回归已离开(finished_at)的就诊不再自动建空单,只是查看已结束就诊不该冒空号单
+        # 回归#235/#252:已离开(finished_at)的就诊不再自动建空单,只是查看已结束就诊不该冒空号单
         import datetime
         today = datetime.date.today().isoformat()
         with tempfile.TemporaryDirectory() as tmp:
@@ -681,7 +681,7 @@ class TreatmentOrderArrivalTest(unittest.TestCase):
             self.assertEqual(len(client.get("/api/patients/p1/treatment-orders").json()["orders"]), 1)
 
     def test_completed_not_left_order_editable_left_locked(self):
-        # 已完成(未离开)空处置单要能编辑录治疗(closed=false+PUT可改);已离开才锁定
+        # #266:已完成(未离开)空处置单要能编辑录治疗(closed=false+PUT可改);已离开才锁定
         import datetime
         today = datetime.date.today().isoformat()
         with tempfile.TemporaryDirectory() as tmp:
@@ -765,7 +765,7 @@ class TreatmentOrderEditTest(unittest.TestCase):
             self.assertEqual(norders, 1, "原地改,不另起新单")
 
     def test_edit_rejected_when_consent_signed(self):
-        # 回归已绑未作废知情同意书的处置单不能直接改项目(防签的同意书与实际处置错配)
+        # 回归#231/#251:已绑未作废知情同意书的处置单不能直接改项目(防签的同意书与实际处置错配)
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             oid = _create(client).json()["order_id"]

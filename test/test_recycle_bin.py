@@ -60,7 +60,7 @@ class RecycleBinTest(unittest.TestCase):
                                               (rvid,)).fetchone()[0], 0)
 
     def test_restore_voided_bill_cascade(self):
-        # 还原作废账单→state=pending(合法态,非'open')+级联还原处置单/明细
+        # 审查#8：还原作废账单→state=pending(合法态,非'open')+级联还原处置单/明细
         with tempfile.TemporaryDirectory() as tmp:
             db, client = self._setup(tmp)
             with connect(db) as conn:
@@ -94,7 +94,7 @@ class RecycleBinTest(unittest.TestCase):
 
 
     def test_restore_permission_owner_or_admin(self):
-        # 仅本人或 admin 可还原
+        # #94 仅本人或 admin 可还原
         with tempfile.TemporaryDirectory() as tmp:
             db, client = self._setup(tmp)  # yh 登录
             with connect(db) as conn:
@@ -115,7 +115,7 @@ class RecycleBinTest(unittest.TestCase):
                              json={"entity_type": "return_visit", "entity_id": rvid}).status_code, 200)
 
     def test_voided_bill_listed(self):
-        # 作废账单进回收站
+        # #95 作废账单进回收站
         with tempfile.TemporaryDirectory() as tmp:
             db, client = self._setup(tmp)
             with connect(db) as conn:
@@ -126,10 +126,10 @@ class RecycleBinTest(unittest.TestCase):
             self.assertTrue(any(i["entity_type"] == "bill" and i["entity_id"] == "b1" for i in items))
 
     def test_dispatch_delete_writes_audit(self):
-        # 送消单删除写审计(回收站可显示谁删的)
+        # #93 送消单删除写审计(回收站可显示谁删的)
         with tempfile.TemporaryDirectory() as tmp:
             db, client = self._setup(tmp)
-            # 消毒接口现需 sterilize.manage:种子角色 + 以护士(有该权)操作
+            # 消毒接口现需 sterilize.manage(动态扫补漏批3):种子角色 + 以护士(有该权)操作
             auth.ensure_seed_roles(db)
             with connect(db) as conn:
                 auth.create_user(conn, "ns", "护士", "pw123456", role="nurse")

@@ -1,4 +1,4 @@
-// 外层 backdrop hidden 时,内部 role=dialog 必须同步 hidden/aria-hidden,
+// #488:外层 backdrop hidden 时,内部 role=dialog 必须同步 hidden/aria-hidden,
 // 否则读屏/自动化全局扫描会读到已关闭弹窗的旧内容。
 // 沙箱 eval syncDialogHidden,用桩 host/dialog 验证镜像逻辑。
 import { test } from "node:test";

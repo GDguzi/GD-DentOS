@@ -1,10 +1,10 @@
 // 报表中心：把已验证的后端 /api/reports/arrears(欠费清单) 与 /api/lab-orders/in-progress(在制义齿)
 // 做成可点界面。纯对接，数据走 fetch + 事件委托(不拼内联JS)。
-// 已从顶层导航搬进配置管理"报表"子tab，渲染进 config_center.js 的 cfgBody；
+// #617:已从顶层导航搬进配置管理"报表"子tab，渲染进 config_center.js 的 cfgBody；
 // 收费管理(原独立顶层入口，前台基本用不上)并入本tab，点了直接跳转回 billing 全屏视图(今日工作台深链复用同一视图)。
 let _rptTab = "docstat";
 
-// 左侧竖菜单分组(对标行业通用口径「本店统计」左栏)。第一组 9 项为行业通用报表；第二组是本地扩展报表。
+// 左侧竖菜单分组(对标 SaaS「本店统计」左栏)。第一组 9 项与 SaaS 完全一致；第二组是本地扩展报表。
 const RPT_GROUPS = [
   ["本店统计", [
     ["docstat", "🩺", "医生统计"], ["nursestat", "💉", "护士统计"], ["asststat", "🧰", "助理统计"],
@@ -14,14 +14,14 @@ const RPT_GROUPS = [
   ["其他报表", [
     ["arrears", "🧾", "欠费清单"], ["lab", "🦷", "在制义齿"], ["income", "💵", "营收日报"],
     ["monthly", "🗓️", "月度汇总"], ["daily", "🧮", "日结单"], ["staffperf", "🏅", "员工业绩"],
-    ["handlecat", "📦", "处置大类"], ["billing", "💳", "收费管理"],
+    ["handlecat", "📦", "处置大类"], ["reconcile", "🔁", "双跑对账"], ["billing", "💳", "收费管理"],
   ]],
 ];
 
 function loadReportsModule() {
   const modulePanel = document.getElementById("cfgBody");
   if (!modulePanel) return;
-  // billing tab 是"跳转回收费管理全屏"的外链(会 switchWorkspaceView)。若上次停在它,
+  // #691:billing tab 是"跳转回收费管理全屏"的外链(会 switchWorkspaceView)。若上次停在它,
   // 再进报表会立刻跳走、回不来。进模块时把停在跳转 tab 的状态重置为默认(医生统计)。
   if (_rptTab === "billing") _rptTab = "docstat";
   modulePanel.innerHTML = `
@@ -56,7 +56,7 @@ const RPT_LOADERS = {
   cliniclog: b => loadClinicLogTab(b), reconcilecal: b => loadReconcileCalendarTab(b),
   arrears: b => loadArrearsTab(b), income: b => loadIncomeTab(b), monthly: b => loadMonthlyTab(b),
   daily: b => loadDailyTab(b), staffperf: b => loadStaffPerfTab(b), cashier: b => loadCashierTab(b),
-  handlecat: b => loadHandleCatTab(b), lab: b => loadLabLedgerTab(b),
+  handlecat: b => loadHandleCatTab(b), reconcile: b => loadReconcileTab(b), lab: b => loadLabLedgerTab(b),
 };
 
 function loadRptTab() {
@@ -105,7 +105,7 @@ function loadArrearsTab(body) {
 async function fetchArrears(target) {
   const params = new URLSearchParams();
   if (_arrearsQ) params.set("q", _arrearsQ);
-  // 严格十进制有限正数才发，挡 '123abc'/'1,000'/'Infinity' 这类 parseFloat 宽松值
+  // #162：严格十进制有限正数才发，挡 '123abc'/'1,000'/'Infinity' 这类 parseFloat 宽松值
   if (/^\d+(\.\d+)?$/.test(_arrearsMin) && parseFloat(_arrearsMin) > 0) {
     params.set("min_arrears", _arrearsMin);
   }
@@ -197,7 +197,7 @@ async function fetchIncome(target) {
   } catch { target.innerHTML = `<div class="module-loading">载入失败（网络异常）</div>`; return; }
   const days = d.days || [];
   const methods = d.methods || [];
-  const num = v => v != null ? escapeHtml(String(v)) : "";   // 数字也统一转义,口径一致
+  const num = v => v != null ? escapeHtml(String(v)) : ""; // #171：数字也统一转义,口径一致
   const money = v => (v != null && v !== 0) ? escapeHtml(String(v)) : "";
   const head = `<div class="rpt-summary">${escapeHtml(d.date_from || "")} ~ ${escapeHtml(d.date_to || "")}　实收合计 <b>${num(d.total_amount) || 0}</b> 元，应收 <b>${num(d.total_receivable) || 0}</b>，<b>${num(d.total_count) || 0}</b> 笔</div>`;
   if (!days.length) { target.innerHTML = head + `<div class="empty">该区间无收款记录</div>`; return; }
@@ -232,7 +232,7 @@ function loadCashierTab(body) {
       <button type="button" class="plain-button" data-cash-csv>导出CSV</button>
     </div>
     <div data-cash-results><div class="module-loading">载入中...</div></div>`;
-  if (typeof bindStaffInputs === "function") bindStaffInputs(body);   // 二批:医生/收银员筛选选人
+  if (typeof bindStaffInputs === "function") bindStaffInputs(body);   // #420二批:医生/收银员筛选选人
   const get = sel => body.querySelector(sel).value.trim();
   const sync = () => {
     _cashDoctor = get("[data-cash-doctor]"); _cashSource = get("[data-cash-source]");
@@ -333,8 +333,49 @@ async function fetchHandleCat(target, params) {
     </table>`;
 }
 
+// 双跑对账：本地 vs SaaS 每日 预约/实收/患者 差异(差异≠0 标红)。数据由 8点同步写 reconcile_log
+let _recFrom = "", _recTo = "";
+function loadReconcileTab(body) {
+  body.innerHTML = `
+    <div class="rpt-filter">
+      <label>起止日期 <span class="rpt-range" data-rec-range></span></label>
+      <button type="button" class="plain-button" data-rec-go>查询</button>
+      <span class="rpt-note">对账数据由每晚 8 点同步自动写入；差异≠0 标红</span>
+    </div>
+    <div data-rec-results><div class="module-loading">载入中...</div></div>`;
+  const target = body.querySelector("[data-rec-results]");
+  const params = () => { const p = new URLSearchParams(); if (_recFrom) p.set("date_from", _recFrom); if (_recTo) p.set("date_to", _recTo); return p.toString(); };
+  mountRangePicker(body.querySelector("[data-rec-range]"), {from: _recFrom, to: _recTo,
+    onApply: (f, t) => { _recFrom = f; _recTo = t; fetchReconcile(target, params); }});
+  body.querySelector("[data-rec-go]").addEventListener("click", () => fetchReconcile(target, params));
+  fetchReconcile(target, params);
+}
+async function fetchReconcile(target, params) {
+  target.innerHTML = `<div class="module-loading">载入中...</div>`;
+  let d;
+  try {
+    const res = await fetch(`/api/reports/reconcile?${params()}`);
+    if (!res.ok) { const m = await res.json().catch(() => ({})); target.innerHTML = `<div class="module-loading">${escapeHtml(m.detail || "载入失败")}</div>`; return; }
+    d = await res.json();
+  } catch { target.innerHTML = `<div class="module-loading">载入失败（网络异常）</div>`; return; }
+  const rows = d.rows || [];
+  const num = v => v != null ? escapeHtml(String(v)) : "";
+  const head = `<div class="rpt-summary">${escapeHtml(d.date_from || "")} ~ ${escapeHtml(d.date_to || "")}　差异天数 <b>${num(d.diff_days) || 0}</b></div>`;
+  if (!rows.length) { target.innerHTML = head + `<div class="empty">该区间无对账记录（等 8 点同步或手动跑）</div>`; return; }
+  const cell = (m) => { const bad = m.diff !== 0; return `<td${bad ? ' class="txt-danger"' : ''} style="text-align:right${bad ? ';font-weight:600' : ''}">${num(m.local)}/${num(m.saas)}${bad ? `(${m.diff > 0 ? "+" : ""}${num(m.diff)})` : ""}</td>`; };
+  const trs = rows.map(r => `<tr>
+      <td>${escapeHtml(r.date || "")}</td>
+      ${cell(r.appts)}${cell(r.income)}${cell(r.patients)}
+      <td>${r.ok ? "✅" : "⚠️"}</td>
+    </tr>`).join("");
+  target.innerHTML = head + `
+    <table class="wh-table">
+      <thead><tr><th>日期</th><th>预约(本地/SaaS)</th><th>实收(本地/SaaS)</th><th>患者(本地/SaaS)</th><th>对账</th></tr></thead>
+      <tbody>${trs}</tbody>
+    </table>`;
+}
 
-// ===== 月度汇总 =====
+// ===== #657 月度汇总 =====
 let _moFrom = "", _moTo = "";   // 空=后端默认近12个月
 
 function loadMonthlyTab(body) {
@@ -384,7 +425,7 @@ async function fetchMonthly(target) {
     </table>`;
 }
 
-// ===== 日结单(任意日期营收日报) =====
+// ===== #657 日结单(任意日期营收日报) =====
 let _dailyDate = "";   // 空=今天
 
 function loadDailyTab(body) {
@@ -429,7 +470,7 @@ async function fetchDaily(target) {
     </table>`;
 }
 
-// ===== 员工业绩(配台统计,只算已划价单) =====
+// ===== #657 员工业绩(配台统计,只算已划价单) =====
 let _spFrom = "", _spTo = "";
 
 function loadStaffPerfTab(body) {

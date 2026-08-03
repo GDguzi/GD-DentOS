@@ -85,7 +85,7 @@ class QueueStatusTest(unittest.TestCase):
             self.assertFalse(a["arrived_at"])
 
     def test_finish_chinese_status_stamps_finished_at(self):
-        # 前端日视图写 status="完成"(非"已完成"/2)也要打 finished_at,与漏斗口径一致
+        # 动态扫#5：前端日视图写 status="完成"(非"已完成"/2)也要打 finished_at,与漏斗口径一致
         with tempfile.TemporaryDirectory() as tmp:
             client = self._setup(tmp)
             client.put("/api/appointments/a1", json={"status": "完成"})
@@ -105,10 +105,10 @@ class QueueStatusTest(unittest.TestCase):
             self.assertEqual(s["visits_today"], 2)
 
     def test_dianzhen_counts_as_new_visit_kpi(self):
-        # 外部导入来的「点诊」= 本地「新诊」,须并入 new_visits 桶,不能漏统计。
+        # #452：SaaS 同步来的「点诊」= 本地「新诊」,须并入 new_visits 桶,不能漏统计。
         with tempfile.TemporaryDirectory() as tmp:
             client = self._setup(tmp)
-            client.put("/api/appointments/a1", json={"visit_type": "点诊"})   # 外部系统 术语
+            client.put("/api/appointments/a1", json={"visit_type": "点诊"})   # SaaS 术语
             client.put("/api/appointments/a2", json={"visit_type": "新诊"})   # 本地术语
             s = client.get(f"/api/today-work?date={TODAY}").json()["summary"]
             self.assertEqual(s["new_visits_today"], 2, "点诊应与新诊同桶")
@@ -125,7 +125,7 @@ class QueueStatusTest(unittest.TestCase):
 
 
     def test_cancelled_excluded_from_today_kpi(self):
-        # 今日就诊KPI(总数+初复新)排除已取消/爽约,口径一致
+        # 审查#21：今日就诊KPI(总数+初复新)排除已取消/爽约,口径一致
         with tempfile.TemporaryDirectory() as tmp:
             client = self._setup(tmp)
             client.put("/api/appointments/a2", json={"status": "已取消", "cancel_reason": "x"})
@@ -134,7 +134,7 @@ class QueueStatusTest(unittest.TestCase):
             self.assertEqual(s["visits_today"], 1)
 
     def test_voided_treatment_and_bill_excluded(self):
-        # 已撤销处置/作废账单不算"已处置/欠费"
+        # #97 已撤销处置/作废账单不算"已处置/欠费"
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "clinic.sqlite3"
             init_db(db)
@@ -152,7 +152,7 @@ class QueueStatusTest(unittest.TestCase):
             a = {x["appointment_id"]: x for x in body["appointments"]}["a1"]
             self.assertFalse(a["treated_today"])     # 撤销的处置不算
             self.assertEqual(a["unpaid_amount"], 0)  # 作废的账单不算欠费
-            # 首页汇总/列表也排除作废账单
+            # #99 首页汇总/列表也排除作废账单
             self.assertEqual(body["summary"]["unpaid_bills"], 0)
             self.assertEqual(body["summary"]["today_unpaid_amount"], 0)
             self.assertEqual(len(body["unpaid_bills"]), 0)
@@ -164,7 +164,7 @@ if __name__ == "__main__":
 
 class TodayWorkLimitTest(unittest.TestCase):
     def test_today_work_returns_more_than_20_appointments(self):
-        # 今日预约超 20 条要全返回(候诊队列/患者今日tab 不能只显示前 20)
+        # #121：今日预约超 20 条要全返回(候诊队列/患者今日tab 不能只显示前 20)
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "clinic.sqlite3"
             init_db(db)
@@ -194,14 +194,14 @@ class CancelTimestampTest(unittest.TestCase):
         return db, TestClient(create_app(db))
 
     def test_cancel_clears_arrival_timestamp(self):
-        # 取消已到达的预约要清 arrived_at,不留"已取消却有到达时间"的矛盾记录
+        # 审查#22：取消已到达的预约要清 arrived_at,不留"已取消却有到达时间"的矛盾记录
         with tempfile.TemporaryDirectory() as tmp:
             db, client = self._setup(tmp)
             client.put("/api/appointments/a1", json={"status": "已到诊"})  # arrived_at 打戳
             a = {x["appointment_id"]: x for x in client.get(f"/api/today-work?date={TODAY}").json()["appointments"]}["a1"]
             self.assertTrue(a["arrived_at"])
             client.put("/api/appointments/a1", json={"status": "已取消", "cancel_reason": "改约"})
-            # 取消后预约从今日工作台隐藏(展示层),清戳是数据层校验 → 直接读库核对
+            # #418:取消后预约从今日工作台隐藏(展示层),清戳是数据层校验 → 直接读库核对
             with connect(db) as conn:
                 arrived, finished = conn.execute(
                     "select coalesce(arrived_at, ''), coalesce(finished_at, '') "
@@ -211,7 +211,7 @@ class CancelTimestampTest(unittest.TestCase):
             self.assertEqual(finished, "")
 
     def test_version_snapshot_includes_timestamps(self):
-        # 版本快照要含 arrived_at/room/visit_type 等状态机字段
+        # 审查#7：版本快照要含 arrived_at/room/visit_type 等状态机字段
         with tempfile.TemporaryDirectory() as tmp:
             db, client = self._setup(tmp)
             client.put("/api/appointments/a1", json={"status": "已到诊", "room": "诊室2"})
@@ -222,7 +222,7 @@ class CancelTimestampTest(unittest.TestCase):
 
 class ApptNoopTest(unittest.TestCase):
     def test_noop_update_does_not_insert_version(self):
-        # 相同值再 PUT 不灌冗余版本(no-op 守卫)
+        # 审查#20：相同值再 PUT 不灌冗余版本(no-op 守卫)
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "clinic.sqlite3"
             init_db(db)

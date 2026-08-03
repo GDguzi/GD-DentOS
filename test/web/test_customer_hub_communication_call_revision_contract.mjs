@@ -51,7 +51,7 @@ function commHarness(writeResponse = ok()) {
   };
   vm.createContext(sandbox);
   vm.runInContext(
-    section(communications, "async function setCommDeal", "// \u5361\u7247\u8865\u4f20")
+    section(communications, "async function setCommDeal", "// #722 \u5361\u7247\u8865\u4f20")
       + "\nthis.__set = setCommDeal; this.__delete = deleteCommunication;",
     sandbox,
   );

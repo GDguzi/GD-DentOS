@@ -15,7 +15,7 @@ async function loadPatientTags(pid) {
   if (!pid || !_railTagsBox()) return;
   let list = [];
   try { list = (await (await fetch(`/api/patients/${encodeURIComponent(pid)}/tags`)).json()).list || []; } catch { list = []; }
-  // 切患者守卫:异步返回时已不是当前患者→丢弃,不把 A 的标签写进 B 的侧栏
+  // 切患者守卫(#277):异步返回时已不是当前患者→丢弃,不把 A 的标签写进 B 的侧栏
   if (typeof workspacePatientId !== "undefined" && pid !== workspacePatientId) return;
   const box = _railTagsBox();   // 重新就近取:可能已被新患者重渲染
   if (!box) return;

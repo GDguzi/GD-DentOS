@@ -1,7 +1,7 @@
-// 预约列表视图原来只把"已取消"/"3"视为不可取消,"完成治疗"等终态行仍渲染启用的
+// #615:预约列表视图原来只把"已取消"/"3"视为不可取消,"完成治疗"等终态行仍渲染启用的
 // 取消按钮——实机点击会弹出取消原因确认框,确认后会把已完成的预约清成"已取消"并清空
 // 到达/完成时间戳。改成复用今日队列同一套 tqStage() 终态判定，不再各写一套口径。
-// 跑：node --test test/web/test_appointment_list_cancel_lock.mjs
+// 跑：node --test test/web/test_appointment_list_cancel_lock_615.mjs
 import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
@@ -31,13 +31,13 @@ function render(status) {
 }
 
 for (const status of ["完成治疗", "已完成", "完成", "已离开", "已取消", "3"]) {
-  test(`状态"${status}" → 不可取消(不渲染取消按钮)`, () => {
+  test(`#615 状态"${status}" → 不可取消(不渲染取消按钮)`, () => {
     assert.ok(!render(status).includes("appt-cancel"), `${status} 不应该有可点的取消按钮`);
   });
 }
 
 for (const status of ["已到诊", "已确认", "已预约", ""]) {
-  test(`状态"${status || "(空)"}" → 仍可取消(未终态,不误伤)`, () => {
+  test(`#615 状态"${status || "(空)"}" → 仍可取消(未终态,不误伤)`, () => {
     assert.ok(render(status).includes("appt-cancel"), `${status || "(空)"} 应该保留可取消`);
   });
 }

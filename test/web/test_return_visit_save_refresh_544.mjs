@@ -1,7 +1,7 @@
-// 回归:①refreshWorkspaceDetail 只拉 /api/patients/{id} 不拉 /summary，导致病历/回访等
+// #544 回归:①refreshWorkspaceDetail 只拉 /api/patients/{id} 不拉 /summary，导致病历/回访等
 // tab 角标(病历0/回访0)永远不重算；②标记已回访保存后卡片还停在编辑态，不重渲已回访状态。
 // 抽出 refreshWorkspaceDetail / saveReturnVisit 源码，stub fetch/document，沙箱 eval 真测。
-// 跑：node --test test/web/test_return_visit_save_refresh.mjs
+// 跑：node --test test/web/test_return_visit_save_refresh_544.mjs
 import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
@@ -23,7 +23,7 @@ const refreshDetailCode = extract("async function refreshWorkspaceDetail");
 const refreshReturnVisitCode = extract("async function refreshReturnVisitWorkspaceFromServer");
 const saveReturnVisitCode = extract("async function saveReturnVisit");
 
-test("refreshWorkspaceDetail 成功后应连带重算 tab 角标(拉 /summary)", async () => {
+test("#544 refreshWorkspaceDetail 成功后应连带重算 tab 角标(拉 /summary)", async () => {
   const calls = {summaryFetched: 0, tabCounts: null};
   const sandbox = {
     workspacePatientId: "p1",
@@ -41,7 +41,7 @@ test("refreshWorkspaceDetail 成功后应连带重算 tab 角标(拉 /summary)",
   assert.deepStrictEqual(calls.tabCounts, {return_visit: 1}, "应该用新 summary.counts 重渲染 tab 角标");
 });
 
-test("标记已回访保存成功 → 应切回只读态重渲(不留在编辑态)", async () => {
+test("#544 标记已回访保存成功 → 应切回只读态重渲(不留在编辑态)", async () => {
   const calls = {switchedTab: null, deletedFromCache: null};
   const loadedTabs = new Set(["return-visits"]);
   const sandbox = {

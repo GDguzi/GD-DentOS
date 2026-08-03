@@ -1,4 +1,4 @@
-"""created_at 补列不能丢。旧库(appointments/return_visits 无 created_at)跑启动
+"""#432:created_at 补列不能丢。旧库(appointments/return_visits 无 created_at)跑启动
 后必须补上该列,否则今日工作台查询/新增预约回访/同步导入都会 no such column。
 Phase3 第二刀后补列走 schema.sql 差分(_apply_schema_diff),本测试意图不变、实现跟随。"""
 import sqlite3

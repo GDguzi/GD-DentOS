@@ -1,4 +1,4 @@
-"""传统界面导航真实浏览器冒烟:合成演示库起真服务,Playwright 真点击。
+"""#762 传统界面导航真实浏览器冒烟:合成演示库起真服务,Playwright 真点击。
 
 覆盖:登录 → 逐点顶导(10) → 各视图内逐点 .module-subtab 二级导航 → 患者列表点行
 开工作台 → 逐点 13 患者 tab。每步断言:active 唯一、对应面板可见、内容不停留在
@@ -531,7 +531,7 @@ class BrowserSmokeTest(unittest.TestCase):
             tab_keys = page.eval_on_selector_all(
                 f"{scope} .workspace-tab[data-workspace-tab]", "els => els.map(e => e.dataset.workspaceTab)")
             self.assertEqual(len(tab_keys), 13, f"患者 tab 应为13个: {tab_keys}")
-            # 几何回归(产品决策=单行横向滚动):13个tab必须同一行,无孤儿掉行
+            # #763 几何回归(用户拍板=单行横向滚动):13个tab必须同一行,无孤儿掉行
             tops = page.eval_on_selector_all(
                 f"{scope} .workspace-tab[data-workspace-tab]", "els => els.map(e => e.offsetTop)")
             self.assertEqual(len(set(tops)), 1, f"13个患者tab必须同一行(offsetTop应一致): {tops}")

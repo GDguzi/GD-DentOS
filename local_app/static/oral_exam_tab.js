@@ -21,7 +21,7 @@ function renderWorkspaceOralExamTab(panel) {
         <div class="panel-body" data-oe-form>${renderOeForm()}</div></section>
       <section class="panel"><div class="panel-head"><span>口腔检查记录</span></div>
         <div class="panel-body">${list || '<span class="empty">暂无口腔检查</span>'}</div></section>`;
-    if (typeof bindStaffInputs === "function") bindStaffInputs(panel);   // 二批:检查医生选人
+    if (typeof bindStaffInputs === "function") bindStaffInputs(panel);   // #420二批:检查医生选人
   }).catch(() => { if (identity === workspacePatientId) panel.textContent = "口腔检查载入失败"; });
 }
 
@@ -62,7 +62,7 @@ function oeSyncFromDom() {
     if (f) fEl.querySelectorAll("[data-f]").forEach(i => { f[i.dataset.f] = i.value; });
   });
 }
-function oeRerender() { oeSyncFromDom(); const f = workspacePageEl().querySelector("[data-oe-form]"); if (f) { f.innerHTML = renderOeForm(); if (typeof bindStaffInputs === "function") bindStaffInputs(f); } }   // 二批:检查医生选人
+function oeRerender() { oeSyncFromDom(); const f = workspacePageEl().querySelector("[data-oe-form]"); if (f) { f.innerHTML = renderOeForm(); if (typeof bindStaffInputs === "function") bindStaffInputs(f); } }   // #420二批:检查医生选人
 function oeAddFinding() { oeSyncFromDom(); oeModel.findings.push(oeNewFinding()); oeRerender(); }
 function oeRemoveFinding(i) { oeSyncFromDom(); if (oeModel.findings.length > 1) oeModel.findings.splice(i, 1); oeRerender(); }
 function oePickTooth(i) {

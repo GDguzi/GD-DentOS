@@ -91,7 +91,7 @@ class SterilizationApiTest(unittest.TestCase):
 
 
     def test_update_cannot_clear_category(self):
-        # 编辑也不能把分类改空
+        # #86 编辑也不能把分类改空
         with tempfile.TemporaryDirectory() as tmp:
             _, client = self._client(tmp)
             cid = client.post("/api/instrument-categories", json={"name": "类"}).json()["id"]
@@ -99,7 +99,7 @@ class SterilizationApiTest(unittest.TestCase):
             self.assertEqual(client.put(f"/api/instruments/{iid}", json={"category_id": ""}).status_code, 400)
 
     def test_delete_category_with_instruments_rejected(self):
-        # 后端：分类下有器械时删除被拦(409),不留孤儿器械
+        # #87 后端：分类下有器械时删除被拦(409),不留孤儿器械
         with tempfile.TemporaryDirectory() as tmp:
             _, client = self._client(tmp)
             cid = client.post("/api/instrument-categories", json={"name": "类"}).json()["id"]

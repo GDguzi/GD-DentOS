@@ -63,7 +63,7 @@ class ConsultTest(unittest.TestCase):
             )
 
     def test_bad_consult_date_400(self):
-        # 非法 consult_date 应 400(与回访日期校验一致)
+        # 动态扫#15：非法 consult_date 应 400(与回访日期校验一致)
         with tempfile.TemporaryDirectory() as tmpdir:
             _, client = _client(tmpdir)
             resp = client.post(

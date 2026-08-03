@@ -14,8 +14,8 @@ UNCATEGORIZED = "未分类"
 
 
 def _display_category(category):
-    """库里有些分类名是裸 ParentIdentity 数字ID（原系统库 目录节点缺名/被软删，导入兜底
-    存了原始 ParentIdentity）。展示层把"空 或 纯数字"的分类归到「未分类」桶，不露乱码数字；
+    """#11：库里有些分类名是裸数字ID（外部导入的目录节点缺名/被软删时，兜底存了原始数字标识）。
+    展示层把"空 或 纯数字"的分类归到「未分类」桶，不露乱码数字；
     库里原始值保留不动，将来拿到目录名仍可还原。"""
     text = str(category or "").strip()
     if not text or text.isdigit():

@@ -15,6 +15,110 @@ from local_app.validation import valid_date_param, valid_time_field
 from local_app.versioning import stable_hash, stable_json
 
 
+_CHECK_IN_CANCELLED_STATUSES = ("3", "9", "已取消", "已爽约", "爽约")
+
+
+def _today_check_in_candidates(conn, patient_identity, today):
+    placeholders = ", ".join("?" for _ in _CHECK_IN_CANCELLED_STATUSES)
+    return conn.execute(
+        "select * from appointments where patient_identity = ? "
+        "and substr(coalesce(start_time, ''), 1, 10) = ? "
+        f"and coalesce(status, '') not in ({placeholders}) "
+        "order by coalesce(start_time, ''), appointment_id",
+        (patient_identity, today, *_CHECK_IN_CANCELLED_STATUSES),
+    ).fetchall()
+
+
+def _default_visit_type(conn, patient_identity, now, exclude_appointment_id=None):
+    """初复诊按「本次之前是否真看过」判定：比完整时间戳，不比日期。
+
+    按日期比会把当天更早的就诊整片排除——上午看过、下午再挂号会被错标「初诊」。
+    本次选中的那条预约不能当自己的依据，显式排除。
+    """
+    prior_record = conn.execute(
+        "select 1 from medical_records where patient_identity = ? "
+        "and coalesce(draft_status, '') = '' "
+        "and coalesce(nullif(visit_time, ''), nullif(created_at, ''), '') <> '' "
+        "and coalesce(nullif(visit_time, ''), nullif(created_at, ''), '') < ? "
+        "limit 1",
+        (patient_identity, now),
+    ).fetchone()
+    if prior_record:
+        return "复诊"
+    prior_appointments = conn.execute(
+        "select status, arrived_at from appointments where patient_identity = ? "
+        "and coalesce(start_time, '') <> '' and coalesce(start_time, '') < ? "
+        "and appointment_id is not ?",
+        (patient_identity, now, exclude_appointment_id),
+    ).fetchall()
+    visited = any(
+        str(row["arrived_at"] or "").strip() or appt_stage(row["status"]) >= 2
+        for row in prior_appointments
+    )
+    return "复诊" if visited else "初诊"
+
+
+def _candidate_payload(row):
+    return {
+        "appointment_id": row["appointment_id"],
+        "start_time": row["start_time"] or "",
+        "doctor_name": row["doctor_name"] or "",
+        "item_name": row["item_name"] or "",
+        "suspect_cancelled": bool(row["suspect_cancelled"]),
+    }
+
+
+def _split_check_in_candidates(candidates):
+    """按「这条预约用掉没有」分两堆——到诊过或阶段已推进的算用掉了。"""
+    arrived, pending = [], []
+    for row in candidates:
+        used = str(row["arrived_at"] or "").strip() or appt_stage(row["status"]) >= 2
+        (arrived if used else pending).append(row)
+    return arrived, pending
+
+
+def _select_check_in_candidate(arrived, pending):
+    """一条预约到诊后就算「用掉了」，下次挂号先找还没用掉的那条。
+
+    先挑已到诊会挂错：上午那条看完了、下午还另有一条待到店时，下午挂号会复用上午
+    那条已完成记录，真正的下午预约永远停在「已预约」。
+    没有未用掉的候选时才复用最近一条已到诊记录——那是重复点挂号的幂等路径。
+    """
+    if len(pending) == 1:
+        return pending[0]
+    if pending:
+        return None   # 多条待到店，选哪条只有前台知道，交 409 让人挑
+    if arrived:
+        return max(
+            arrived,
+            key=lambda row: (
+                str(row["arrived_at"] or ""),
+                str(row["start_time"] or ""),
+                str(row["appointment_id"] or ""),
+            ),
+        )
+    return None
+
+
+# 挂号响应只回前端真正用到的字段：整行会带出 source_json / last_batch_id 等 SaaS 同步层内部字段，
+# 迁移层要能整块剥离，就不该从通用接口漏出去。
+_CHECK_IN_RESPONSE_FIELDS = (
+    "appointment_id", "patient_identity", "start_time", "end_time", "doctor_name",
+    "item_name", "status", "visit_type", "register_type", "room", "arrived_at", "finished_at",
+    "created_at", "updated_at",
+)
+
+
+def _check_in_response_row(conn, appointment_id):
+    columns = ", ".join(f"a.{field}" for field in _CHECK_IN_RESPONSE_FIELDS)
+    return conn.execute(
+        f"select {columns}, p.display_name, p.phone from appointments a "
+        "left join patients p on p.patient_identity = a.patient_identity "
+        "where a.appointment_id = ?",
+        (appointment_id,),
+    ).fetchone()
+
+
 def create_appointments_router(db_path):
     router = APIRouter()
     db_path = Path(db_path)
@@ -30,7 +134,7 @@ def create_appointments_router(db_path):
         pageno: int = 1,
         pagesize: int = 50,
     ):
-        require_perm("patient.view")   # 预约列表含患者姓名/电话,按 patient.view 守卫(无 appointment.view 权限点)
+        require_perm("patient.view")   # #482：预约列表含患者姓名/电话,按 patient.view 守卫(无 appointment.view 权限点)
         date = date.strip()
         if date:
             valid_date_param(date, "date")
@@ -118,7 +222,7 @@ def create_appointments_router(db_path):
     def appointment_summary(date: str = "", date_from: str = "", date_to: str = ""):
         """预约统计：按状态/类型/医生计数，供视图顶部可点 chip。
         给 date（单日）或 date_from/date_to（区间）。都不给默认今天。"""
-        require_perm("patient.view")   # 预约统计口径同列表,按 patient.view 守卫
+        require_perm("patient.view")   # #482：预约统计口径同列表,按 patient.view 守卫
         date = date.strip()
         date_from = date_from.strip()
         date_to = date_to.strip()
@@ -159,7 +263,7 @@ def create_appointments_router(db_path):
     @router.post("/api/appointments")
     def create_appointment(payload: dict):
         """新建预约。患者必填且须存在；start_time 必填且合法；其余可选。"""
-        require_perm("patient.edit")   # 预约写操作按患者编辑权守卫(前台/医生有,库房/消毒无)
+        require_perm("patient.edit")   # #556：预约写操作按患者编辑权守卫(前台/医生有,库房/消毒无)
         payload = payload or {}
         patient_identity = str(payload.get("patient_identity") or "").strip()
         if not patient_identity:
@@ -177,7 +281,7 @@ def create_appointments_router(db_path):
         status = str(payload.get("status") or "已预约").strip()
         visit_type = str(payload.get("visit_type") or "").strip()
         register_type = str(payload.get("register_type") or "预约").strip() or "预约"  # 登记方式: 预约/到店
-        room = str(payload.get("room") or "").strip()   # P1-3/诊室(椅位)：落库 + 参与冲突检测
+        room = str(payload.get("room") or "").strip()   # P1-3/#133 诊室(椅位)：落库 + 参与冲突检测
         # 待确定预约/咨询师/患者来源/预约人/备注 无独立列，落 source_json(不动 schema)
         src = {"origin": "local"}
         for key in ("appointment_type", "consultant", "patient_source", "booked_by", "remark"):
@@ -185,7 +289,7 @@ def create_appointments_router(db_path):
             if val:
                 src[key] = val
         now = now_str()
-        # 到店登记=walk-in,人已在场→直接落「已到诊」+到达时刻,进候诊队列「到达」阶段,
+        # #345 到店登记=walk-in,人已在场→直接落「已到诊」+到达时刻,进候诊队列「到达」阶段,
         # 前台不用再手点到达。仅当还没过到达阶段(预约/确认)时升,不覆盖更后的阶段。
         arrived_at = ""
         if register_type == "到店" and status in ("", "已预约", "已确认"):
@@ -196,7 +300,7 @@ def create_appointments_router(db_path):
             begin_immediate(conn)   # 审计R2复核:抢写锁使「查患者→写入」原子,合并事务无法插进两步之间(P1竞态窗口)
             require_patient(conn, patient_identity)   # 审计R2:软删/已合并患者不得新建预约
             # P1-3 时段冲突提示(不硬阻断)：同医生 或 同诊室(非空) 时段重叠且未 force → 返回 conflict 二次确认
-            # 半开区间：相接(09:30 接 09:30)不算冲突；真重叠或完全同起点才算。
+            # #132 半开区间：相接(09:30 接 09:30)不算冲突；真重叠或完全同起点才算。
             if not payload.get("force"):
                 new_end = end_time or start_time
                 day = start_time[:10]
@@ -238,6 +342,160 @@ def create_appointments_router(db_path):
                 (appointment_id,),
             ).fetchone()
         return {"appointment": _row_to_dict(created)}
+
+    @router.post("/api/patients/{patient_identity}/check-in")
+    def check_in_patient(patient_identity: str, payload: dict):
+        """今日到店快速挂号：原子复用今日预约，没有候选时创建到店记录。"""
+        require_perm("patient.edit")
+        payload = payload or {}
+        if set(payload) - {"appointment_id"}:
+            raise HTTPException(status_code=400, detail="请求只允许 appointment_id")
+        raw_appointment_id = payload.get("appointment_id")
+        if raw_appointment_id is not None and not isinstance(raw_appointment_id, str):
+            raise HTTPException(status_code=400, detail="appointment_id 格式无效")
+        requested_id = str(raw_appointment_id or "").strip()
+
+        with connect(db_path) as conn:
+            begin_immediate(conn)
+            now = now_str()
+            today = now[:10]
+            require_patient(conn, patient_identity)
+            candidates = _today_check_in_candidates(conn, patient_identity, today)
+
+            if requested_id:
+                selected = next(
+                    (row for row in candidates if row["appointment_id"] == requested_id),
+                    None,
+                )
+                if selected is None:
+                    raise HTTPException(
+                        status_code=409,
+                        detail={"code": "check_in_candidate_stale"},
+                    )
+            else:
+                arrived, pending = _split_check_in_candidates(candidates)
+                selected = _select_check_in_candidate(arrived, pending)
+                if selected is None and len(candidates) > 1:
+                    # 只把待到店的交给前台挑：混进已用掉的记录，选中就又复用了旧记录，
+                    # 而候选列表不显示状态，前台看不出哪条是上午那条
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            "code": "multiple_check_in_candidates",
+                            "candidates": [_candidate_payload(row) for row in pending],
+                        },
+                    )
+
+            if selected is None:
+                appointment_id = new_id("local-appt")
+                # 新建路径：这条还没入库，没有自身可排除
+                visit_type = _default_visit_type(conn, patient_identity, now)
+                source_json = json.dumps({"origin": "local"}, ensure_ascii=False)
+                conn.execute(
+                    "insert into appointments(appointment_id, patient_identity, start_time, end_time, "
+                    "doctor_name, item_name, status, visit_type, register_type, room, arrived_at, "
+                    "finished_at, source_json, created_at, updated_at) "
+                    "values (?, ?, ?, '', '', '', '已到诊', ?, '到店', '', ?, '', ?, ?, ?)",
+                    (
+                        appointment_id,
+                        patient_identity,
+                        now,
+                        visit_type,
+                        now,
+                        source_json,
+                        now,
+                        now,
+                    ),
+                )
+                created_row = conn.execute(
+                    "select * from appointments where appointment_id = ?",
+                    (appointment_id,),
+                ).fetchone()
+                audit_write(
+                    conn,
+                    "appointment",
+                    appointment_id,
+                    "create_appointment",
+                    new_json=stable_json(appointment_snapshot(created_row)),
+                    created_at=now,
+                )
+                created = True
+                already_arrived = False
+            else:
+                appointment_id = selected["appointment_id"]
+                stage = appt_stage(selected["status"])
+                already_arrived = bool(str(selected["arrived_at"] or "").strip()) or stage >= 2
+                target = {
+                    "status": selected["status"],
+                    "arrived_at": selected["arrived_at"],
+                    "finished_at": selected["finished_at"],
+                    "visit_type": selected["visit_type"],
+                    "suspect_cancelled": selected["suspect_cancelled"],
+                    "suspect_reason": selected["suspect_reason"],
+                }
+                if 0 <= stage < 2:
+                    target["status"] = "已到诊"
+                    target["finished_at"] = ""
+                if not str(selected["arrived_at"] or "").strip():
+                    target["arrived_at"] = now
+                if not str(selected["visit_type"] or "").strip():
+                    target["visit_type"] = _default_visit_type(
+                        conn, patient_identity, now, appointment_id
+                    )
+                target["suspect_cancelled"] = 0
+                target["suspect_reason"] = ""
+                changed = {
+                    field: value
+                    for field, value in target.items()
+                    if str(value if value is not None else "")
+                    != str(selected[field] if selected[field] is not None else "")
+                }
+                if changed:
+                    old_snapshot = appointment_snapshot(selected)
+                    old_json = stable_json(old_snapshot)
+                    conn.execute(
+                        "insert into appointment_versions(appointment_id, version_hash, "
+                        "snapshot_json, batch_id) values (?, ?, ?, ?)",
+                        (appointment_id, stable_hash(old_snapshot), old_json, None),
+                    )
+                    conn.execute(
+                        "update appointments set status = ?, arrived_at = ?, finished_at = ?, "
+                        "visit_type = ?, suspect_cancelled = ?, suspect_reason = ?, updated_at = ? "
+                        "where appointment_id = ?",
+                        (
+                            target["status"],
+                            target["arrived_at"],
+                            target["finished_at"],
+                            target["visit_type"],
+                            target["suspect_cancelled"],
+                            target["suspect_reason"],
+                            now,
+                            appointment_id,
+                        ),
+                    )
+                    new_snapshot = dict(old_snapshot)
+                    new_snapshot.update(target)
+                    new_snapshot["updated_at"] = now
+                    new_snapshot["edit_source"] = "local_appointment_edit"
+                    audit_write(
+                        conn,
+                        "appointment",
+                        appointment_id,
+                        "update_appointment",
+                        old_json=old_json,
+                        new_json=stable_json(new_snapshot),
+                        created_at=now,
+                    )
+                created = False
+
+            response_row = _check_in_response_row(conn, appointment_id)
+            conn.commit()
+
+        return {
+            "appointment": _row_to_dict(response_row),
+            "created": created,
+            "already_arrived": already_arrived,
+        }
 
     @router.put("/api/appointments/{appointment_id}")
     def update_appointment(appointment_id: str, payload: dict):
@@ -321,11 +579,11 @@ def create_appointments_router(db_path):
                         updates["finished_at"] = now
                 elif stage >= 0:        # 回退到完成之前 → 清完成戳
                     updates["finished_at"] = ""
-                if stage < 0:   # +取消/爽约都未真正完成就诊，清到达/完成戳避免矛盾记录(原只清爽约,漏了取消)
+                if stage < 0:   # 审查#22+#134：取消/爽约都未真正完成就诊，清到达/完成戳避免矛盾记录(原只清爽约,漏了取消)
                     updates["arrived_at"] = ""
                     updates["finished_at"] = ""
 
-            # no-op 守卫——只比可编辑字段实际值,无变更不灌版本/不审计(对齐 patient/return_visit;
+            # 审查#20：no-op 守卫——只比可编辑字段实际值,无变更不灌版本/不审计(对齐 patient/return_visit;
             # 旧逻辑靠 new_hash!=old_hash,但 new_snapshot 含新 updated_at/edit_source,恒不等→每次都灌)
             changed = {f: v for f, v in updates.items()
                        if str(v if v is not None else "") != str(appointment[f] if appointment[f] is not None else "")}
@@ -405,7 +663,7 @@ def create_appointments_router(db_path):
     def get_appointment(appointment_id: str):
         """单条预约完整详情(供双击编辑回填)：含 room/visit_type/register_type 及 source_json
         内嵌字段(预约类型/咨询师/患者来源/预约人/备注)、病历号。"""
-        require_perm("patient.view")   # 预约详情含患者姓名/电话/病历号,按 patient.view 守卫
+        require_perm("patient.view")   # #482：预约详情含患者姓名/电话/病历号,按 patient.view 守卫
         src = "iif(json_valid(a.source_json), a.source_json, '{}')"
         with connect(db_path) as conn:
             row = conn.execute(
@@ -434,7 +692,7 @@ def create_appointments_router(db_path):
     @router.delete("/api/appointments/{appointment_id}")
     def delete_appointment(appointment_id: str):
         """删除预约(队列误建/作废)：审计留底 old 快照后硬删，并清其版本行。"""
-        require_perm("patient.edit")   # 预约写操作按患者编辑权守卫
+        require_perm("patient.edit")   # #556：预约写操作按患者编辑权守卫
         now = now_str()
         with connect(db_path) as conn:
             row = conn.execute(

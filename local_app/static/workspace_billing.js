@@ -36,7 +36,7 @@ function renderWorkspaceBillingTab(panel) {
     return a;
   }, {total: 0, receivable: 0, paid: 0});
   const sumReceivable = sum.receivable;
-  // 0 元空流水(外部导入带回)不进「未关联付款」，只碰展示不碰数据
+  // 0 元空流水(SaaS 同步带回)不进「未关联付款」，只碰展示不碰数据
   const orphanPayments = Array.from(paymentsByBill.values()).flat().filter((p) => Number(p.amount) !== 0);
   panel.innerHTML = `
     <section class="panel">
@@ -60,7 +60,7 @@ function renderWorkspaceBillingTab(panel) {
     ${orphanPayments.length ? recordsPanel("未关联付款", orphanPayments, renderPayment) : ""}
   `;
   // 从今日工作台「收费」进来:只有一张待收账单就直接弹收款框(直接吊起收费)。
-  // 意图绑患者id。收费tab一渲染就**无条件消费**这个意图(清掉),只有 id 等于当前患者才弹;
+  // #267/#271:意图绑患者id。收费tab一渲染就**无条件消费**这个意图(清掉),只有 id 等于当前患者才弹;
   // 不匹配也清,避免过期意图残留→之后正常打开该患者收费页被误弹收款框(改钱入口)。
   const _wantPay = window._queueWantsPay;
   window._queueWantsPay = null;
@@ -128,7 +128,7 @@ function toggleBillDetail(billId) {
   if (row) row.hidden = !row.hidden;
 }
 
-// 折扣率口径按账单来源区分——外部系统 单 total_fee=优惠前总额(应收在 net_receivable)，
+// #451:折扣率口径按账单来源区分——SaaS 单 total_fee=优惠前总额(应收在 net_receivable)，
 // 折扣率=net/total；本地单(local-bill-*) total_fee 已是净额，折扣率=total/(total+优惠)。
 function billDiscountRate(b) {
   const discount = Number(b.discount_fee) || 0;
@@ -141,9 +141,9 @@ function billDiscountRate(b) {
   return gross > 0 ? Math.round(net / gross * 100) + "%" : "";
 }
 
-const BILL_STATE_LABEL = {pending: "待收费", partial: "部分收款", paid: "已收清", voided: "已作废", refunded: "已退费"};   // 补 refunded,否则退费单状态列显「—」
-// 导入的历史账单状态是数字码(如100)，按金额派生可读状态更可靠；本地状态直接映射。
-// 撤单/作废账单状态(历史数字撤单码 + 本地 voided)，与后端 VOIDED_BILL_STATES 对齐
+const BILL_STATE_LABEL = {pending: "待收费", partial: "部分收款", paid: "已收清", voided: "已作废", refunded: "已退费"};   // 扫荡#392:补 refunded,否则退费单状态列显「—」
+// 同步单状态是数字码(如100)，按金额派生可读状态更可靠；本地状态直接映射。
+// 撤单/作废账单状态(SaaS 撤单码 + 本地 voided)，与后端 VOIDED_BILL_STATES 对齐
 const VOID_BILL_STATES = ["900", "500", "400", "200", "voided"];
 function billStateLabel(s, total, paid) {
   if (VOID_BILL_STATES.includes(String(s)) || String(s) === "1") return "已作废";
@@ -155,7 +155,7 @@ function billStateLabel(s, total, paid) {
 }
 function billStateClass(s, total, paid) {
   if (VOID_BILL_STATES.includes(String(s)) || String(s) === "1") return "bc-voided";
-  if (s === "refunded") return "bc-refunded";   // 已退费
+  if (s === "refunded") return "bc-refunded";   // 扫荡#392 已退费
   if (s === "paid") return "bc-paid";
   total = total || 0; paid = paid || 0;
   if (total > 0 && paid + 1e-6 >= total) return "bc-paid";
@@ -163,7 +163,7 @@ function billStateClass(s, total, paid) {
   return "";
 }
 
-// 收费单卡片化（对标处置单卡，清爽极简）。items=本单诊疗项目明细
+// #14：收费单卡片化（对标处置单卡，清爽极简）。items=本单诊疗项目明细
 function renderBill(row, items) {
   const payable = row.state === "pending" || row.state === "partial";
   const remaining = (row.total_fee || 0) - (row.paid_fee || 0);
@@ -202,13 +202,13 @@ function renderBill(row, items) {
   `;
 }
 
-// 就诊时间轴(visits)是 病历/处置/收费/预约/回访 的聚合视图，任一业务成功变更后都要清它的缓存，
+// #57：就诊时间轴(visits)是 病历/处置/收费/预约/回访 的聚合视图，任一业务成功变更后都要清它的缓存，
 // 否则用户做完操作回"就诊"仍看旧时间轴(要重开患者才刷)。各业务刷新点统一调它。
 function evictVisitsCache() {
   if (typeof workspaceLoadedTabs !== "undefined") workspaceLoadedTabs.delete("visits");
 }
 
-// 收费处撤销 → 填理由 → 按账单找处置单撤销 → 刷新
+// #9：收费处撤销 → 填理由 → 按账单找处置单撤销 → 刷新
 async function voidBillOrder(billId) {
   const reason = await appPrompt("撤销这张收费单(及其处置单)，请填写撤销理由：", "");
   if (reason === null) return;
@@ -233,12 +233,12 @@ async function voidBillOrder(billId) {
 }
 
 // 前台收款确认：录金额 → POST /api/bills/{id}/pay → 刷新收费 tab
-// 正式收款弹框：账单编号+收银员 + 逐项明细(单价/数量/折/总价/减免) + 合计应收/已收/欠款/找零 + 收费方式
+// #8 正式收款弹框：账单编号+收银员 + 逐项明细(单价/数量/折/总价/减免) + 合计应收/已收/欠款/找零 + 收费方式
 const PAY_CASHIER_LS = "dental_cashier_last";   // 记住上次收银员
-// 付款方式改全店可自定义(收费弹窗⚙️),运行时从设置拉;null=未加载/失败(显式报错,禁止兜底旧名单)
+// #638:付款方式改全店可自定义(收费弹窗⚙️),运行时从设置拉;null=未加载/失败(显式报错,禁止兜底旧名单)
 let PAY_METHODS = null;
 let payContext = null;
-// 收退款请求号。LAN http(iPad/手机)是非安全上下文没有 crypto.randomUUID,
+// #800:收退款请求号。LAN http(iPad/手机)是非安全上下文没有 crypto.randomUUID,
 // 统一走 getRandomValues(全上下文可用),单一代码路径。
 function newPaymentRequestId() {
   const a = new Uint8Array(16);
@@ -267,7 +267,7 @@ function renderPayMethodOptions() {
   sel.value = PAY_METHODS.includes(keep) ? keep : PAY_METHODS[0];
 }
 
-// ---------- 付款方式设置(⚙️):列表增删/上下排序,billing.pay 可改 ----------
+// ---------- #638 付款方式设置(⚙️):列表增删/上下排序,billing.pay 可改 ----------
 let _pmDraft = null;   // 编辑中的名单副本,保存才生效
 
 function openPayMethodSettings() {
@@ -375,13 +375,13 @@ function paySplitUpdate() {
   if (active) {
     const sum = rows.reduce((a, r) => a + (isNaN(r.amount) ? 0 : r.amount), 0);
     setText("paySplitSumVal", formatMoney(Math.round(sum * 100) / 100));
-    setText("payChange", 0);   // 拆分模式不走找零,清掉单方式残留找零提示
+    setText("payChange", 0); // 拆分模式不走找零,清掉单方式残留找零提示
   } else {
     payUpdateChange();
   }
 }
 function confirmBillPayment(billId, remaining, onDone) {
-  // 一次弹窗=一个收款意图=一个请求号;弹窗内重试复用同号(后端同号同载荷重放,不落第二笔)
+  // #800:一次弹窗=一个收款意图=一个请求号;弹窗内重试复用同号(后端同号同载荷重放,不落第二笔)
   payContext = {billId: billId, remaining: remaining || 0, requestId: newPaymentRequestId(),
                 onDone: typeof onDone === "function" ? onDone : null};
   const m = document.getElementById("payModal");
@@ -394,14 +394,14 @@ function confirmBillPayment(billId, remaining, onDone) {
   if (detail) detail.innerHTML = "";
   const amt = document.getElementById("payAmount");
   if (amt) amt.value = (remaining && remaining > 0) ? String(remaining) : "";
-  // 下拉从全店设置拉(缓存),默认选名单第一条;⚙️按付款方式管理权限显示
+  // #638:下拉从全店设置拉(缓存),默认选名单第一条;⚙️按付款方式管理权限显示
   loadPayMethods().then(() => renderPayMethodOptions());
   const gear = document.getElementById("payMethodGear");
   if (gear) gear.hidden = typeof canManagePaymentMethods === "function"
     && !canManagePaymentMethods();
   const cashier = document.getElementById("payCashier");
   if (cashier) { try { cashier.value = localStorage.getItem(PAY_CASHIER_LS) || ""; } catch { cashier.value = ""; } }
-  // 收款经办人接人员库选人(产品决策:只放前台岗),弹窗每次打开绑定/刷新 datalist
+  // #666 收款经办人接人员库选人(用户拍板:只放前台岗),弹窗每次打开绑定/刷新 datalist
   if (typeof bindStaffInputs === "function") bindStaffInputs(m);
   const splitRows = document.getElementById("paySplitRows");
   if (splitRows) splitRows.innerHTML = "";        // 清上次拆分行
@@ -416,7 +416,7 @@ function confirmBillPayment(billId, remaining, onDone) {
 // 退费弹框（对标官方）：仅本地已结清单(local-bill-)。按整单(填总退款额) / 按处置(逐项勾选填额)。
 async function confirmBillRefund(billId, onDone) {
   if (!billId || billId.indexOf("local-bill-") !== 0) {
-    alert("仅本地账单可退费，不能退 导入单"); return;
+    alert("仅本地账单可退费，不能退 SaaS 同步单"); return;
   }
   let d;
   try { d = await fetch(`/api/bills/${encodeURIComponent(billId)}`).then(r => r.json()); }
@@ -424,7 +424,7 @@ async function confirmBillRefund(billId, onDone) {
   if (!d || !d.bill_id) { alert("账单不存在"); return; }
   const items = d.items || [];
   const paid = Number(d.paid_fee) || 0;
-  // ①:退款不再冲减 paid_fee,可退额度=已收−已退(后端派生),默认退款额/封顶都用它
+  // #813①:退款不再冲减 paid_fee,可退额度=已收−已退(后端派生),默认退款额/封顶都用它
   const refunded = Number(d.refunded_fee) || 0;
   const refundable = Number(d.refundable) || 0;
   const nowStr = bjNowStr();
@@ -453,7 +453,7 @@ async function confirmBillRefund(billId, onDone) {
       <div class="modal-actions"><button type="button" class="tooth-confirm-btn" data-rf="ok">确定</button><button type="button" class="plain-button" data-rf="cancel">取消</button></div>
     </section>`;
   document.body.appendChild(ov);
-  if (typeof bindStaffInputs === "function") bindStaffInputs(ov);   // 二批:退费医生选人
+  if (typeof bindStaffInputs === "function") bindStaffInputs(ov);   // #420二批:退费医生选人
   const $ = sel => ov.querySelector(sel);
   const close = () => ov.remove();
   let mode = "whole";
@@ -495,7 +495,7 @@ async function confirmBillRefund(billId, onDone) {
     const method = $("[data-rf=method]").value;
     const doctor = $("[data-rf=doctor]").value.trim();
     if (!reason) { st.textContent = "退款原因必填"; return; }
-    // 退费弹窗一次打开=一个请求号(挂弹窗节点,重试复用;重开弹窗=新意图新号)
+    // #800:退费弹窗一次打开=一个请求号(挂弹窗节点,重试复用;重开弹窗=新意图新号)
     if (!ov.dataset.requestId) ov.dataset.requestId = newPaymentRequestId();
     const body = {refund_reason: reason, refund_method: method, doctor, request_id: ov.dataset.requestId};
     if (mode === "item") {
@@ -525,7 +525,7 @@ async function confirmBillRefund(billId, onDone) {
     workspaceLoadedTabs.delete(tab);
     evictVisitsCache();
     switchWorkspaceTab(tab);
-    // 退费后即时刷新今日工作台统计/队列(冲减实收/现金流入),不必等手动刷新页面
+    // #377:退费后即时刷新今日工作台统计/队列(冲减实收/现金流入),不必等手动刷新页面
     if (typeof loadTodayWork === "function") loadTodayWork();
     if (typeof loadAuditLogs === "function") await loadAuditLogs();
   });
@@ -594,9 +594,9 @@ async function submitBillPayment() {
     const entered = parseFloat((document.getElementById("payAmount") || {}).value);
     if (isNaN(entered) || entered <= 0) { if (status) status.textContent = "请输入有效金额"; return; }
     const payMethod = (document.getElementById("payMethod") || {}).value || "";
-    // 单方式分支与拆分分支同强度校验——付款方式加载失败时下拉只剩空值项,必须在这里挡住
+    // #801:单方式分支与拆分分支同强度校验——付款方式加载失败时下拉只剩空值项,必须在这里挡住
     if (!payMethod) { if (status) status.textContent = "请选择付款方式"; return; }
-    // 现金多收找零 → 实际入账只记欠款额，多出的是找零(不入账)
+    // #8：现金多收找零 → 实际入账只记欠款额，多出的是找零(不入账)
     const rem = payContext.remaining || 0;
     const amount = (rem > 0 && entered > rem) ? rem : entered;
     // 架构铁律#禁止兼容层：单方式=一行methods,与拆分同一契约(旧amount+pay_method双轨已删)
@@ -620,7 +620,7 @@ async function submitBillPayment() {
   closePayModal();
   // 模块上下文(前台收费台)用自己的 onDone 刷新；否则走患者工作区刷新
   if (onDone) { onDone(); if (typeof loadAuditLogs === "function") loadAuditLogs(); return; }
-  // 收款后先重新拉患者详情(收费 tab 用 workspaceData.detail 缓存)，再重渲，避免显示旧待收金额
+  // #30：收款后先重新拉患者详情(收费 tab 用 workspaceData.detail 缓存)，再重渲，避免显示旧待收金额
   if (typeof refreshWorkspaceDetail === "function") await refreshWorkspaceDetail();
   const page = workspacePageEl();
   const active = page && page.querySelector(".workspace-tab.active");
@@ -628,7 +628,7 @@ async function submitBillPayment() {
   workspaceLoadedTabs.delete(tab);
   evictVisitsCache();
   switchWorkspaceTab(tab);
-  // 收款后即时刷新今日工作台统计/队列(收款常从今日队列发起),不必等手动刷新页面
+  // #376:收款后即时刷新今日工作台统计/队列(收款常从今日队列发起),不必等手动刷新页面
   if (typeof loadTodayWork === "function") loadTodayWork();
   if (typeof loadAuditLogs === "function") await loadAuditLogs();
 }

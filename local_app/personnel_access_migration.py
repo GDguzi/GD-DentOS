@@ -1120,7 +1120,7 @@ _TARGET_TABLES = {
     "sessions", "role_data_scopes", "audit_logs",
 }
 
-# 局域网精简模式取消登录限速。这两张表不属于目标模型，
+# 2026-07-15 用户决定：局域网精简模式取消登录限速。这两张表不属于目标模型，
 # 但可能作为废表残留在旧副本里（SQLite backup 会原样带过来），必须显式清掉。
 _OBSOLETE_TABLES = ("login_throttle_accounts", "login_throttle_sources")
 

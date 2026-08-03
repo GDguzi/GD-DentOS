@@ -1,4 +1,4 @@
-// 退费单(state=refunded)在收费 tab 状态列必须显示「已退费」,不能落到「—」。
+// 扫荡#392:退费单(state=refunded)在收费 tab 状态列必须显示「已退费」,不能落到「—」。
 // 沙箱 eval billStateLabel + 两个常量,验证 refunded 映射。
 import { test } from "node:test";
 import assert from "node:assert";

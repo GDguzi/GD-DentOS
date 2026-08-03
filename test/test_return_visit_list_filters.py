@@ -1,4 +1,4 @@
-"""回访列表筛选(外部系统化)：date区间/状态/主治医生/回访人 + 默认待回访工作台口径不变。"""
+"""回访列表筛选(SaaS化)：date区间/状态/主治医生/回访人 + 默认待回访工作台口径不变。"""
 import tempfile
 import unittest
 from pathlib import Path

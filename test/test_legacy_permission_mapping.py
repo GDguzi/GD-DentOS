@@ -1,6 +1,6 @@
 """旧 35 权限键 → 新 99 权限键迁移工具测试：全程 TemporaryDirectory 合成库，不接触真实数据。
 
-映射真相源 = local_app/oneoff/legacy_permission_mapping.py。
+映射唯一真相源 = docs/权限映射_旧到新_2026-07-18.md 第 3 节（D1-D9 已拍板）。
 """
 
 import io
@@ -259,14 +259,14 @@ class MappingDecisionBehaviorTest(unittest.TestCase):
         )
 
     def test_master_data_manage_alone_closure_adds_view(self):
-        # D8 授予规则不随 manage 派 view；依赖闭包要求必须补齐 master_data.view。
+        # D8 授予规则不随 manage 派 view；#859 依赖闭包要求必须补齐 master_data.view。
         result = mapping.compute_new_permissions("custom", {"master_data.manage"})
         self.assertEqual(
             result, frozenset({"master_data.manage", "master_data.view"})
         )
 
     def test_patient_edit_expansion_excludes_delete_keys(self):
-        # D2：删除类键不随 patient.edit 派发；依赖闭包补齐各项 view。
+        # D2：删除类键不随 patient.edit 派发；#859：依赖闭包补齐各项 view。
         result = mapping.compute_new_permissions("custom", {"patient.edit"})
         self.assertEqual(
             result,
@@ -367,7 +367,7 @@ class MappingDecisionBehaviorTest(unittest.TestCase):
     def test_d9_ai_review_blanket_for_doctor_and_director_only(self):
         self.assertEqual(
             mapping.compute_new_permissions("doctor", frozenset()),
-            frozenset({D9_AI_REVIEW_KEY, "medical_record.view"}),  # 闭包补 view
+            frozenset({D9_AI_REVIEW_KEY, "medical_record.view"}),  # #859 闭包补 view
         )
         self.assertIn(
             D9_AI_REVIEW_KEY, mapping.compute_new_permissions("director", frozenset())
@@ -386,7 +386,7 @@ class MappingDecisionBehaviorTest(unittest.TestCase):
             frozenset({
                 "medical_record.edit",
                 "medical_record.template.manage",
-                "medical_record.view",  # 闭包补 edit 的依赖
+                "medical_record.view",  # #859 闭包补 edit 的依赖
             }),
         )
 
@@ -403,7 +403,7 @@ class MappingDecisionBehaviorTest(unittest.TestCase):
         )
 
     def test_write_only_legacy_roles_pass_v3_dependency_validation(self):
-        # 只持写/管理类旧键的角色，迁移结果也必须通过新 GUI 保存校验。
+        # #859：只持写/管理类旧键的角色，迁移结果也必须通过新 GUI 保存校验。
         from local_app import access_service
 
         for role_key, old_keys in (

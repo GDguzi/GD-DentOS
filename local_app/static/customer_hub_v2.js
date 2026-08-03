@@ -1,4 +1,5 @@
-// 客户通 V2(任务3/4):今日总览(默认)/回访列表/沟通记录 三视图 + 回访处理弹窗。
+// 客户通 V2(#856 任务3/4):今日总览(默认)/回访列表/沟通记录 三视图 + 回访处理弹窗。
+// 形态基线:docs/superpowers/prototypes/2026-07-17-customer-hub-v2-final-demo.html(用户定稿)。
 // 独立模块(防撞规矩):module_views.loadReturnVisitModule 仅委托 loadCustomerHubV2();
 // 全局依赖(app.js 提供):modulePanel/workDate/localDateValue/
 // escapeHtml/escapeAttr/openPatientWorkspace。权限即隐形:响应缺块=整块不渲染,禁假零兜底。
@@ -191,7 +192,7 @@ function _chvBindPager(root, total, page, onGo) {
 }
 
 function _chvToday() {
-  // 日期契约:与今日工作台同一真相源
+  // #729 日期契约:与今日工作台同一真相源
   return _chvDay || ((workDate && workDate.value) ? workDate.value : localDateValue());
 }
 
@@ -221,7 +222,7 @@ function _chvStatusBadge(rowOrStatus) {
 
 function _chvName(pid, name) {
   if (!hasPerm("patient.profile.view")) return escapeHtml(name || "(无名)");
-  // 点名字才进个人主页(产品决策);行点击只开弹窗
+  // 点名字才进个人主页(用户拍板);行点击只开弹窗
   return `<span class="chv-pname" data-chv-home="${escapeAttr(pid || "")}">${escapeHtml(name || "(无名)")}</span>`;
 }
 
@@ -300,12 +301,12 @@ async function loadCustomerHubV2(context) {
   if (entryContext.status !== "ok") return _chvFailEntryLoad();
   const {returnFilter, searchText, selectedDate} = entryContext;
   // 今日工作台「今日待回访」入口 → 直进列表视图(待回访工作台口径)
-  // 必须清全部旧筛选+页码,否则残留的医生/关键词/高级筛选会藏掉待跟进患者
+  // 前端复核轮P1:必须清全部旧筛选+页码,否则残留的医生/关键词/高级筛选会藏掉待跟进患者
   if (returnFilter === "pending_due") {
     _chvView = "list";
     _chvF = _chvEmptyFilter();
     _chvListPage = 1;
-    _chvPendingChip = true;   // 今日工作台「今日待回访」入口:列表带提示章
+    _chvPendingChip = true;   // #221 今日工作台「今日待回访」入口:列表带提示章
   }
   if (searchText) {
     _chvView = "list";
@@ -406,7 +407,7 @@ async function _chvRenderToday(token) {
         <td>${_chvStatusBadge(r)}</td>
         <td>${hasPerm("call_record.view") ? `<button type="button" class="chv-mini" data-chv-play="${escapeAttr(r.return_visit_id)}" data-chv-pid2="${escapeAttr(r.patient_identity || "")}">▶</button>` : "—"}</td>
       </tr>`).join("");
-    // 双筛选(真机验收改):回访人/医生,默认全部;选项取当天实际出现的值
+    // 双筛选(真机验收#2改):回访人/医生,默认全部;选项取当天实际出现的值
     const uniq = k => [...new Set(rows.map(r => (r[k] || "").trim()).filter(Boolean))];
     const opts = vals => [`<option value="">全部</option>`,
       ...vals.map(v => `<option>${escapeHtml(v)}</option>`)].join("");
@@ -616,7 +617,7 @@ async function _chvRenderList(token) {
   body.querySelector("[data-chv-adv]").addEventListener("click", _chvOpenAdv);
   const exp = body.querySelector("[data-chv-export]");
   if (exp) exp.addEventListener("click", () => {
-    window.open(`/api/return-visits/export?${_chvListQuery("")}`, "_blank");   // 与列表同口径
+    window.open(`/api/return-visits/export?${_chvListQuery("")}`, "_blank");   // 与列表同口径(#124)
   });
   _chvBindBatchDelete(body);
   body.querySelectorAll("[data-chv-stop]").forEach(td => td.addEventListener("click", e => e.stopPropagation()));
@@ -756,7 +757,7 @@ async function _chvPlayRecording(rvId, pid) {
   });
 }
 
-// ============ 二期改向 上传即转:回访弹窗自动填「回访内容」(规格§2) ============
+// ============ #856二期改向 上传即转:回访弹窗自动填「回访内容」(规格§2) ============
 // 转写文本全界面不展示;成功且未动过才填并标记待保存;失败/超时诚实提示;弹窗关闭即停轮询。
 
 // 三期②:AI 辅助要点区(只读,绝不写入表单字段);pending 不出现,中/败两态诚实提示
@@ -829,7 +830,7 @@ async function _chvMaybeFillTranscript(ovl, rvId, pid) {
   }
 }
 
-// ============ 三期 下次回访制度预填:ReturnPlan 字典(诊所现行回访制度) ============
+// ============ #856三期 下次回访制度预填:ReturnPlan 字典(诊所现行回访制度) ============
 // 制度来源=现有字典接口 dict_type=ReturnPlan(name+天数),不新建路由;事项关键词命中排前,不自动选。
 let _chvPlans = null;
 
@@ -868,7 +869,7 @@ async function _chvLoadReturnPlans(itemName) {
     });
 }
 
-// ============ 三期③A 桌面麦克风直录(MediaRecorder→既有上传→自动转写) ============
+// ============ #856三期③A 桌面麦克风直录(MediaRecorder→既有上传→自动转写) ============
 // 环境不支持/未授权都诚实提示;上传中防重;弹窗上下文自动挂 linked_return_visit_id。
 function _chvMicButton(pid, rvId, getRevision, setRevision, ovl) {
   const btn = document.createElement("button");
@@ -1417,7 +1418,7 @@ function _chvOpenRecordings(todayData) {
   }));
 }
 
-// ============ 月度回顾(真机验收):服务端月统计 ============
+// ============ 月度回顾(真机验收#2):服务端月统计 ============
 
 const _CHV_MONTHLY_SUMMARY_KEYS = [
   "total", "completed", "pending", "overdue", "completion_rate",
@@ -1591,7 +1592,7 @@ function _chvOpenAdv() {
   });
   ovl.querySelector("[data-chv-ok]").addEventListener("click", () => {
     ovl.querySelectorAll("[data-af]").forEach(el => { _chvF[el.dataset.af] = el.value.trim(); });
-    _chvListPage = 1;   // 改筛选后回第一页,免停在旧页码看空表
+    _chvListPage = 1; // 前端复核轮P2:改筛选后回第一页,免停在旧页码看空表
     _chvDisposeOverlay(ovl);
     loadCustomerHubV2();
   });
@@ -1659,7 +1660,7 @@ function _chvDictionaryRequestStale(error) {
 function _chvBindPatientPick(ovl, inputId, hintId, state) {
   const input = ovl.querySelector(`#${inputId}`);
   const hint = ovl.querySelector(`#${hintId}`);
-  let searchGen = 0;   // 请求代数:丢弃迟到的旧响应,防它覆盖 state.pid
+  let searchGen = 0; // 请求代数:丢弃迟到的旧响应,防它覆盖 state.pid
   input.addEventListener("change", async () => {
     const gen = ++searchGen;
     state.pid = "";
@@ -1807,7 +1808,7 @@ async function _chvOpenNewRv(presetPid) {
 
 // ============ 回访处理弹窗(任务4:左五页签患者卡 + 右回访表单) ============
 
-let _chvModalGen = 0;   // 弹窗打开代数:连点两行时,慢到的旧详情不得覆盖新弹窗
+let _chvModalGen = 0; // 弹窗打开代数:连点两行时,慢到的旧详情不得覆盖新弹窗
 function _chvCreateRevisionRecovery(rvId, patientIdentity, getRevision, setRevision) {
   let pending = null;
   let confirmed = null;
@@ -1937,7 +1938,7 @@ async function _chvOpenRvModal(rvId, pid) {
     <select data-chv-dict-insert="${escapeAttr(dictionaryName)}" onchange="if(this.value){document.getElementById('${target}').value=this.value;this.selectedIndex=0}">
       <option value="">插入常用语…</option>${(list || []).map(x => `<option>${escapeHtml(x)}</option>`).join("")}
     </select>`;
-  const canEdit = hasPerm("return_visit.manage");   // 只有管理权才显示写控件(查看用户得只读弹窗)
+  const canEdit = hasPerm("return_visit.manage"); // 只有管理权才显示写控件(查看用户得只读弹窗)
   const ro = canEdit ? "" : " disabled";
   const dueLocal = (d.due_time || "").replace(" ", "T").slice(0, 16);
   // 状态保原值:导入态若不在标准四项内,补一个「原值」项并选中,防改其他字段时被浏览器落到「待回访」静默改写
@@ -2026,11 +2027,11 @@ async function _chvOpenRvModal(rvId, pid) {
       <button type="button" class="chv-btn" data-chv-close="1">${canEdit ? "取消" : "关闭"}</button>
     </div>`, true);
   _chvGuardDirty(ovl);
-  // 三期②:「回访内容」字段级脏标记(与表单级 ovl._chvDirty 独立) + 自动填入挂链录音转写
+  // #856三期②:「回访内容」字段级脏标记(与表单级 ovl._chvDirty 独立) + 自动填入挂链录音转写
   const noteEl = ovl.querySelector("#chvMC");
   if (noteEl) noteEl.addEventListener("input", () => { ovl._chvNoteDirty = true; });
   _chvMaybeFillTranscript(ovl, rvId, pid);
-  // 三期③A:弹窗内桌面麦克风直录(自动挂本回访)
+  // #856三期③A:弹窗内桌面麦克风直录(自动挂本回访)
   const scList = ovl.querySelector("#chvScList");
   if (scList && hasPerm("call_record.manage")) {
     scList.appendChild(_chvMicButton(
@@ -2041,7 +2042,7 @@ async function _chvOpenRvModal(rvId, pid) {
       ovl,
     ));
   }
-  // 三期:下次回访制度预填——选 ReturnPlan 计划名,日期=北京今天+天数;事项关键词命中排前,不自动选
+  // #856三期:下次回访制度预填——选 ReturnPlan 计划名,日期=北京今天+天数;事项关键词命中排前,不自动选
   const planSel = ovl.querySelector("[data-chv-plan]");
   if (planSel) {
     _chvLoadReturnPlans(d.item_name).then(plans => {
@@ -2091,7 +2092,7 @@ async function _chvOpenRvModal(rvId, pid) {
     ovl.querySelectorAll("[data-chv-way]").forEach(x => x.classList.toggle("pri", x === b));
     ovl.querySelector("#chvMWay").value = b.dataset.chvWay;
     ovl.querySelector("#chvWx").style.display = b.dataset.chvWay === "wechat" ? "block" : "none";
-    ovl._chvDirty = true;   // 隐藏 input 编程改值不触发事件,手动置脏
+    ovl._chvDirty = true; // 隐藏 input 编程改值不触发事件,手动置脏
   }));
   // 截图暂存:选文件先入内存,保存时才真上传——取消/关闭就丢弃,
   // 不落库、无孤儿、无需删权/再认证;彻底绕开原「即传即存」的回滚困境。
@@ -2165,12 +2166,12 @@ async function _chvOpenRvModal(rvId, pid) {
     if (resumed.handled && (resumed.deferCompletion
         || !resumed.ok || resumed.kind !== "confirm" || resumed.action !== "edit")) return false;
     const editAlreadyConfirmed = resumed.handled && resumed.action === "edit";
-    if (!way) { window.alert("请先选择回访方式(电话/微信)"); return false; }   // channel 不默认
+    if (!way) { window.alert("请先选择回访方式(电话/微信)"); return false; } // channel 不默认
     if (way === "wechat" && scCountOf() === 0) {
       window.alert("微信回访必须上传聊天截图才能保存"); return false;
     }
     const miss = [];
-    if (!time) miss.push("回访时间");   // 空时间会让记录从总览/月历消失,前端硬拦
+    if (!time) miss.push("回访时间"); // 空时间会让记录从总览/月历消失,前端硬拦
     if (!item) miss.push("回访事项");
     if (!visitor) miss.push("回访人");
     if (!content) miss.push("回访内容");
@@ -2179,7 +2180,7 @@ async function _chvOpenRvModal(rvId, pid) {
     // 暂存截图逐个上传(微信留证的后端 PUT 校验要求截图已在库)。一张截图入库即成为该回访的
     // 合法附件(同患者,与其他字段是否保存无关),故上传成功即从待传队列移除、计数上调——
     // 保存链任一步失败时,已传截图不回滚(它是有效附件、非孤儿),重试只处理剩余,不会重复上传
-    // (去掉需删权/再认证的补偿删除,改用「附件独立有效」的正确语义)。
+    // 去掉需删权/再认证的补偿删除,改用「附件独立有效」的正确语义。
     while (pendingFiles.length) {
       if (screenshotUploadQuarantined) {
         window.alert("截图上传结果不确定，请关闭后重新打开该回访确认，请勿重复上传");
@@ -2299,7 +2300,7 @@ async function _chvOpenRvModal(rvId, pid) {
     // openNewAppointment 从 prefill.patient.patient_identity 读预选患者
     if (typeof openNewAppointment === "function") {
       openNewAppointment({patient: {patient_identity: pid, display_name: d.display_name}});
-      // 真机验收本弹窗(.chv-ovl z=60)高于预约弹窗(.modal-backdrop z=50)——
+      // 真机验收#1:本弹窗(.chv-ovl z=60)高于预约弹窗(.modal-backdrop z=50)——
       // 打开期间临时抬到 70,关闭(hidden)即还原,不影响其他入口的层级语义
       const am = document.getElementById("appointmentModal");
       if (am) {

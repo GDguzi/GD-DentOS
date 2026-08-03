@@ -4,8 +4,9 @@
    次数多于记录→也红(堵"复用白名单已有颜色写新硬编码"的绕过道)。
 2) styles.css 里引用的 var(--x) 必须在 :root 有定义(抓 var(--accented,#d8e0db) 这类
    引用不存在 token、一直渲染备胎值的真 bug)。
-注意:先剥 /* */ 注释再扫描——注释里的工单号(等)不是颜色。
+注意:先剥 /* */ 注释再扫描——注释里的工单号(#392 等)不是颜色。
 token 合法定义区 = :root 块 + body.theme-pearl 主题定义块(玉瓷主题覆盖值,UI重构Phase1 起)。
+规格:docs/superpowers/specs/2026-07-14-ui-design-refactor-design.md Phase 0。
 """
 import re
 import unittest
@@ -136,7 +137,7 @@ WHITELIST = {
     "#f7f8fa": 1,
     "#f7f9fb": 4,
     "#f7faf8": 1,
-    "#f7faf9": 5,
+    "#f7faf9": 6,
     "#f8fbfa": 1,
     "#faf5ff": 1,
     "#fafbfb": 2,

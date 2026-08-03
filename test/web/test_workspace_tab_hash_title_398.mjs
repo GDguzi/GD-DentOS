@@ -1,7 +1,7 @@
-// 回归:患者工作区切tab时 URL hash 和顶部 H1 都不跟着变,始终停在
+// #398/#547 回归:患者工作区切tab时 URL hash 和顶部 H1 都不跟着变,始终停在
 // 打开时的路由/"今日工作台"。抽出 switchWorkspaceTab 源码,stub document/location,
 // 沙箱 eval 真测切tab后 hash 和 H1 有没有更新。
-// 跑：node --test test/web/test_workspace_tab_hash_title.mjs
+// 跑：node --test test/web/test_workspace_tab_hash_title_398.mjs
 import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
@@ -103,19 +103,19 @@ function makeSandbox({initialHash, patientId, displayName, loadedTabs}) {
   return sandbox;
 }
 
-test("切到收费tab → hash 带上患者+tab，不停在打开时的路由", () => {
+test("#398/#547 切到收费tab → hash 带上患者+tab，不停在打开时的路由", () => {
   const sandbox = makeSandbox({initialHash: "#patient/p1/profile", patientId: "p1", displayName: "张三", loadedTabs: ["profile", "billing"]});
   sandbox.__switch("billing");
   assert.strictEqual(sandbox.location.hash, "#patient/p1/billing", "hash 应该跟着切到的tab变，不能停在profile");
 });
 
-test("切到收费tab → 顶部H1不再是「今日工作台」，改显示患者名+当前tab", () => {
+test("#398/#547 切到收费tab → 顶部H1不再是「今日工作台」，改显示患者名+当前tab", () => {
   const sandbox = makeSandbox({initialHash: "#patient/p1/profile", patientId: "p1", displayName: "张三", loadedTabs: ["profile", "billing"]});
   sandbox.__switch("billing");
   assert.strictEqual(sandbox.workspaceTitle.textContent, "张三 · 收费", "H1应显示患者名+当前tab标签，不能停留在今日工作台");
 });
 
-test("tab角标数字不该混进H1标题里", () => {
+test("#398/#547 tab角标数字不该混进H1标题里", () => {
   const sandbox = makeSandbox({initialHash: "#patient/p1/profile", patientId: "p1", displayName: "张三", loadedTabs: ["profile", "billing"]});
   sandbox.__switch("billing");
   assert.ok(!sandbox.workspaceTitle.textContent.includes("0"), "角标countspan文本不该混进标题");

@@ -4,7 +4,7 @@
 // ---------- 通用：tab 载入(竞态/网络守卫，复用 workspace_tabs 范式) ----------
 async function loadSimpleTab(panel, urlPath, render, failText) {
   const identity = workspacePatientId;
-  // 面诊作为「客户沟通」子tab:记下起始子tab,await 期间若切走(含失败态)不写回共享 body。
+  // #715 面诊作为「客户沟通」子tab:记下起始子tab,await 期间若切走(含失败态)不写回共享 body。
   // 手术是顶层 tab(panel 无 data-cs-cur)→ sub0=undefined,stale 恒 false,行为不变。
   const sub0 = panel.dataset ? panel.dataset.csCur : undefined;
   const stale = () => sub0 !== undefined && panel.dataset.csCur !== sub0;
@@ -34,7 +34,7 @@ function area(label, name) {
 
 // ---------- 面诊 / 咨询沟通 ----------
 function renderWorkspaceConsultTab(panel) {
-  loadSimpleTab(panel, "consults", (p, data) => {   // 过期守卫统一在 loadSimpleTab(含失败态),此处只管渲染
+  loadSimpleTab(panel, "consults", (p, data) => {   // #709/#715 过期守卫统一在 loadSimpleTab(含失败态),此处只管渲染
     const list = (data.consults || []).map(c => `
       <div class="cs-card">
         <div class="cs-card-head"><strong>${escapeHtml(c.consult_date || "未填日期")}</strong>
@@ -65,7 +65,7 @@ function csRow(label, value) {
 
 async function saveConsult() { await saveSimpleForm("consult", "consults", refreshConsultSubtab); }
 
-// 面诊已并入「客户沟通」子tab:保存成功后就地重渲面诊子页(不再 switchWorkspaceTab("consult")——
+// #708 面诊已并入「客户沟通」子tab:保存成功后就地重渲面诊子页(不再 switchWorkspaceTab("consult")——
 // 顶层已无该tab,会被静默退回基本资料且父级 return-visits 缓存不刷新)。
 function refreshConsultSubtab() {
   const page = (typeof workspacePageEl === "function") ? workspacePageEl() : null;
@@ -105,7 +105,7 @@ async function saveSurgery() { await saveSimpleForm("surgery", "surgeries"); }
 
 // ---------- 通用保存 ----------
 // onSaved: 保存成功后的刷新方式。手术仍是顶层 tab → 默认 switchWorkspaceTab 重载;
-// 面诊已并入子tab → 传 refreshConsultSubtab 就地重渲(见 )。
+// 面诊已并入子tab → 传 refreshConsultSubtab 就地重渲(见 #708)。
 async function saveSimpleForm(tab, urlPath, onSaved) {
   const page = workspacePageEl();
   const form = page && page.querySelector(`[data-cs-form="${tab}"]`);

@@ -1,5 +1,6 @@
 """消毒/灭菌追溯 · 器械库(首期)：器械分类 + 器械主数据 CRUD + 停用。
-器械库是整条追溯链(送消→消毒→发放)的主数据源，先做单条增删改查，Excel导入二期。"""
+器械库是整条追溯链(送消→消毒→发放)的主数据源，先做单条增删改查，Excel导入二期。
+规格：docs/官方规格/消毒.md（器械库段）。"""
 import sqlite3
 from pathlib import Path
 
@@ -111,7 +112,7 @@ def create_sterilization_router(db_path):
         require_perm("sterilize.manage")   # 越权:改器械/送消单(含审核放行),写操作
         with connect(db_path) as conn:
             _get_category(conn, category_id)
-            # 后端校验：分类下还有器械则不允许删除(避免孤儿器械,与"分类必填"一致)
+            # #87 后端校验：分类下还有器械则不允许删除(避免孤儿器械,与"分类必填"一致)
             n = conn.execute(
                 "select count(*) from instrument where category_id = ? and coalesce(is_deleted, 0) = 0",
                 (category_id,),
@@ -194,7 +195,7 @@ def create_sterilization_router(db_path):
             if not code or not name:
                 raise HTTPException(status_code=400, detail="器械编号和名称不能为空")
             category_id = _text(payload, "category_id", current["category_id"])
-            if not category_id:   # 编辑也不允许清空分类
+            if not category_id:   # #86 编辑也不允许清空分类
                 raise HTTPException(status_code=400, detail="器械分类必填")
             if not _category_exists(conn, category_id):
                 raise HTTPException(status_code=400, detail="器械分类不存在")

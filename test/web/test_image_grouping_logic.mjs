@@ -109,7 +109,7 @@ test("拼图布局:空模型无格子", () => {
   assert.strictEqual(plan.cells.length, 0);
 });
 
-test("组图判定:只认落库标记,有标签也不自动算组图(产品决策)", () => {
+test("组图判定:只认落库标记,有标签也不自动算组图(用户拍板)", () => {
   assert.ok(sandbox.igIsSetDate(["2025-07-14"], "2025-07-14"));
   assert.ok(!sandbox.igIsSetDate(["2025-07-14"], "2026-07-03"));
   assert.ok(!sandbox.igIsSetDate([], "2026-07-03"));

@@ -89,7 +89,7 @@ def upsert_patient_with_version(conn, patient: PatientSnapshot, batch_id):
         ]
         if diffs and locally_edited_since_last_import(
             conn, "patient", patient.patient_identity,
-            # 患者合并补全(merge_patient_master)也算本地编辑，否则合并回填的
+            # #553：患者合并补全(merge_patient_master)也算本地编辑，否则合并回填的
             # phone/sex/birthday/address 会被重跑导入静默回退
             ("update_patient_profile", "merge_patient_master"), existing[2],
         ):
@@ -99,7 +99,7 @@ def upsert_patient_with_version(conn, patient: PatientSnapshot, batch_id):
                     local_value, incoming_value, batch_id,
                 )
             return "conflict"
-        # 归档的 version_hash 必须与被归档的 source_json 自洽（系统不变量
+        # #552：归档的 version_hash 必须与被归档的 source_json 自洽（系统不变量
         # current_hash==stable_hash(source_json)）。直接抄 existing.current_hash 会在
         # 该行被本地编辑/合并偏离后写出 hash≠hash(source_json) 的坏版本行。
         try:
@@ -134,7 +134,7 @@ def upsert_patient_with_version(conn, patient: PatientSnapshot, batch_id):
         )
         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         on conflict(patient_identity) do update set
-            -- incoming 为空时保留存量绑定,别用空/NULL 静默清空已绑定客户号
+            -- 审计#27:incoming 为空时保留存量绑定,别用空/NULL 静默清空已绑定客户号
             source_customer_id = coalesce(nullif(excluded.source_customer_id, ''), patients.source_customer_id),
             display_name = excluded.display_name,
             phone = excluded.phone,

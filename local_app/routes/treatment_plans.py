@@ -8,9 +8,9 @@ from local_app.timeutil import now_str
 from local_app.auth import audit_write, require_perm
 from local_app.db import begin_immediate, connect, init_db, new_id
 from local_app.routes.patient_common import require_patient   # 审计R2:软删患者按不存在处理(共享校验)
-from local_app.validation import valid_int_qty   # 数量非整数拒绝报错(与处置单同口径)
+from local_app.validation import valid_int_qty   # #557:数量非整数拒绝报错(与处置单同口径)
 
-# 官方四段流转——确认/完成 + 撤回确认(confirmed→draft)/撤回完成(done→confirmed)。
+# 复审#9：官方四段流转——确认/完成 + 撤回确认(confirmed→draft)/撤回完成(done→confirmed)。
 _ALLOWED_TRANSITIONS = {
     "draft": {"confirmed"},
     "confirmed": {"done", "draft"},   # done=完成；draft=撤回确认
@@ -43,12 +43,12 @@ def _parse_plan_item(raw, sort_order):
     name = str(raw.get("item_name") or "").strip()
     if not name:
         return None
-    qty = valid_int_qty(raw.get("quantity"), 1)   # 非整数数量拒绝报错
-    if qty <= 0:                     # 负/零数量回退为 1
+    qty = valid_int_qty(raw.get("quantity"), 1)   # #557:非整数数量拒绝报错
+    if qty <= 0:                     # #110 负/零数量回退为 1
         qty = 1
     unit_price = _to_real(raw.get("unit_price"))
     if unit_price is not None and (not math.isfinite(unit_price) or unit_price < 0):
-        unit_price = None            # 负/nan 单价丢弃,留待划价时再填,不存进库污染后续
+        unit_price = None            # #110 负/nan 单价丢弃,留待划价时再填,不存进库污染后续
     line_total = _to_real(raw.get("total_price"))
     if line_total is not None and (not math.isfinite(line_total) or line_total < 0):
         line_total = None
@@ -341,7 +341,7 @@ def create_treatment_plans_router(db_path):
                     detail=f"不能从「{current}」变为「{new_status}」",
                 )
             now = now_str()
-            # 撤回确认(confirmed→draft)若计划已转划价(挂着 bill_id),必须连带撤销账单,
+            # 审计#19：撤回确认(confirmed→draft)若计划已转划价(挂着 bill_id),必须连带撤销账单,
             # 否则计划回 draft 而账单仍在=脱节孤儿。语义=撤销这次转划价(账单是转划价刚生成、本未付):
             # 已收费则拦截(先去收费处退费);未收费则硬删账单+明细+清 bill_id,彻底回到划价前(计划可重新划价)。
             # 不用 state='voided'——那是"作废一张真账单",会进回收站,从回收站还原会再造 pending 孤儿(明细仍软删)。
@@ -401,7 +401,7 @@ def create_treatment_plans_router(db_path):
             ).fetchone()
             if not prow:   # 软删的计划不能再改选方案(否则改了被删计划的总价)
                 raise HTTPException(status_code=404, detail="计划不存在")
-            # 已确认/已划价的计划不能再改二选一(否则 total_price 变了与已生成账单脱节)
+            # 审查#14：已确认/已划价的计划不能再改二选一(否则 total_price 变了与已生成账单脱节)
             if prow["status"] != "draft" or str(prow["bill_id"] or "").strip():
                 raise HTTPException(status_code=409, detail="计划已确认或已划价，不能再改方案选项")
             if grow["group_type"] != "alt":
@@ -450,10 +450,10 @@ def create_treatment_plans_router(db_path):
             ).fetchone()
             if not plan:
                 raise HTTPException(status_code=404, detail="治疗计划不存在")
-            # 必须先确认方案才能转划价（草稿不能直接进收费，遵守状态机）
+            # #16：必须先确认方案才能转划价（草稿不能直接进收费，遵守状态机）
             if plan["status"] != "confirmed":
                 raise HTTPException(status_code=409, detail="计划未确认，不能转划价（请先确认方案）")
-            # 防重复划价——已生成过收费单的计划不再重复生成
+            # #17：防重复划价——已生成过收费单的计划不再重复生成
             if plan["bill_id"]:
                 raise HTTPException(status_code=409, detail="该计划已转划价，不能重复生成收费单")
             item_rows = conn.execute(
@@ -494,14 +494,14 @@ def create_treatment_plans_router(db_path):
                     if unit_price is None or not math.isfinite(unit_price) or unit_price < 0:
                         raise HTTPException(status_code=400, detail="单价必须是非负数字")
                 else:
-                    stored = r["unit_price"]   # 未改价回退库内值时钳正(老数据可能存了负价)
+                    stored = r["unit_price"]   # #110 未改价回退库内值时钳正(老数据可能存了负价)
                     unit_price = stored if (stored is not None and math.isfinite(stored) and stored >= 0) else 0.0
                 if adj.get("quantity") in (None, ""):
                     qty = r["quantity"] or 1
                     if qty <= 0:   # 老数据可能存了负/零数量
                         qty = 1
                 else:
-                    qty = valid_int_qty(adj.get("quantity"))   # 非整数数量拒绝报错
+                    qty = valid_int_qty(adj.get("quantity"))   # #557:非整数数量拒绝报错
                     # 架构铁律#禁止兜底：零/负数量400报错，不静默退回原数量(对齐处置单划价)
                     if qty <= 0:
                         raise HTTPException(status_code=400, detail="数量必须大于 0")
@@ -512,7 +512,7 @@ def create_treatment_plans_router(db_path):
                         raise HTTPException(status_code=400, detail="本项金额必须是非负数字")
                 else:
                     line_fee = unit_price * qty
-                line_fee = round(line_fee, 2)   # 同 ,逐项取整到分,避免带厘账单收不齐
+                line_fee = round(line_fee, 2)   # #585：同 #550,逐项取整到分,避免带厘账单收不齐
                 subtotal += line_fee
                 lines.append({
                     "treatment_item_id": new_id("local-ti"),
@@ -522,10 +522,10 @@ def create_treatment_plans_router(db_path):
                     "quantity": qty,
                     "total_fee": line_fee,
                 })
-            total_fee = round(max(subtotal - discount, 0.0), 2)   # 账单总额取整到分
-            # 全免/抵到0元 → 直接结清(state=paid)，否则0元单卡在pending无完成路径(同处置单)
+            total_fee = round(max(subtotal - discount, 0.0), 2)   # #585：账单总额取整到分
+            # #3：全免/抵到0元 → 直接结清(state=paid)，否则0元单卡在pending无完成路径(同处置单#27)
             bill_state = "paid" if total_fee <= 1e-6 else "pending"
-            # 账单编号 YYMMDD+当日4位流水(处置单路径已修,计划路径此前写空串→收费单"没有账单编号")
+            # 审查#13：账单编号 YYMMDD+当日4位流水(处置单路径已修,计划路径此前写空串→收费单"没有账单编号")
             yymmdd = now[2:4] + now[5:7] + now[8:10]
             mx = conn.execute(
                 "select max(cast(substr(bill_no, 7) as integer)) from bills where bill_no like ? and length(bill_no) = 10",
@@ -572,7 +572,7 @@ def create_treatment_plans_router(db_path):
                 "update treatment_plans set bill_id = ?, updated_at = ? where plan_id = ?",
                 (bill_id, now, plan_id),
             )
-            # 计划实体本身被改(挂上 bill_id)→也记一条 plan 审计,供同步冲突守卫识别本地变更
+            # 计划实体本身被改(挂上 bill_id)→也记一条 plan 审计,供同步冲突守卫(#207)识别本地变更
             audit_write(
                 conn, "treatment_plan", plan_id, "generate_plan_bill",
                 new_json=json.dumps({"bill_id": bill_id}, ensure_ascii=False),

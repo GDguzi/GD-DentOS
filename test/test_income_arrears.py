@@ -1,4 +1,4 @@
-"""收入统计欠款流水(对标行业通用口径)：期初/期末欠款 + 每日新增/补交欠款，锁住勾稽恒等式。"""
+"""收入统计欠款流水(对标 SaaS)：期初/期末欠款 + 每日新增/补交欠款，锁住勾稽恒等式。"""
 import json
 import tempfile
 import unittest
@@ -82,7 +82,7 @@ class IncomeArrearsTest(unittest.TestCase):
             self.assertEqual(d["closing_arrears"], 0.0)
 
     def test_prepay_empty_bill_not_inflate_closing(self):
-        # 期后空 bill_id 预交(不改 paid_fee)不得抬高历史期末欠款
+        # #682: 期后空 bill_id 预交(不改 paid_fee)不得抬高历史期末欠款
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             with connect(db) as c:

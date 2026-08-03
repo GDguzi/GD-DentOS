@@ -145,7 +145,7 @@ class CommunicationTest(unittest.TestCase):
             self.assertEqual(list((Path(tmp) / "img" / "communication-images").rglob("*.png")), [])
 
     def test_image_upload_db_failure_no_orphan(self):
-        # 口径:入库失败(drop 表模拟)时,已落盘截图必须清掉不留孤儿
+        # #712 口径:入库失败(drop 表模拟)时,已落盘截图必须清掉不留孤儿
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "clinic.sqlite3"
             init_db(db)
@@ -218,7 +218,7 @@ class CommunicationTest(unittest.TestCase):
             self.assertEqual(call["linked_communication_id"], cid)
 
     def test_call_link_cross_patient_rejected(self):
-        # 录音弱关联必须属于同一患者:传别的患者的沟通/关联 ID 一律拒绝,且不留孤儿录音
+        # #723 录音弱关联必须属于同一患者:传别的患者的沟通/关联 ID 一律拒绝,且不留孤儿录音
         with tempfile.TemporaryDirectory() as tmp:
             db, client = self._client(tmp)
             with connect(db) as conn:
@@ -244,7 +244,7 @@ class CommunicationTest(unittest.TestCase):
             self.assertEqual(list((Path(tmp) / "img" / "call-recordings").rglob("*.wav")), [])
 
     def test_call_link_wechat_communication_rejected(self):
-        # 录音只能关联电话沟通(channel=phone),微信沟通不给挂录音
+        # #723 录音只能关联电话沟通(channel=phone),微信沟通不给挂录音
         with tempfile.TemporaryDirectory() as tmp:
             _, client = self._client(tmp)
             wechat = self._create(client, channel="wechat").json()["communication_id"]

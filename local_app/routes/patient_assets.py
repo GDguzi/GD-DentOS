@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse
 
 from local_app.access_authorization import has_access, require_access
 from local_app.db import begin_immediate, connect
-from local_app.routes.patient_common import require_patient   # 审计R2:软删口径收敛到共享校验
+from local_app.routes.patient_common import require_patient   # 审计R2:#580 软删口径收敛到共享校验
 from local_app.snapshots import row_to_dict
 
 # 标准口内照拍摄模板：slot(引导机位) -> (category 落库分类, tooth_codes 牙位)。
@@ -84,8 +84,8 @@ IMAGE_SET_SLOT_LABELS = (
 
 
 def ensure_seed_image_sets(db_path):
-    """一次性种子:历史上真正成套的期(当天>=6个不同视图位标签,正畸组图特征)预标为组图。
-    此后组图与否只认医生手点(跟进,产品决策:自动不判组);幂等,app_settings 记标记。"""
+    """一次性种子:历史上真正成套的期(当天>=6个不同视图位标签,SaaS正畸组图特征)预标为组图。
+    此后组图与否只认医生手点(#534跟进,用户拍板:自动不判组);幂等,app_settings 记标记。"""
     with connect(db_path) as conn:
         done = conn.execute(
             "select 1 from app_settings where key = 'migration.534_seed_image_sets'"
@@ -105,7 +105,7 @@ def ensure_seed_image_sets(db_path):
             """,
             (now, *IMAGE_SET_SLOT_LABELS),
         )
-        conn.execute(   # or ignore 防新库首批并发请求都过了上面的 done 检查后撞主键 500
+        conn.execute(   # #579:or ignore 防新库首批并发请求都过了上面的 done 检查后撞主键 500
             "insert or ignore into app_settings(key, value, updated_at) values ('migration.534_seed_image_sets', '1', ?)",
             (now,),
         )
@@ -185,7 +185,7 @@ def create_patient_assets_router(db_path, images_dir):
                 }
             bill_id = row["linked_bill_id"]
             if not bill_id:
-                # 本地处置单的未划价项目(带 order_id)已在「本地处置单」卡里展示,
+                # #381:本地处置单的未划价项目(带 order_id)已在「本地处置单」卡里展示,
                 # 不再进「未关联就诊」重复出现;真正的孤儿项目(无单无账)才进这里。
                 if row["order_id"]:
                     continue
@@ -323,7 +323,7 @@ def create_patient_assets_router(db_path, images_dir):
                 bucket(d)["appointments"].append(
                     {
                         "appointment_id": r["appointment_id"],
-                        "start_time": r["start_time"],   # 就诊行显示时分(visitApptLine 取 a.start_time);
+                        "start_time": r["start_time"],   # 就诊行显示时分(visitApptLine 取 a.start_time);#444/#446
                         "doctor_name": r["doctor_name"],
                         "item_name": r["item_name"],
                         "status": r["status"],
@@ -417,7 +417,7 @@ def create_patient_assets_router(db_path, images_dir):
                     }
                 )
             # 经营概览(大客户经营)：累计消费/到诊次数/首诊——一眼看全消费与到诊轨迹。
-            # 累计消费口径与 today_cash_in/收银查询一致：排作废原单(CancelMark非空且金额≥0),
+            # 累计消费口径与 today_cash_in/收银查询一致(#276)：排作废原单(CancelMark非空且金额≥0),
             # 保留退费负数冲减→净实收,避免作废收款虚高大客户识别。
             if see_billing:
                 total_spend = conn.execute(
@@ -547,7 +547,7 @@ def create_patient_assets_router(db_path, images_dir):
         try:
             with Image.open(file_path) as img:
                 img.load()
-                # 带EXIF方向标签的照片(手机翻拍),浏览器显示时已按标签转正;先把像素转成
+                # #637:带EXIF方向标签的照片(手机翻拍),浏览器显示时已按标签转正;先把像素转成
                 # "显示的样子"再做用户变换,保存后不带标签,方向才与灯箱所见一致(内窥镜片无标签,等价原样)
                 out = ImageOps.exif_transpose(img)
                 if flip_x:
@@ -615,7 +615,7 @@ def create_patient_assets_router(db_path, images_dir):
             try:
                 new_path.unlink(missing_ok=True)   # 库没切过去:只回收新文件,旧图旧哈希原样
             except OSError:
-                # 清理自身的报错只记日志——不得顶掉原始的404/409/库异常
+                # 八轮#854:清理自身的报错只记日志——不得顶掉原始的404/409/库异常
                 logging.getLogger("local_app").warning("旋转失败后新文件清理失败: %s", new_path.name)
             raise
         # 指针已切换:旧文件成落选品——清理失败只记日志不改变已提交结果(同头像口径)
@@ -673,7 +673,7 @@ def create_patient_assets_router(db_path, images_dir):
         data = await file.read()
         if len(data) > 8 * 1024 * 1024:
             raise HTTPException(status_code=400, detail="图片不要超过 8MB")
-        # 用 patient_identity 的哈希做文件名前缀，避免不同ID清洗后碰撞串图。
+        # #104 用 patient_identity 的哈希做文件名前缀，避免不同ID清洗后碰撞串图。
         # 审计R2复核三轮:每次上传独立文件名(带随机段)——新文件永不覆盖旧文件,并发上传互不踩;
         # 库成功指向新文件之前,旧头像文件分毫不动(提交失败/竞态404只丢自己的新文件)。
         safe = hashlib.sha1(patient_identity.encode("utf-8")).hexdigest()[:20]
@@ -777,9 +777,9 @@ def create_patient_assets_router(db_path, images_dir):
         content_hash = hashlib.sha1(data).hexdigest()
         now = now_str()
         with connect(db_path) as conn:
-            begin_immediate(conn)   # 复核:抢写锁使「复查身份→插入」原子——合并事务无法插进两步之间
+            begin_immediate(conn)   # #580复核:抢写锁使「复查身份→插入」原子——合并事务无法插进两步之间
             try:
-                # 与患者合并竞态——第一次校验到此处之间身份可能刚被合并,落库前同事务再查一次
+                # #580:与患者合并竞态——第一次校验到此处之间身份可能刚被合并,落库前同事务再查一次
                 require_patient(conn, patient_identity)
             except HTTPException:
                 (images_dir / rel).unlink(missing_ok=True)   # 已落盘文件回收,不留孤儿
@@ -804,7 +804,7 @@ def create_patient_assets_router(db_path, images_dir):
     def delete_patient_image(patient_identity: str, image_id: str):
         require_perm("patient.edit")   # 越权:删患者影像
         with connect(db_path) as conn:
-            # 锁内读 rel_path——与旋转的指针切换互斥。不抢锁先读,旋转在
+            # 六轮P2:锁内读 rel_path——与旋转的指针切换互斥。不抢锁先读,旋转在
             # 「读路径→删行」之间提交新路径时,下面会按旧路径清文件,新旋转文件成永久孤儿
             begin_immediate(conn)
             row = conn.execute(
@@ -814,7 +814,7 @@ def create_patient_assets_router(db_path, images_dir):
             ).fetchone()
             if not row:
                 raise HTTPException(status_code=404, detail="image not found")
-            # 先删库记录并提交,成功后再删磁盘文件——避免提交失败时文件已不可恢复地丢、库留悬挂行
+            # #567：先删库记录并提交,成功后再删磁盘文件——避免提交失败时文件已不可恢复地丢、库留悬挂行
             conn.execute("delete from patient_images where image_id = ?", (image_id,))
             now = now_str()
             audit_write(

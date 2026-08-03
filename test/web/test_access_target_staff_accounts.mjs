@@ -159,6 +159,7 @@ test("V3 账号页显示岗位只读信息，不再提供旧角色修改和脱�
   assert.doesNotMatch(elements.amBody.innerHTML, /class="cs-input am-role"/);
   assert.doesNotMatch(elements.amBody.innerHTML, /id="amNewRole"/);
   assert.match(elements.amBody.innerHTML, /诊所人员管理/);
+  assert.match(elements.amBody.innerHTML, /id="amMsg"/);
 });
 
 test("accountManagerVisibleUsers 只在 V3 且可查看人员时过滤员工账号", () => {
@@ -286,10 +287,83 @@ test("普通账号操作员不显示也不能触发系统管理员目标的启�
   assert.match(systemAdmin.elements.amBody.innerHTML, />重置密码<\/button>/);
 });
 
-test("账号管理标题栏不再提供 openStaffManager 第二入口", () => {
-  const {sandbox} = accountSandbox();
-  const modal = sandbox.amEnsureModal();
-  assert.doesNotMatch(modal.innerHTML, /openStaffManager|[👥]配台人员/);
+test("账号管理标题栏只为 V3 staff.edit 提供新增员工入口", () => {
+  const editable = accountSandbox({permissions: ["account.open", "account.security", "staff.edit"]});
+  const editableHtml = editable.sandbox.amEnsureModal().innerHTML;
+  assert.match(editableHtml, /＋新增员工/);
+  assert.match(editableHtml, /amOpenNewStaff\(\)/);
+  assert.doesNotMatch(editableHtml, /openStaffManager|[👥]配台人员/);
+
+  const accountOnly = accountSandbox({permissions: ["account.open", "account.security"]});
+  assert.doesNotMatch(accountOnly.sandbox.amEnsureModal().innerHTML, /新增员工|amOpenNewStaff/);
+
+  const legacyAdmin = accountSandbox({
+    accessV3: false,
+    permissions: ["staff.manage"],
+    isSystemAdmin: true,
+  });
+  assert.doesNotMatch(legacyAdmin.sandbox.amEnsureModal().innerHTML, /新增员工|amOpenNewStaff/);
+});
+
+test("账号新增员工 bridge 成功后关闭账号弹窗", async () => {
+  const target = accountSandbox({permissions: ["account.open", "staff.edit"]});
+  const modal = target.sandbox.amEnsureModal();
+  modal.hidden = false;
+  let bridgeCalls = 0;
+  target.sandbox.openNewStaffFromConfig = async () => { bridgeCalls += 1; return true; };
+
+  assert.strictEqual(await target.sandbox.amOpenNewStaff(), true);
+  assert.strictEqual(bridgeCalls, 1);
+  assert.strictEqual(modal.hidden, true);
+});
+
+test("账号新增员工 bridge 取消时保留账号弹窗且不提示失败", async () => {
+  const target = accountSandbox({permissions: ["account.open", "staff.edit"]});
+  const modal = target.sandbox.amEnsureModal();
+  modal.hidden = false;
+  target.sandbox.openNewStaffFromConfig = async () => null;
+
+  assert.strictEqual(await target.sandbox.amOpenNewStaff(), null);
+  assert.strictEqual(modal.hidden, false);
+  assert.strictEqual(target.elements.amMsg.textContent, "");
+});
+
+test("账号新增员工 bridge 返回失败时保留弹窗并显示明确提示", async () => {
+  const target = accountSandbox({permissions: ["account.open", "staff.edit"]});
+  const modal = target.sandbox.amEnsureModal();
+  modal.hidden = false;
+  target.sandbox.openNewStaffFromConfig = async () => false;
+
+  assert.strictEqual(await target.sandbox.amOpenNewStaff(), false);
+  assert.strictEqual(modal.hidden, false);
+  assert.match(target.elements.amMsg.textContent, /无法打开新增员工/);
+});
+
+test("账号新增员工 bridge 缺失或抛错时不外抛并显示明确提示", async () => {
+  for (const bridge of [undefined, async () => { throw new Error("private bridge detail"); }]) {
+    const target = accountSandbox({permissions: ["account.open", "staff.edit"]});
+    const modal = target.sandbox.amEnsureModal();
+    modal.hidden = false;
+    if (bridge) target.sandbox.openNewStaffFromConfig = bridge;
+
+    assert.strictEqual(await target.sandbox.amOpenNewStaff(), false);
+    assert.strictEqual(modal.hidden, false);
+    assert.match(target.elements.amMsg.textContent, /无法打开新增员工/);
+    assert.doesNotMatch(target.elements.amMsg.textContent, /private|bridge|detail/);
+  }
+});
+
+test("无 staff.edit 时程序化调用新增员工入口静默拒绝", async () => {
+  const target = accountSandbox({permissions: ["account.open", "account.security"]});
+  const modal = target.sandbox.amEnsureModal();
+  modal.hidden = false;
+  let bridgeCalls = 0;
+  target.sandbox.openNewStaffFromConfig = async () => { bridgeCalls += 1; return true; };
+
+  assert.strictEqual(await target.sandbox.amOpenNewStaff(), false);
+  assert.strictEqual(bridgeCalls, 0);
+  assert.strictEqual(modal.hidden, false);
+  assert.strictEqual(target.elements.amMsg.textContent, "");
 });
 
 test("账号页 400/403/409/500 和网络异常均给稳定中文，不渲染后端 detail", async () => {
@@ -480,9 +554,9 @@ function personnelSandbox({
     encodeURIComponent,
     escapeHtml: value => String(value ?? "")
       .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;").replaceAll("'", "&;"),
+      .replaceAll('"', "&quot;").replaceAll("'", "&#39;"),
     escapeAttr: value => String(value ?? "")
-      .replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("'", "&;"),
+      .replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("'", "&#39;"),
     hasPerm: permission => granted.has(permission),
     appPrompt: async (...args) => {
       promptCalls.push(args);
@@ -537,6 +611,26 @@ function personnelSandbox({
 function accessStaffState(sandbox) {
   return vm.runInContext("_accessStaffState", sandbox);
 }
+
+test("openNewStaffForm 仅在人员列表就绪后打开真实新增表单", async () => {
+  const ready = personnelSandbox();
+  assert.strictEqual(ready.sandbox.openNewStaffForm(), false);
+  assert.strictEqual(accessStaffState(ready.sandbox).formOpen, false);
+  assert.doesNotMatch(ready.elements.personnelBody.innerHTML, /accessStaffFormTitle/);
+
+  await ready.sandbox.renderStaffInto("personnelBody");
+  assert.strictEqual(ready.sandbox.openNewStaffForm(), true);
+  assert.strictEqual(accessStaffState(ready.sandbox).formOpen, true);
+  assert.match(ready.elements.personnelBody.innerHTML, /class="tooth-confirm-btn access-staff-add"[^>]*>新增员工<\/button>/);
+  assert.match(ready.elements.personnelBody.innerHTML, /id="accessStaffFormTitle">新增员工<\/h2>/);
+  assert.doesNotMatch(ready.elements.personnelBody.innerHTML, /添加人员/);
+
+  const failed = personnelSandbox({listOk: false});
+  await failed.sandbox.renderStaffInto("personnelBody");
+  assert.strictEqual(failed.sandbox.openNewStaffForm(), false);
+  assert.strictEqual(accessStaffState(failed.sandbox).formOpen, false);
+  assert.doesNotMatch(failed.elements.personnelBody.innerHTML, /accessStaffFormTitle/);
+});
 
 test("人员中心只从受控聚合接口加载，失败时不回退轻量选人缓存", async () => {
   const ready = personnelSandbox();
@@ -753,7 +847,7 @@ function deferNewStaffSave(target) {
   return gate;
 }
 
-test("添加编辑共用应用内 modal，主岗位与兼任岗位生成精确 payload", async () => {
+test("新增编辑共用应用内 modal，主岗位与兼任岗位生成精确 payload", async () => {
   const target = personnelSandbox();
   await target.sandbox.renderStaffInto("personnelBody");
   target.sandbox.openStaffForm(null);
@@ -853,7 +947,7 @@ test("legacy staff.manage 新增和编辑发送中文岗位旧合同，保留档
 
   const created = personnelSandbox({accessV3: false, members: [legacyMember]});
   await created.sandbox.renderStaffInto("personnelBody");
-  assert.match(created.elements.personnelBody.innerHTML, />添加人员</);
+  assert.match(created.elements.personnelBody.innerHTML, />新增员工</);
   created.sandbox.openStaffForm(null);
   installFormElements(created.elements);
   created.selectedRoles.push({value: "nurse"}, {value: "doctor"}, {value: "nurse"});
@@ -955,14 +1049,14 @@ test("主岗位为空不发请求，保存失败保留 modal 和字段且不泄�
   assert.match(network.elements.accessStaffFormError.textContent, /保存失败/);
 });
 
-test("只有人员编辑权限才显示添加和编辑入口", async () => {
+test("只有人员编辑权限才显示新增和编辑入口", async () => {
   const editable = personnelSandbox({canEdit: true});
   await editable.sandbox.renderStaffInto("personnelBody");
-  assert.match(editable.elements.personnelBody.innerHTML, />添加人员</);
+  assert.match(editable.elements.personnelBody.innerHTML, />新增员工</);
   assert.match(editable.elements.personnelBody.innerHTML, />编辑</);
   const readOnly = personnelSandbox({canEdit: false});
   await readOnly.sandbox.renderStaffInto("personnelBody");
-  assert.doesNotMatch(readOnly.elements.personnelBody.innerHTML, />添加人员|>编辑</);
+  assert.doesNotMatch(readOnly.elements.personnelBody.innerHTML, />新增员工|>编辑</);
 });
 
 function installActionReason(elements, value) {
@@ -1117,7 +1211,7 @@ test("直接请求编辑离职人员不改表单状态，新建人员仍可打�
   target.sandbox.openStaffForm(null);
   assert.strictEqual(state.formOpen, true);
   assert.strictEqual(state.formStaffId, null);
-  assert.match(target.elements.personnelBody.innerHTML, /id="accessStaffFormTitle">添加人员<\/h2>/);
+  assert.match(target.elements.personnelBody.innerHTML, /id="accessStaffFormTitle">新增员工<\/h2>/);
 });
 
 test("人员详情按精确权限和目标状态显示人事、账号与系统管理员动作", async () => {

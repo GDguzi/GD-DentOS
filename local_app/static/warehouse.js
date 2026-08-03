@@ -87,7 +87,7 @@ function whOpenModal(title, inner, onSubmit) {
       </div>
     </div>`;
   document.body.appendChild(wrap);
-  if (typeof bindStaffInputs === "function") bindStaffInputs(wrap);   // 二批:经手人/领用人选人
+  if (typeof bindStaffInputs === "function") bindStaffInputs(wrap);   // #420二批:经手人/领用人选人
   wrap.querySelectorAll("[data-wh-close]").forEach(b => b.addEventListener("click", whCloseModal));
   wrap.addEventListener("click", e => { if (e.target === wrap) whCloseModal(); });
   wrap.querySelector("[data-wh-ok]").addEventListener("click", async () => {
@@ -318,7 +318,7 @@ async function whReceiptForm(kind) {
       }
       return o;
     }).filter(o => o.stock_item_id && Number(o.qty) > 0);
-    // 供应商仅 进货(purchase)/退货(return_supplier) 必填；领用(use)/退领(return) 可空(诊室领用最高频)
+    // #223：供应商仅 进货(purchase)/退货(return_supplier) 必填；领用(use)/退领(return) 可空(诊室领用最高频)
     const needSupplier = ["purchase", "return_supplier"].includes(whVal(w, "type"));
     if (needSupplier && !whVal(w, "supplier_id")) { status.textContent = "进货/退货需选择供应商"; return false; }
     if (!its.length) { status.textContent = "至少录一条有效明细(选物品+数量>0)"; return false; }

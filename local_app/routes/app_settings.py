@@ -1,5 +1,5 @@
 """应用设置：预约界面设置（营业时间/最小单位/是否分医生列），驱动预约天/周视图网格。
-单店一份配置，存通用 KV 表。"""
+规格：docs/官方规格/预约.md「预约界面设置」。单店一份配置，存通用 KV 表。"""
 import json
 import re
 from pathlib import Path
@@ -32,12 +32,12 @@ _DEFAULT_APPT = {
 _DEFAULT_CLINIC = {
     "name": DEFAULT_CLINIC_NAME,   # 就诊诊所名：首启填一次，各处(登录页/回访卡/打印头)统一显示
 }
-# 诊室列表：候诊队列给患者分诊室用(按诊室归属操作)。可在设置里改。
+# 诊室列表：候诊队列给患者分诊室用(将来对接语音系统,按诊室归属操作)。可在设置里改。
 _DEFAULT_ROOMS = {"list": ["诊室1", "诊室2", "诊室3", "治疗室"]}
 # 功能开关：诊所按需启停模块。membership_enabled=会员储值(默认开,不用会员可关掉)。
 _DEFAULT_FEATURES = {"membership_enabled": True}
-# 付款方式：收费弹窗下拉的候选名单,前台可在弹窗⚙️里自定义(默认=原写死8种,零迁移)。
-_DEFAULT_PAY_METHODS = {"list": ["现金", "微信", "支付宝", "银行卡", "云闪付", "社保卡", "医保", "其他"]}
+# #638 付款方式：收费弹窗下拉的候选名单,前台可在弹窗⚙️里自定义(默认=原写死8种,零迁移)。
+_DEFAULT_PAY_METHODS = {"list": ["现金", "微信", "支付宝", "银行卡", "社保卡", "医保", "其他"]}
 
 _CUSTOMER_HUB_RETURN_DICTS = (
     "return_type",
@@ -212,7 +212,7 @@ def create_app_settings_router(db_path):
 
     @router.put("/api/settings/features")
     def put_feature_settings(payload: dict):
-        require_perm("settings.manage")   # 会员开关等模块开关；全店设置权限可配(默认仅 admin)
+        require_perm("settings.manage")   # 审查#16：会员开关等模块开关；全店设置权限可配(默认仅 admin)
         payload = payload or {}
         with connect(db_path) as conn:
             current = _read(conn, "features", _DEFAULT_FEATURES)
@@ -250,7 +250,7 @@ def create_app_settings_router(db_path):
 
     @router.put("/api/settings/pay-methods")
     def put_pay_methods_settings(payload: dict):
-        # 产品决策「能收费就能改」:守卫用 billing.pay 而非 settings.manage,前台/收银自己维护
+        # #638 用户拍板「能收费就能改」:守卫用 billing.pay 而非 settings.manage,前台/收银自己维护
         require_perm("billing.pay")
         payload = payload or {}
         raw = payload.get("list")

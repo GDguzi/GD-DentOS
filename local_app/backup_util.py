@@ -67,7 +67,7 @@ def claim_backup_name(tmp, final):
             pass
         except OSError:
             # exFAT/FAT 等无硬链接的文件系统:退化为 O_EXCL 独占占位+换入,保住"绝不覆盖"。
-            # 注: 占位与换入之间被强杀会留 0 字节正式名(窗口毫秒级);硬链接路径无此窗口
+            # ponytail: 占位与换入之间被强杀会留 0 字节正式名(窗口毫秒级);硬链接路径无此窗口
             try:
                 os.close(os.open(final, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
             except FileExistsError:
@@ -153,7 +153,7 @@ def prune_manual_snapshots(db_path, nas_dir, keep=None):
             result["skipped_conflict"] += 1
             continue
         if dest.exists():
-            # 同名目标必须是普通文件且逐字节确认是同一副本才敢删本地;
+            # #737/#738 同名目标必须是普通文件且逐字节确认是同一副本才敢删本地;
             # 目录/设备等非普通文件、同大小异内容(st_size 相等不代表内容相等)一律判冲突
             try:
                 same = dest.is_file() and filecmp.cmp(f, dest, shallow=False)
@@ -215,7 +215,7 @@ def list_backups(db_path):
 
 
 def _service_running(port=None):
-    """探测本机 web 服务端口是否还在监听——restore_backup 是破坏性操作(删 WAL+覆盖库文件),
+    """#569:探测本机 web 服务端口是否还在监听——restore_backup 是破坏性操作(删 WAL+覆盖库文件),
     不能只靠 docstring 提醒操作者"调用前务必停掉写入方"，服务真在跑时必须程序性拒绝。
     只探测本机 loopback，不联网。"""
     port = int(port or os.environ.get("DENTAL_PORT", "").strip() or 8765)
@@ -227,7 +227,7 @@ def _service_running(port=None):
 def restore_backup(db_path, name, force=False):
     """回滚：先把当前库另存一份安全备份(回滚也可逆),再用指定备份覆盖当前库。
     处理 WAL：删 -wal/-shm,确保副本生效。**调用前务必停掉写入方(web 服务/同步)**——
-    不再只是文档提醒,默认会探测本机服务端口，服务还在监听就拒绝执行(force=True 跳过探测)。
+    #569:不再只是文档提醒,默认会探测本机服务端口，服务还在监听就拒绝执行(force=True 跳过探测)。
     返回 {restored, safety}。"""
     db_path = Path(db_path)
     backups = _backups_dir(db_path)
@@ -260,7 +260,7 @@ def restore_backup(db_path, name, force=False):
                 chown(tmp, st.st_uid, st.st_gid)   # sudo/跨账号恢复时保住原属主
             except PermissionError:
                 pass   # 非特权同用户场景无需也无法改属主
-        # 注: macOS ACL/扩展属性不随拷贝保留,本部署(单用户 Mac)不用 ACL;要用得换 copystat+xattr
+        # ponytail: macOS ACL/扩展属性不随拷贝保留,本部署(单用户 Mac)不用 ACL;要用得换 copystat+xattr
         # 再清 WAL/SHM(否则旧 -wal 会盖回覆盖后的库,回滚失效),最后原子换入自包含副本
         for suffix in ("-wal", "-shm"):
             p = Path(str(db_path) + suffix)

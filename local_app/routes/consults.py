@@ -28,7 +28,7 @@ def create_consults_router(db_path):
 
     @router.get("/api/patients/{patient_identity}/consults")
     def list_consults(patient_identity: str):
-        require_perm("consult.manage")   # 咨询沟通记录读守卫用本模块对应权限(consultant/support 有 manage 能读自己的)
+        require_perm("consult.manage")   # #482：咨询沟通记录读守卫用本模块对应权限(consultant/support 有 manage 能读自己的)
         with connect(db_path) as conn:
             require_patient(conn, patient_identity)
             rows = conn.execute(
@@ -62,7 +62,7 @@ def create_consults_router(db_path):
     def create_consult(patient_identity: str, payload: dict):
         require_perm("consult.manage")
         values = {f: str(payload.get(f) or "").strip() for f in _TEXT_FIELDS}
-        values["consult_date"] = valid_time_field(values["consult_date"], "consult_date")  # 日期校验
+        values["consult_date"] = valid_time_field(values["consult_date"], "consult_date")  # #15 日期校验
         # 至少要有沟通内容之一，避免建空记录
         if not any(
             values[f] for f in ("chief_complaint", "plan", "communication", "advice")

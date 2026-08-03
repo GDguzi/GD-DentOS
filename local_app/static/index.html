@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>口腔门诊 · 本地系统</title><!-- 诊所名启动后由 app.js 按配置刷新 -->
+  <title>口腔门诊 · 本地系统</title><!-- 诊所名启动后由 app.js 按配置刷新(开源壳阶段1) -->
   <!-- PWA：手机"添加到主屏幕"→图标一点直接进(全屏、记住登录) -->
   <link rel="manifest" href="/manifest.webmanifest">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -12,9 +12,9 @@
   <meta name="theme-color" content="#dfeff0">
   <link rel="apple-touch-icon" href="/icon-180.png">
   <link rel="icon" href="/icon.svg?v=2026-06-26-merged" type="image/svg+xml">
-  <!-- APP_ASSET_VERSION: 2026-07-22-ocr-main -->
-  <link rel="stylesheet" href="/styles.css?v=2026-07-27-charge-items">
-  <link rel="stylesheet" href="/customer_hub_v2.css?v=2026-07-22-ocr-main">
+  <!-- APP_ASSET_VERSION: 2026-08-02-quick-checkin-1 -->
+  <link rel="stylesheet" href="/styles.css?v=2026-08-02-quick-checkin-1">
+  <link rel="stylesheet" href="/customer_hub_v2.css?v=2026-07-27-charge-items">
   <link rel="stylesheet" href="/access_center.css?v=2026-07-19-access-tree">
 </head>
 <body class="theme-pearl">
@@ -174,7 +174,7 @@
     </section>
   </div>
   <div id="appointmentModal" class="modal-backdrop" hidden>
-    <section class="appt-modal appt-modal-wide" role="dialog" aria-modal="true" aria-label="新增预约">
+    <section class="appt-modal appt-modal-wide" role="dialog" aria-modal="true" aria-labelledby="apptModalTitle">
       <div class="modal-head"><strong id="apptModalTitle">新增预约</strong><button type="button" class="plain-button" onclick="closeNewAppointment()">×</button></div>
       <div class="appt-dialog">
         <div class="appt-col appt-col-left">
@@ -309,7 +309,7 @@
       </div>
     </section>
   </div>
-  <!-- 付款方式设置(收款弹窗⚙️进入):增删/排序,billing.pay 可改 -->
+  <!-- #638 付款方式设置(收款弹窗⚙️进入):增删/排序,billing.pay 可改 -->
   <div id="payMethodSettingsModal" class="modal-backdrop" hidden>
     <section class="pay-modal" role="dialog" aria-modal="true" aria-label="付款方式设置">
       <div class="modal-head"><strong>付款方式设置</strong><button type="button" class="plain-button" onclick="closePayMethodSettings()">×</button></div>
@@ -426,18 +426,19 @@
     </figure>
   </div>
   <script src="/vendor/echarts.min.js?v=2026-06-26-merged"></script>
-  <script src="/helpers.js?v=2026-07-17-workspace-leave-guard"></script>
+  <script src="/helpers.js?v=2026-08-02-quick-checkin-1"></script>
+  <script src="/check_in.js?v=2026-08-02-quick-checkin-1"></script>
   <script src="/dict.js?v=2026-06-26-merged"></script>
   <script src="/referral_source.js?v=2026-07-05-appprompt548"></script>
   <script src="/follow_ups.js?v=2026-06-26-merged"></script>
-  <script src="/today_work.js?v=2026-07-22-ocr-main"></script>
+  <script src="/today_work.js?v=2026-08-02-quick-checkin-1"></script>
   <script src="/today_inspection.js?v=2026-07-14-tokens0"></script>
   <script src="/billing_module.js?v=2026-07-15-reporterr803"></script>
-  <script src="/patient_module.js?v=2026-07-05-split"></script>
+  <script src="/patient_module.js?v=2026-08-02-quick-checkin-1"></script>
   <script src="/customer_hub_v2_contract.js?v=2026-07-22-dialog-followup1"></script>
   <script src="/customer_hub_v2_followup_date.js?v=2026-07-22-dialog-followup1"></script>
   <script src="/customer_hub_v2.js?v=2026-07-22-dialog-followup1"></script>
-  <script src="/module_views.js?v=2026-07-22-ocr-main"></script>
+  <script src="/module_views.js?v=2026-07-27-charge-items"></script>
   <script src="/return_visit_card.js?v=2026-07-20-attachment-saga1"></script>
   <script src="/audit_log.js?v=2026-07-27-charge-items"></script>
   <script src="/endoscope_capture.js?v=2026-07-04-endohelper7"></script>
@@ -452,10 +453,10 @@
   <script src="/config_center.js?v=2026-07-19-access-tree"></script>
   <script src="/role_permissions.js?v=2026-07-19-access-tree"></script>
   <script src="/consent_form.js?v=2026-06-29-sweep3"></script>
-  <script src="/treatment_order_editor.js?v=2026-07-08-clinicname"></script>
+  <script src="/treatment_order_editor.js?v=2026-08-02-quick-checkin-1"></script>
   <script src="/lab_order_editor.js?v=2026-07-08-bjdate541"></script>
-  <script src="/appointment_editor.js?v=2026-07-08-bjdate541"></script>
-  <script src="/appointment_grid.js?v=2026-07-08-bjdate541"></script>
+  <script src="/appointment_editor.js?v=2026-08-02-quick-checkin-1"></script>
+  <script src="/appointment_grid.js?v=2026-08-02-quick-checkin-1"></script>
   <script src="/appointment_views.js?v=2026-07-08-bjdate541"></script>
   <script src="/sterilization.js?v=2026-07-05-appprompt548"></script>
   <script src="/warehouse.js?v=2026-07-08-staffpick420"></script>
@@ -470,10 +471,10 @@
   <script src="/oral_exam_tab.js?v=2026-07-08-staffpick420"></script>
   <script src="/member_account.js?v=2026-07-17-r4reqid"></script>
   <script src="/patient_tags.js?v=2026-06-26-merged"></script>
-  <script src="/patient_workspace.js?v=2026-07-26-rail-revisit-btn"></script>
+  <script src="/patient_workspace.js?v=2026-08-02-quick-checkin-1"></script>
   <script src="/ai_drafts.js?v=2026-06-26-merged"></script>
   <script src="/account_manager.js?v=2026-07-19-access-tree"></script>
   <script src="/recycle_bin.js?v=2026-07-05-nav617"></script>
-  <script src="/app.js?v=2026-07-17-workspace-leave-guard"></script>
+  <script src="/app.js?v=2026-08-02-quick-checkin-1"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-// 预约·月视图 + 列表视图(对标行业通用口径)。复用 appointment_grid.js 的 localISO/apptBlockClass/apptStatusLabel。
+// 预约·月视图 + 列表视图(对标 SaaS)。复用 appointment_grid.js 的 localISO/apptBlockClass/apptStatusLabel。
 // 月视图：7列月历格,格内堆当天预约条,点格→天视图。列表视图：筛选条+表格+操作。
 
 let _apptMonthToken = 0;
@@ -98,7 +98,7 @@ function bindMonthView(container) {
     }));
 }
 
-// ====== 列表视图(对标行业通用口径 表格) ======
+// ====== 列表视图(对标 SaaS 表格) ======
 async function loadAppointmentListView() {
   if (!modulePanel) return;
   const token = ++_apptListToken;
@@ -158,10 +158,10 @@ function appointmentListFilters(from, to, doctors) {
 
 function appointmentListRow(row) {
   const apptId = row.appointment_id || "";
-  // 原来只挡"已取消/3"，"完成治疗"等终态行仍渲染可点的取消按钮，点了会清到达/完成时间戳。
+  // #615:原来只挡"已取消/3"，"完成治疗"等终态行仍渲染可点的取消按钮，点了会清到达/完成时间戳。
   // 复用今日队列同一套 tqStage() 终态判定(stage 4=完成/完成治疗，5=已离开，-1=已取消/爽约)，
   // 不再各写一套口径。列表页没有每行收费状态数据，这里比今日队列稍严——完成即锁，不像队列
-  // 那样"完成但未收费"仍可取消，偏保守但避免误撤已完成就诊。
+  // 那样"完成但未收费"仍可取消(#330)，偏保守但避免误撤已完成就诊。
   const stage = typeof tqStage === "function" ? tqStage(row) : 0;
   const cancelable = apptId && stage >= 0 && stage < 4;
   return `

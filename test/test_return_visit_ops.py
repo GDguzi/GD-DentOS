@@ -48,20 +48,20 @@ class ReturnVisitOpsTest(unittest.TestCase):
             self.assertEqual(row["is_deleted"], 0)
 
     def test_edit_return_doctor_and_type_persist(self):
-        # 编辑回访医生/类型能保存(前端卡片也展示这两字段)
+        # #37：编辑回访医生/类型能保存(前端卡片也展示这两字段)
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path, client = _client(tmpdir)
             rv_id = client.post("/api/patients/p1/return-visits", json={
                 "due_time": "2026-06-20", "item_name": "复查"}).json()["return_visit_id"]
             resp = client.put(f"/api/return-visits/{rv_id}", json={
                 "expected_revision": 1,
-                "return_doctor": "陈医生", "return_type": "到店回访"})
+                "return_doctor": "王医生", "return_type": "到店回访"})
             self.assertEqual(resp.status_code, 200)
             with connect(db_path) as conn:
                 row = conn.execute(
                     "select return_doctor, return_type from return_visits where return_visit_id = ?",
                     (rv_id,)).fetchone()
-            self.assertEqual(row["return_doctor"], "陈医生")
+            self.assertEqual(row["return_doctor"], "王医生")
             self.assertEqual(row["return_type"], "到店回访")
 
     def test_client_actual_date_rejected(self):
@@ -74,7 +74,7 @@ class ReturnVisitOpsTest(unittest.TestCase):
                                               "actual_date": "下周"}).status_code, 400)
 
     def test_today_completed_counts_by_actual_date(self):
-        # 今天实际完成"未来计划"的回访 → 今日已回访数+1(按actual_date而非due_time)
+        # #54：今天实际完成"未来计划"的回访 → 今日已回访数+1(按actual_date而非due_time)
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path, client = _client(tmpdir)
             rv_id = client.post("/api/patients/p1/return-visits", json={
@@ -86,7 +86,7 @@ class ReturnVisitOpsTest(unittest.TestCase):
             self.assertEqual(data["summary"]["completed_return_visits"], 1)
 
     def test_edit_workflow_fields_persist(self):
-        # 回访工作流字段 回访人/回访结果/实际回访日期 能保存(标记已回访)
+        # #13：回访工作流字段 回访人/回访结果/实际回访日期 能保存(标记已回访)
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path, client = _client(tmpdir)
             rv_id = client.post("/api/patients/p1/return-visits", json={
@@ -133,7 +133,7 @@ class ReturnVisitOpsTest(unittest.TestCase):
             self.assertEqual(row["satisfaction"], "非常满意")
 
     def test_noop_edit_does_not_insert_version(self):
-        # 相同值连续 PUT 不应灌 return_visit_versions(no-op 守卫)
+        # #150：相同值连续 PUT 不应灌 return_visit_versions(no-op 守卫)
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path, client = _client(tmpdir)
             rv_id = client.post("/api/patients/p1/return-visits", json={
@@ -157,7 +157,7 @@ class ReturnVisitOpsTest(unittest.TestCase):
             self.assertEqual(vcount(), 2)
 
     def test_soft_delete_twice_404(self):
-        # 已软删的回访再删→404,不重复灌版本
+        # 审查#25：已软删的回访再删→404,不重复灌版本
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path, client = _client(tmpdir)
             rv_id = client.post("/api/patients/p1/return-visits", json={
@@ -177,7 +177,7 @@ class ReturnVisitOpsTest(unittest.TestCase):
         self.assertEqual(resp.status_code, 400)
 
     def test_create_rejects_empty_item_name(self):
-        # 事项+到期时间一起录
+        # 复审#6：事项+到期时间一起录
         with tempfile.TemporaryDirectory() as tmpdir:
             _, client = _client(tmpdir)
             resp = client.post(
@@ -202,7 +202,7 @@ class ReturnVisitOpsTest(unittest.TestCase):
                     "select is_deleted from return_visits where return_visit_id = ?",
                     (rv_id,),
                 ).fetchone()["is_deleted"]
-                # 软删要留版本快照 + 审计
+                # 复审#7：软删要留版本快照 + 审计
                 ver = conn.execute(
                     "select count(*) from return_visit_versions where return_visit_id = ?",
                     (rv_id,),

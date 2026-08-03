@@ -33,7 +33,7 @@ def _to_real(value):
         f = float(value)
     except (TypeError, ValueError):
         return None
-    return f if math.isfinite(f) else None   # nan/inf 视为无效
+    return f if math.isfinite(f) else None   # nan/inf 视为无效(#20)
 
 
 def create_warehouse_items_router(db_path):

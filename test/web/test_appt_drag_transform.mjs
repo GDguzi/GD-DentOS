@@ -1,4 +1,4 @@
-// 回归守卫(node:test)：重叠并排块的内联 translateX 在拖拽/点击后必须还原，不得被清空。
+// #361 回归守卫(node:test)：重叠并排块的内联 translateX 在拖拽/点击后必须还原，不得被清空。
 // 无 DOM 测试栈，改守源码不变量——startApptBlockDrag 的 onUp 必须还原 origTransform。
 // 跑：node --test test/web/test_appt_drag_transform.mjs
 import { test } from "node:test";

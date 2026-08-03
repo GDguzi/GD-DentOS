@@ -64,14 +64,14 @@ class GateTest(unittest.TestCase):
             db = _db(tmp)
             auth.ensure_seed_roles(db)
             with connect(db) as conn:
-                # 样例接口 /api/patients 现按 patient.view 守卫;本例只验登录网关(非RBAC),
+                # #482:样例接口 /api/patients 现按 patient.view 守卫;本例只验登录网关(非RBAC),
                 # 用 admin(全通过)避免与角色权限耦合。
                 auth.create_user(conn, "u", "U", "pw123456", role="admin")
                 conn.commit()
             client = TestClient(create_app(db, require_login=True))
             # 未登录访问受保护 API → 401
             self.assertEqual(client.get("/api/patients").status_code, 401)
-            # 页面 → 返回登录页(含静态裸路径 /index.html,防止 StaticFiles 绕过登录墙)
+            # 页面 → 返回登录页(#808:含静态裸路径 /index.html,防止 StaticFiles 绕过登录墙)
             for path in ("/", "/index.html", "/styles.css"):
                 page = client.get(path)
                 self.assertEqual(page.status_code, 200)
@@ -84,7 +84,7 @@ class GateTest(unittest.TestCase):
             self.assertEqual(client.get("/api/patients").status_code, 200)
 
     def test_html_no_store_808(self):
-        # HTML 文档必须 no-store——否则浏览器启发式缓存会在登出后回放登录期骨架;
+        # #808:HTML 文档必须 no-store——否则浏览器启发式缓存会在登出后回放登录期骨架;
         # js/css 保持可缓存(靠 ?v= 版本号失效),不得误伤。
         with tempfile.TemporaryDirectory() as tmp:
             db = _db(tmp)
@@ -157,7 +157,7 @@ class AuditOperatorTest(unittest.TestCase):
             db = _db(tmp)
             auth.ensure_seed_roles(db)  # 医生角色默认权限(含 patient.create)入表，require_perm 才放行
             with connect(db) as conn:
-                auth.create_user(conn, "yisheng", "陈医生", "pw123456", role="doctor")
+                auth.create_user(conn, "yisheng", "王医生", "pw123456", role="doctor")
                 conn.commit()
             client = TestClient(create_app(db))
             client.post("/api/auth/login", json={"username": "yisheng", "password": "pw123456"})
@@ -258,7 +258,7 @@ class UserManagementTest(unittest.TestCase):
             self.assertEqual(client.post("/api/auth/change-password", json={"old_password": "old12345", "new_password": "new12345"}).status_code, 200)
 
     def test_change_own_password_clears_sessions(self):
-        # 自助改密后清该用户全部会话(同管理员重置),防旧会话继续有效
+        # 动态扫#18：自助改密后清该用户全部会话(同管理员重置),防旧会话继续有效
         with tempfile.TemporaryDirectory() as tmp:
             db = _db(tmp)
             with connect(db) as conn:
@@ -317,7 +317,7 @@ class NoLoginThrottleTest(unittest.TestCase):
 
 
 class AuditWriteContractTest(unittest.TestCase):
-    """数据层 audit_write 的 operator 必填(漏传 TypeError,不许静默兜底成 local_user)；
+    """#746：数据层 audit_write 的 operator 必填(漏传 TypeError,不许静默兜底成 local_user)；
     auth 薄壳缺省自动填当前登录人/无会话 local_user；两层都不 commit(事务边界归调用方)。"""
 
     def test_db_layer_missing_operator_raises(self):
@@ -357,7 +357,7 @@ class AuditWriteContractTest(unittest.TestCase):
 
 
 class AdminInitialPasswordFileTest(unittest.TestCase):
-    """首启 admin 明文初始密码文件在 admin 改密成功后必须删除,不让凭据常驻磁盘。"""
+    """#583:首启 admin 明文初始密码文件在 admin 改密成功后必须删除,不让凭据常驻磁盘。"""
 
     def test_change_password_removes_initial_password_file(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -365,7 +365,7 @@ class AdminInitialPasswordFileTest(unittest.TestCase):
             seeded = auth.ensure_seed_admin(db)
             self.assertIsNotNone(seeded)
             username, pw = seeded
-            self.assertGreaterEqual(len(pw), 32, "初始口令应为 token_hex(16)=32字符,不再是8字符弱口令")
+            self.assertGreaterEqual(len(pw), 32, "#583:初始口令应为 token_hex(16)=32字符,不再是8字符弱口令")
             f = Path(tmp) / ".admin_initial_password"
             self.assertTrue(f.is_file(), "首启应写初始密码文件")
             c = TestClient(create_app(db))
@@ -374,10 +374,10 @@ class AdminInitialPasswordFileTest(unittest.TestCase):
             r = c.post("/api/auth/change-password",
                        json={"old_password": pw, "new_password": "newpw12345"})
             self.assertEqual(r.status_code, 200, r.text)
-            self.assertFalse(f.exists(), "admin 改密成功后明文初始密码文件必须被删除")
+            self.assertFalse(f.exists(), "#583:admin 改密成功后明文初始密码文件必须被删除")
 
     def test_admin_reset_password_also_removes_file(self):
-        # 管理员经 reset-password 路径改 admin 密码,明文初始密码文件同样删除
+        # #783:管理员经 reset-password 路径改 admin 密码,明文初始密码文件同样删除
         with tempfile.TemporaryDirectory() as tmp:
             db = _db(tmp)
             username, pw = auth.ensure_seed_admin(db)
@@ -389,7 +389,7 @@ class AdminInitialPasswordFileTest(unittest.TestCase):
                 uid = conn.execute("select id from users where username='admin'").fetchone()["id"]
             r = c.post(f"/api/users/{uid}/reset-password", json={"password": "resetpw123"})
             self.assertEqual(r.status_code, 200, r.text)
-            self.assertFalse(f.exists(), "重置路径改 admin 密码也必须删明文文件")
+            self.assertFalse(f.exists(), "#783:重置路径改 admin 密码也必须删明文文件")
 
 
 # 2D.3：全系统只剩一条密码规则——原文至少含一个非空白字符。不做长度/复杂度校验，

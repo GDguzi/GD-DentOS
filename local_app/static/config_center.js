@@ -1,14 +1,14 @@
 // 配置管理（集中式设置中心）：左侧导航一级模块。
-// 管理向/低频功能统一收进这里，顶层导航只留日常门诊工作——
+// #617:管理向/低频功能统一收进这里，顶层导航只留日常门诊工作——
 // 子页含人员与权限(人员/角色权限/账号管理)、收费项目、同步中心、影像资料、操作历史、回收站。
 
 let _cfgTab = "access";
 let _accessCenterTab = "staff";
 
 // 各子页所需权限(后端对应守卫)，按权限显示子 tab，避免"看得到入口点进去却被后端 403"。
-// 回收站(第2步)：recycle.manage 只控这个入口是否出现在配置管理里，默认只给 admin，
+// 回收站(#617 第2步)：recycle.manage 只控这个入口是否出现在配置管理里，默认只给 admin，
 // 收窄"人人可见"的暴露面；后端还原逻辑不变(仍是 patient.view + 本人/admin 才能还原)，
-// 护士/前台/助理撤销自己删错的东西不受影响——产品决策明确只藏入口,不锁后端。
+// 护士/前台/助理撤销自己删错的东西不受影响——用户拍板明确只藏入口,不锁后端。
 function _cfgTabDefs() {
   const has = k => typeof hasPerm === "function" && hasPerm(k);
   const hasAny = (...keys) => keys.some(has);
@@ -16,22 +16,22 @@ function _cfgTabDefs() {
   const systemAdmin = window.__isSystemAdmin === true
     || (legacy && window.__userRole === "admin");
   const defs = [];
-  // 第3步:全店设置(诊所名/营业时间/诊室/会员开关集中编辑,复用既有 PUT 接口)
+  // #617第3步:全店设置(诊所名/营业时间/诊室/会员开关集中编辑,复用既有 PUT 接口)
   if (hasAny("clinic_settings.manage", "settings.manage")) defs.push({key: "shop", label: "全店设置"});
   // 人员档案、角色权限和账号管理统一收进一个外层入口；内部再按精确资格拆分，避免重复入口。
   const canAccessCenter = hasAny("staff.view", "staff.manage", "account.view", "account.open", "account.security", "user.manage")
     || systemAdmin || (legacy && has("role.manage"));
   if (canAccessCenter) defs.push({key: "access", label: "人员与权限"});
   if (hasAny("master_data.view", "master_data.manage")) defs.push({key: "charge-items", label: "收费项目"});
-  // 同步中心/影像资料运维是可选迁移扩展配套,后端没带扩展(/api/capabilities sync=false)不显示
+  // 开源壳阶段3:同步中心/影像资料运维是迁移层配套,后端没带迁移层(/api/capabilities sync=false)不显示
   const syncCap = !window.__capabilities || window.__capabilities.sync !== false;
   const canSync = systemAdmin || (legacy && has("sync.manage"));
   if (syncCap && canSync) defs.push({key: "sync", label: "同步中心"});
   if (syncCap && canSync) defs.push({key: "images", label: "影像资料"});
   if (has("audit.view")) defs.push({key: "audit", label: "操作历史"});
   if (hasAny("recycle.view", "recycle.manage")) defs.push({key: "recycle", label: "回收站"});
-  // 报表已移到顶层导航「数据报表」,不再放配置管理子tab
-  // 第4步:数据备份——后端 require_admin,前端同口径只对管理员显示入口
+  // #691:报表已移到顶层导航「数据报表」,不再放配置管理子tab
+  // #617第4步:数据备份——后端 require_admin,前端同口径只对管理员显示入口
   if (systemAdmin) defs.push({key: "backup", label: "数据备份"});
   return defs;
 }
@@ -42,14 +42,14 @@ function _accessCenterTabs() {
   const legacy = window.__accessV3 !== true;
   const systemAdmin = window.__isSystemAdmin === true
     || (legacy && window.__userRole === "admin");
-  let canStaff = false;
-  if (legacy) {
+  let canStaff = systemAdmin;
+  if (!systemAdmin && legacy) {
     canStaff = hasAny("staff.view", "staff.manage");
   } else {
     // V3 管理员的 hasPerm 会全通过，普通 v3 用户不能据此放大人员档案访问；
     // 但 is_system_admin 是设计内的超级用户（已可下载整库备份/授予任意权限，
     // 人员档案对其不构成额外边界）——且空库首启只有这一个账号，不放行会形成
-    // 「无人能进人员管理」死锁（2026-07-26 产品决策）。
+    // 「无人能进人员管理」死锁（2026-07-26 用户拍板）。
     const directPerms = window.__userPerms;
     const hasDirectStaff = directPerms && typeof directPerms.has === "function"
       && (directPerms.has("staff.view") || directPerms.has("staff.manage"));
@@ -185,6 +185,30 @@ async function renderAccessCenter() {
   await _loadAccessCenterTab();
 }
 
+async function openNewStaffFromConfig() {
+  const activeWorkspace = document.querySelector(".nav-item.active[data-workspace-view]");
+  if (activeWorkspace?.dataset.workspaceView !== "config") return false;
+  if (_cfgTab !== "access") return false;
+  if (typeof hasPerm !== "function" || !hasPerm("staff.edit")) return false;
+  if (!_accessCenterTabs().some(tab => tab.key === "staff")) return false;
+  const previousAccessCenterTab = _accessCenterTab;
+  if (previousAccessCenterTab === "roles" && !(await _requestLeaveRolePermissionsIfPresent())) return null;
+  try {
+    _accessCenterTab = "staff";
+    await renderAccessCenter();
+    if (typeof openNewStaffForm !== "function") return false;
+    return (await openNewStaffForm()) === true;
+  } catch {
+    _accessCenterTab = previousAccessCenterTab;
+    try {
+      await renderAccessCenter();
+    } catch {
+      // 原页回滚也失败时保持合同：不递归重试，入口仍返回 false。
+    }
+    return false;
+  }
+}
+
 async function _loadAccessCenterTab() {
   const inner = document.getElementById("accessCenterBody");
   if (!inner) return;
@@ -215,7 +239,7 @@ async function _loadAccessCenterTab() {
   }
 }
 
-// ===== 第3步 全店设置 =====
+// ===== #617第3步 全店设置 =====
 async function renderShopSettings(body) {
   body.innerHTML = `<div class="module-loading">载入中...</div>`;
   let clinic, appt, rooms, feats;
@@ -276,7 +300,7 @@ async function renderShopSettings(body) {
   });
 }
 
-// ===== 第4步 数据备份(仅管理员;后端 require_admin 是闸门) =====
+// ===== #617第4步 数据备份(仅管理员;后端 require_admin 是闸门) =====
 async function renderBackupTab(body) {
   body.innerHTML = `
     <section class="panel">
@@ -326,3 +350,4 @@ async function renderBackupTab(body) {
 }
 
 Object.assign(window, {loadConfigModule, requestLeaveConfigModule});
+window.openNewStaffFromConfig = openNewStaffFromConfig;

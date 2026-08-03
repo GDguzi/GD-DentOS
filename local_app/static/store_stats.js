@@ -1,10 +1,10 @@
-// 店内统计前端（对标行业通用口径「本店统计」）。挂在「配置管理 → 报表」tab 体系内，由 reports.js 分发。
+// 店内统计前端（对标 SaaS「本店统计」）。挂在「配置管理 → 报表」tab 体系内，由 reports.js 分发。
 // 医生/护士/助理/咨询师 收费统计共用本文件一套渲染，role 参数区分。
 
 const _rolePerfState = {};   // role -> {from, to, staff}
 const _ROLE_LABEL = {doctor: "处置医生", nurse: "护士", consultant: "咨询师", assistant: "助理"};
 
-// 默认查「当月到今天」(北京),避免默认只查今天看着空。走 localDateValue()(把北京 bjToday Date 格式化成 YYYY-MM-DD 字符串);bjToday() 返回 Date,勿直接 .slice。
+// 默认查「当月到今天」(北京),避免默认只查今天看着空。#541:走 localDateValue()(把北京 bjToday Date 格式化成 YYYY-MM-DD 字符串);bjToday() 返回 Date,勿直接 .slice。
 function _bjMonthStart() { return localDateValue().slice(0, 7) + "-01"; }
 
 function _rpState(role) {
@@ -85,7 +85,7 @@ async function fetchRolePerf(target, role) {
     </table></div>`;
 }
 
-// ===== 收入统计(对标行业通用口径：日×收款方式 + 应收款项/实际收款/新增欠款/补交欠款 + 期初/期末欠款) =====
+// ===== 收入统计(对标 SaaS：日×收款方式 + 应收款项/实际收款/新增欠款/补交欠款 + 期初/期末欠款) =====
 let _incStatFrom = "", _incStatTo = "";
 
 function loadIncomeStatTab(body) {
@@ -147,7 +147,7 @@ async function fetchIncomeStat(target) {
     </table></div>`;
 }
 
-// ===== 日结报表明细(对标行业通用口径：每条就诊一行 + 患者信息 + 账单财务) =====
+// ===== 日结报表明细(对标 SaaS：每条就诊一行 + 患者信息 + 账单财务) =====
 let _dsFrom = "", _dsTo = "";
 
 function loadDailySettlementTab(body) {
@@ -201,7 +201,7 @@ async function fetchDailySettlement(target) {
   target.innerHTML = head + `<div style="overflow-x:auto"><table class="data-table"><thead><tr>${th}</tr></thead><tbody>${trs}${totalRow}</tbody></table></div>`;
 }
 
-// ===== 门诊日志(对标行业通用口径：每条就诊一行，就诊管理性质) =====
+// ===== 门诊日志(对标 SaaS：每条就诊一行，就诊管理性质) =====
 let _clFrom = "", _clTo = "";
 
 function loadClinicLogTab(body) {
@@ -249,7 +249,7 @@ async function fetchClinicLog(target, params) {
   target.innerHTML = head + `<div style="overflow-x:auto"><table class="data-table"><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table></div>`;
 }
 
-// ===== 对账日历(对标行业通用口径：月历视图，每天 收/支/合) =====
+// ===== 对账日历(对标 SaaS：月历视图，每天 收/支/合) =====
 let _rcMonth = "";   // YYYY-MM，空=北京当月
 
 function loadReconcileCalendarTab(body) {
@@ -260,7 +260,7 @@ function loadReconcileCalendarTab(body) {
       <button type="button" class="plain-button" data-rc-next>下月 ▶</button>
       <span data-rc-summary style="margin-left:16px"></span>
     </div>
-    <div class="rpt-note">收=当日收款、支=当日退费、合=净额(产品决策：本地无支出记账，支即退费)。</div>
+    <div class="rpt-note">收=当日收款、支=当日退费、合=净额(用户拍板：本地无支出记账，支即退费)。</div>
     <div data-rc-grid><div class="module-loading">载入中...</div></div>`;
   const shift = (delta) => {
     const base = _rcMonth || _bjMonthStr();

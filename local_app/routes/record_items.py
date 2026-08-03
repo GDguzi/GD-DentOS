@@ -50,7 +50,7 @@ def create_record_items_router(db_path):
 
     @router.get("/api/medical-records/{record_id}/items")
     def list_record_items(record_id: str):
-        require_perm("medical_record.view")   # 病历牙位条目属病历,按 medical_record.view 守卫
+        require_perm("medical_record.view")   # #482：病历牙位条目属病历,按 medical_record.view 守卫
         with connect(db_path) as conn:
             require_record(conn, record_id)
             rows = conn.execute(
@@ -94,7 +94,7 @@ def create_record_items_router(db_path):
 
         now = now_str()
         with connect(db_path) as conn:
-            begin_immediate(conn)   # 抢写锁，防并发双保存交错致审计链断档+丢更新
+            begin_immediate(conn)   # #571：抢写锁，防并发双保存交错致审计链断档+丢更新
             record = require_record(conn, record_id)
             old_rows = conn.execute(
                 """
@@ -151,7 +151,7 @@ def create_record_items_router(db_path):
     @router.get("/api/patients/{patient_identity}/record-items")
     def patient_record_items(patient_identity: str):
         """患者正式病历摘要及牙位条目（病历列表展示卡一次取齐）。"""
-        require_perm("medical_record.view")   # 
+        require_perm("medical_record.view")   # #482
         with connect(db_path) as conn:
             if not conn.execute(
                 "select 1 from patients "
@@ -203,7 +203,7 @@ def create_record_items_router(db_path):
 
     @router.get("/api/patients/{patient_identity}/teeth/summary")
     def teeth_summary(patient_identity: str):
-        require_perm("medical_record.view")   # 
+        require_perm("medical_record.view")   # #482
         with connect(db_path) as conn:
             if not conn.execute(
                 "select 1 from patients where patient_identity = ?",
@@ -235,7 +235,7 @@ def create_record_items_router(db_path):
 
     @router.get("/api/patients/{patient_identity}/teeth/{tooth}/history")
     def tooth_history(patient_identity: str, tooth: str, item_type: str = ""):
-        require_perm("medical_record.view")   # 
+        require_perm("medical_record.view")   # #482
         item_type = (item_type or "").strip()
         if item_type and item_type not in _ITEM_TYPES:
             raise HTTPException(

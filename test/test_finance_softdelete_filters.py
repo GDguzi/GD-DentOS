@@ -18,7 +18,7 @@ def _client(tmpdir):
             "insert into patients(patient_identity, display_name, updated_at, current_hash) "
             "values ('p1', '测试患者', '2026-06-07 00:00:00', 'h1')"
         )
-        # 正常收款 100 + 作废原单 50（真实作废标记是 source_json.CancelMark，非 state）
+        # 正常收款 100 + 作废原单 50（#1 真实作废标记是 source_json.CancelMark，非 state）
         conn.execute(
             "insert into payments(payment_id, patient_identity, pay_time, amount, state) "
             f"values ('pay1', 'p1', '{TODAY} 10:00:00', 100, '0')"
@@ -69,7 +69,7 @@ class VoidedPaymentExcludedTest(unittest.TestCase):
             self.assertEqual(body["summary"]["today_cash_in"], 100)
 
     def test_malformed_source_json_does_not_crash(self):
-        # source_json 为空串/坏JSON 时,财务口径的 json_extract 不能抛 malformed JSON
+        # 动态扫#113：source_json 为空串/坏JSON 时,财务口径的 json_extract 不能抛 malformed JSON
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path, client = _client(tmpdir)
             with connect(db_path) as conn:
@@ -86,7 +86,7 @@ class VoidedPaymentExcludedTest(unittest.TestCase):
             self.assertEqual(client.get(f"/api/reports/income?date_from={TODAY}&date_to={TODAY}").json()["total_amount"], 200)
 
     def test_refund_negative_kept_as_offset(self):
-        # 退费负数(CancelMark但金额<0)保留作冲减,不被当作废原单剔除
+        # #1：退费负数(CancelMark但金额<0)保留作冲减,不被当作废原单剔除
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path, client = _client(tmpdir)
             with connect(db_path) as conn:

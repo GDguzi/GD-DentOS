@@ -32,7 +32,7 @@ create table if not exists patients (
     referral_source4 text not null default '',    -- 患者来源槽4(对齐官方4槽)
     introducer_type text not null default '',     -- 介绍人类型: 患者介绍/员工介绍
     introducer_name text not null default '',     -- 介绍人姓名(患者或员工)
-    chart_no text not null default '',            -- 病历号(同步=外部系统 patientid,本地建=YYMMDD+流水)
+    chart_no text not null default '',            -- 病历号(同步=SaaS patientid,本地建=YYMMDD+流水)
     name_pinyin text not null default '',         -- 拼音搜索
     avatar_path text not null default '',         -- 头像
     remark text not null default '',              -- 备注(本地建档/前台填写)
@@ -122,7 +122,7 @@ create table if not exists appointments (
     visit_type text not null default '',                  -- 分诊就诊类型: 初诊/复诊/新诊
     register_type text not null default '预约',           -- 登记方式: 预约 / 到店(walk-in)
     last_batch_id text default '',                        -- 同步冲突窗口(本地编辑判定)
-    suspect_cancelled integer not null default 0,         -- 7天窗口对账:外部系统已无→疑似取消(待核对)
+    suspect_cancelled integer not null default 0,         -- 7天窗口对账:SaaS已无→疑似取消(待核对)
     suspect_reason text not null default '',              -- 疑似取消的批次/原因
     schedule_remark text not null default '',             -- 预约备注(从 source_json 回填)
     source_json text not null default '{}',
@@ -203,7 +203,7 @@ create table if not exists payments (
     pay_time text,
     amount real not null default 0,
     state text not null default '',
-    pay_type text not null default '',            -- 支付方式: 现金/微信/支付宝/银行卡/云闪付/社保卡 (P1-12)
+    pay_type text not null default '',            -- 支付方式: 现金/微信/支付宝/银行卡/社保卡等，候选名单在设置里配 (P1-12)
     payment_record_type text not null default '', -- 收退类型: charge 收费 / refund 退费 (P1-12)
     operator text not null default '',            -- 收款员(收费框架B)
     invoice_no text not null default '',          -- 发票号(收费框架B)
@@ -213,7 +213,7 @@ create table if not exists payments (
     updated_at text
 );
 
--- 收退款幂等登记：前端每次收款/退费意图生成一次性 request_id,同号同载荷重放返回首次
+-- 收退款幂等登记(#800)：前端每次收款/退费意图生成一次性 request_id,同号同载荷重放返回首次
 -- 结果(不再落第二笔),同号异载荷 409。只记成功请求;校验失败不记,改参重试不受阻。
 create table if not exists payment_requests (
     request_id text primary key,                  -- 前端 crypto.randomUUID()
@@ -224,7 +224,7 @@ create table if not exists payment_requests (
     created_at text not null
 );
 
--- 账单/支付导入覆盖前的版本快照：本地收款/退费过的账单不被 导入回填静默覆盖。
+-- 账单/支付导入覆盖前的版本快照（改钱保护，#309）：本地收款/退费过的账单不被 SaaS 回填静默覆盖。
 create table if not exists bill_versions (
     version_id integer primary key autoincrement,
     bill_id text not null references bills(bill_id),
@@ -241,6 +241,33 @@ create table if not exists payment_versions (
     snapshot_json text not null,
     batch_id text references sync_batches(batch_id),
     changed_at text not null default current_timestamp
+);
+
+-- 双跑对账：每天 本地 vs SaaS 九维(预约/患者/账单/欠费/收款/退费/治疗项目/病历/影像)差异,差异≠0 报警。
+-- diff_json：每维度差异记录 id(missing_local/surplus_local) + 备注(如某维度不可对账)。
+create table if not exists reconcile_log (
+    recon_date text primary key,
+    local_appts integer not null default 0,
+    saas_appts integer not null default 0,
+    local_income real not null default 0,
+    saas_income real not null default 0,
+    local_patients integer not null default 0,
+    saas_patients integer not null default 0,
+    local_bills integer not null default 0,
+    saas_bills integer not null default 0,
+    local_arrears real not null default 0,
+    saas_arrears real not null default 0,
+    local_refunds real not null default 0,
+    saas_refunds real not null default 0,
+    local_items integer not null default 0,
+    saas_items integer not null default 0,
+    local_records integer not null default 0,
+    saas_records integer not null default 0,
+    local_images integer not null default 0,
+    saas_images integer not null default 0,
+    local_images_done integer not null default 0,
+    diff_json text not null default '{}',
+    run_at text
 );
 
 create table if not exists image_download_tasks (
@@ -319,7 +346,7 @@ create table if not exists treatment_items (
     fee_type text not null default '',
     is_deleted integer not null default 0,
     is_refund integer not null default 0,
-    refunded_fee real not null default 0,                 -- 累计已退金额:退满才标 is_refund,部分退不再永久锁死
+    refunded_fee real not null default 0,                 -- #573 累计已退金额:退满才标 is_refund,部分退不再永久锁死
     order_id text default '',                             -- 归属本地处置单(划价前无 bill_id)
     tooth_codes text default '',                           -- 处置牙位 FDI(从 t_billhandle 回填,哪颗牙做了哪个处置)
     source_json text not null default '{}',
@@ -389,7 +416,7 @@ create table if not exists medical_templates (
 create index if not exists idx_medical_templates_category
 on medical_templates(category, template_name);
 
--- M2 主数据：处置项目（价目字典，可从外部导入，无隐私字段）
+-- M2 主数据：处置项目（纯价目字典，无隐私字段）
 create table if not exists handle_items (
     handle_id text primary key,
     code text default '',
@@ -447,8 +474,8 @@ create table if not exists treatment_plans (
     treatment_goals text not null default '',   -- P2-28 治疗目标
     precautions text not null default '',       -- P2-28 注意事项
     is_deleted integer not null default 0,      -- 软删(删除按钮)
-    source_json text not null default '{}',      -- 外部导入:原始行,审计/回溯
-    last_batch_id text default '',               -- 外部导入:同步批次
+    source_json text not null default '{}',      -- SaaS 导入:原始行,审计/回溯
+    last_batch_id text default '',               -- SaaS 导入:同步批次
     created_at text,
     updated_at text
 );
@@ -589,7 +616,7 @@ on bills(patient_identity, bill_time);
 create index if not exists idx_payments_patient
 on payments(patient_identity, pay_time);
 
--- ①:按账单查退款流水(可退额度派生/退款/回填迁移)避免全表扫,大额历史付款库下必需
+-- #800/#813①:按账单查退款流水(可退额度派生/退款/回填迁移)避免全表扫,大额历史付款库下必需
 create index if not exists idx_payments_bill_type
 on payments(bill_id, payment_record_type);
 
@@ -790,7 +817,7 @@ on stock_take_item(stock_item_id);
 -- === 处置单（两步：新增处置 待划价 → 划价 待收费 → 收费 已收费 / 撤销） ===
 create table if not exists treatment_orders (
     order_id text primary key,
-    order_no text not null default '',         -- 本地处置单号 CZ+YYMMDD+当日流水(避开外部系统的B号)
+    order_no text not null default '',         -- 本地处置单号 CZ+YYMMDD+当日流水(避开SaaS的B号)
     visit_type text not null default '',       -- 就诊类型(初诊/复诊/新诊),开单时从当日预约带入
     reopened integer not null default 0,       -- 离开关闭后被「撤回」解锁过(覆盖离开锁定)
     patient_identity text not null,
@@ -829,7 +856,7 @@ create table if not exists staff_members (
 );
 create index if not exists idx_staff_members_role on staff_members(role, active);
 
--- === 知情同意书：模板 + 签署件。模板=诊所现行同意书正文；签署件=填充+手写签名+内容哈希(防篡改)+可信时间戳(TSA,二期) ===
+-- === 知情同意书 (#15)：模板 + 签署件。模板=诊所现行同意书正文；签署件=填充+手写签名+内容哈希(防篡改)+可信时间戳(TSA,二期) ===
 create table if not exists consent_templates (
     template_id text primary key,
     name text not null,                 -- 拔牙知情同意书
@@ -1005,7 +1032,7 @@ create table if not exists lab_order_images (
 );
 create index if not exists idx_lab_order_images_order on lab_order_images(lab_order_id);
 
--- === 会员储值（纯储值最小闭环：充值/消费扣减/退储值；本地业务，不回写 外部系统）===
+-- === 会员储值（纯储值最小闭环：充值/消费扣减/退储值；本地业务，不回写 SaaS）===
 create table if not exists member_accounts (
     patient_identity text primary key references patients(patient_identity),
     balance real not null default 0,        -- 当前储值余额(元)
@@ -1166,12 +1193,12 @@ create index if not exists idx_rv_images_rv on return_visit_images(return_visit_
 
 -- === CT/CBCT 云端检查档案 ===
 -- 片子本体在云端影像服务商的服务器,本地只存"某患者某天拍了 CT"的索引(DICOM UID 三件套)。
--- 阅片链接带时效 token 不可久存,查看时由迁移扩展现换。
+-- 阅片链接带时效 token 不可久存,查看时由同步扩展用登录态现换。
 create table if not exists patient_ct_studies (
     study_key text primary key,                  -- dataguid,缺失时退化为 studyuid:seriesuid:sopuid
     patient_identity text not null default '',
     modality text not null default '',           -- CT / CBCT
-    filetype text not null default '',           -- 导入原始 filetype(换链接时要原样传回)
+    filetype text not null default '',           -- SaaS 原始 filetype(换链接时要原样传回)
     studyuid text not null default '',
     seriesuid text not null default '',
     sopuid text not null default '',

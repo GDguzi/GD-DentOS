@@ -50,34 +50,34 @@ class PatientSourceTest(unittest.TestCase):
             self.assertEqual(c1, prefix + "001")
             self.assertEqual(c2, prefix + "002")     # 流水递增
 
-    def test_chart_no_continues_past_imported(self):
-        # 同步来的 外部患者当天已占 005 → 本地新建续到 006(不撞号)
+    def test_chart_no_continues_past_saas(self):
+        # 同步来的 SaaS 患者当天已占 005 → 本地新建续到 006(不撞号)
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             prefix = dt.date.today().strftime("%y%m%d")
             with connect(db) as c:
                 c.execute("insert into patients(patient_identity, display_name, chart_no, updated_at, current_hash) "
-                          "values ('imported-x','同步患者',?, '2026-01-01','h')", (prefix + "005",))
+                          "values ('saas-x','同步患者',?, '2026-01-01','h')", (prefix + "005",))
                 c.commit()
             p = _create(client, "本地新", "13800000003")
             with connect(db) as c:
                 cn = c.execute("select chart_no from patients where patient_identity=?", (p,)).fetchone()[0]
             self.assertEqual(cn, prefix + "006")
 
-    def test_chart_no_avoids_imported_chart_no(self):
-        # 同步患者的 外部系统 病历号在 source_json.patientid(非 chart_no 列)→本地新建也要避开
+    def test_chart_no_avoids_saas_patientid(self):
+        # 同步患者的 SaaS 病历号在 source_json.patientid(非 chart_no 列)→本地新建也要避开
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             prefix = dt.date.today().strftime("%y%m%d")
             with connect(db) as c:
                 c.execute("insert into patients(patient_identity, display_name, source_json, updated_at, current_hash) "
-                          "values ('imported-y','同步', ?, '2026-01-01','h')",
+                          "values ('saas-y','同步', ?, '2026-01-01','h')",
                           ('{"patientid": "%s007"}' % prefix,))
                 c.commit()
             p = _create(client, "本地", "13800000099")
             with connect(db) as c:
                 cn = c.execute("select chart_no from patients where patient_identity=?", (p,)).fetchone()[0]
-            self.assertEqual(cn, prefix + "008")   # 续在 外部系统 的 007 之后
+            self.assertEqual(cn, prefix + "008")   # 续在 SaaS 的 007 之后
 
     def test_chart_no_unique_index_blocks_dup(self):
         with tempfile.TemporaryDirectory() as tmp:

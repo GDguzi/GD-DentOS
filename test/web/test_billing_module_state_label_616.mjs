@@ -1,6 +1,6 @@
-// 收费管理列表状态列原来直接输出 row.state 英文码(pending/partial/...),实机显示
+// #616:收费管理列表状态列原来直接输出 row.state 英文码(pending/partial/...),实机显示
 // 与中文界面、患者收费 tab 口径不一致。改为复用 workspace_tabs.js 的 billStateLabel()。
-// 跑：node --test test/web/test_billing_module_state_label.mjs
+// 跑：node --test test/web/test_billing_module_state_label_616.mjs
 import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
@@ -46,7 +46,7 @@ test("英文码渲染成中文标签,不再裸露 state", () => {
   }
 });
 
-test("外部系统 数字码按金额派生(billStateLabel 既有口径)", () => {
+test("SaaS 数字码按金额派生(billStateLabel 既有口径)", () => {
   const html = render({bill_id: "b1", state: "100", total_fee: 100, paid_fee: 40, unpaid_fee: 60});
   assert.ok(html.includes("<span>部分收款</span>"), "数字码+部分付款应派生「部分收款」");
 });

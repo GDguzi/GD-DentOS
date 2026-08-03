@@ -29,7 +29,7 @@ def _login(c, u, p):
 
 class ReferralSourcesTest(unittest.TestCase):
     def test_read_open_but_write_admin_only_with_audit(self):
-        # 来源树是全店配置，读放开，增删改/上移下移仅 admin 且写审计
+        # #261：来源树是全店配置，读放开，增删改/上移下移仅 admin 且写审计
         with tempfile.TemporaryDirectory() as tmp:
             db = _setup(tmp)
             c = TestClient(create_app(db))
@@ -57,7 +57,7 @@ class ReferralSourcesTest(unittest.TestCase):
             self.assertGreaterEqual(n, 3)   # add / update / delete 各一条
 
     def test_move_admin_only_reorders_and_audits(self):
-        # 上移/下移也是全店配置变更，须 admin + 写审计
+        # #263：上移/下移也是全店配置变更，须 admin + 写审计
         with tempfile.TemporaryDirectory() as tmp:
             db = _setup(tmp)
             c = TestClient(create_app(db))

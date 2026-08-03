@@ -15,7 +15,7 @@ class PatientMergeTest(unittest.TestCase):
         db = Path(tmp) / "clinic.sqlite3"
         init_db(db)
         with connect(db) as conn:
-            # 合并需管理员；建管理员 boss + 前台 qt(qt 用于 403 用例)
+            # #123：合并需管理员；建管理员 boss + 前台 qt(qt 用于 403 用例)
             auth.create_user(conn, "boss", "院长", "admin123", role="admin")
             auth.create_user(conn, "qt", "前台", "pw123456", role="reception")
             # 主患者(无电话) + 次患者(同名,有电话) = 同一个人重复建档
@@ -36,7 +36,7 @@ class PatientMergeTest(unittest.TestCase):
         return db, client
 
     def test_merge_fill_writes_version_and_hash(self):
-        # 合并补全主患者字段要留 patient_versions 快照 + 更新 current_hash
+        # 审查#26：合并补全主患者字段要留 patient_versions 快照 + 更新 current_hash
         with tempfile.TemporaryDirectory() as tmp:
             db, client = self._client(tmp)
             r = client.post("/api/patients/keep/merge", json={"secondary": "dup", "reason": "重复建档"})
@@ -46,7 +46,7 @@ class PatientMergeTest(unittest.TestCase):
                 ch = conn.execute("select current_hash from patients where patient_identity='keep'").fetchone()[0]
             self.assertGreaterEqual(nver, 1)   # 补全留了版本快照
             self.assertTrue(ch and ch != "h1")  # current_hash 已更新(不再是初始 h1)
-            # current_hash 必须 == 写库后整行快照(否则版本链不自洽)
+            # 看板#191:current_hash 必须 == 写库后整行快照(否则版本链不自洽)
             from local_app.snapshots import patient_profile_snapshot
             from local_app.versioning import stable_hash
             with connect(db) as conn:
@@ -54,7 +54,7 @@ class PatientMergeTest(unittest.TestCase):
             self.assertEqual(ch, stable_hash(patient_profile_snapshot(row)))
 
     def test_non_admin_cannot_merge(self):
-        # 前台(reception)合并患者 → 403,数据不变
+        # #123：前台(reception)合并患者 → 403,数据不变
         with tempfile.TemporaryDirectory() as tmp:
             db, client = self._client(tmp, login="qt")
             r = client.post("/api/patients/keep/merge", json={"secondary": "dup", "reason": "x"})
@@ -131,7 +131,7 @@ class PatientMergeTest(unittest.TestCase):
                                   "次账户应被删除")
 
     def test_merge_records_balance_migration_txn(self):
-        # 回归主次都有账户合并后,必须有一笔流水(balance_after=合并后余额)解释当前余额,否则改钱审计断链
+        # 回归#221/#250:主次都有账户合并后,必须有一笔流水(balance_after=合并后余额)解释当前余额,否则改钱审计断链
         with tempfile.TemporaryDirectory() as tmp:
             db, client = self._client(tmp)
             self._seed_member(db, "keep", 50)
@@ -159,7 +159,7 @@ class PatientMergeTest(unittest.TestCase):
             self.assertEqual(client.post("/api/patients/keep/merge", json={"secondary": "dup", "reason": "x"}).status_code, 409)
 
     def test_merge_moves_client_communication_tables(self):
-        # 客户沟通三表(calls/communications/communication_images)必须随合并改指主患者,
+        # #725 客户沟通三表(calls/communications/communication_images)必须随合并改指主患者,
         # 否则合并重复档案后沟通记录/录音丢在旧身份下(患者资料归属错误)
         with tempfile.TemporaryDirectory() as tmp:
             db, client = self._client(tmp)
@@ -181,8 +181,8 @@ class PatientMergeTest(unittest.TestCase):
 
 
     def test_merge_moves_return_visit_images(self):
-        # 回访截图表(return_visit_images)带 patient_identity,必须随合并改指主患者,
-        # 否则次患者的回访截图合并后挂在旧身份下从 UI 消失(与 同类漏表)
+        # #733 回访截图表(return_visit_images)带 patient_identity,必须随合并改指主患者,
+        # 否则次患者的回访截图合并后挂在旧身份下从 UI 消失(与 #725 同类漏表)
         with tempfile.TemporaryDirectory() as tmp:
             db, client = self._client(tmp)
             with connect(db) as conn:
@@ -201,7 +201,7 @@ class PatientMergeTest(unittest.TestCase):
                     "select patient_identity from return_visit_images where image_id='rvi1'").fetchone()[0], "keep")
 
     def test_merge_moves_image_sets_and_survives_date_collision(self):
-        # 影像日期分组随合并搬家:两边同日期不撞主键,次患者独有日期补给主患者
+        # #765 影像日期分组随合并搬家:两边同日期不撞主键,次患者独有日期补给主患者
         with tempfile.TemporaryDirectory() as tmp:
             db, client = self._client(tmp)
             with connect(db) as conn:
@@ -222,7 +222,7 @@ class PatientMergeTest(unittest.TestCase):
                     "select count(*) from patient_image_sets where patient_identity='dup'").fetchone()[0], 0)
 
     def test_merge_moves_tags_and_dedups_by_name(self):
-        # 标签随合并搬家,同名标签去重(产品决策)
+        # #766 标签随合并搬家,同名标签去重(用户拍板)
         with tempfile.TemporaryDirectory() as tmp:
             db, client = self._client(tmp)
             with connect(db) as conn:
@@ -240,15 +240,15 @@ class PatientMergeTest(unittest.TestCase):
                     "select count(*) from patient_tags where patient_identity='dup'").fetchone()[0], 0)
 
     def test_merge_tables_cover_all_patient_identity_tables(self):
-        # 治本守卫:schema 里凡带 patient_identity 列的表,必须要么进 _MERGE_TABLES,
-        # 要么在下面的豁免清单里写明原因——新表忘登记合并清单直接红(已漏过两次)
+        # #733 治本守卫:schema 里凡带 patient_identity 列的表,必须要么进 _MERGE_TABLES,
+        # 要么在下面的豁免清单里写明原因——新表忘登记合并清单直接红(#725/#733 已漏过两次)
         import re
         from local_app.routes.patient_merge import _MERGE_TABLES
         exempt = {
             "patients",             # 患者本体,合并的主语不重指
             "member_accounts",      # patient_identity 是主键,盲改撞主键,循环外按余额特例合并
-            "patient_image_sets",   # 已修:主键(patient_identity,image_date)不能盲改,循环外特例合并(补缺+删次)
-            "patient_tags",         # 已修:循环外特例合并(重指+按name去重),不走盲改循环
+            "patient_image_sets",   # #765 已修:主键(patient_identity,image_date)不能盲改,循环外特例合并(补缺+删次)
+            "patient_tags",         # #766 已修:循环外特例合并(重指+按name去重),不走盲改循环
         }
         schema = (Path(__file__).resolve().parent.parent / "local_app" / "schema.sql").read_text()
         with_pid = set()

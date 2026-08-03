@@ -64,7 +64,7 @@ class AppSettingsTest(unittest.TestCase):
     def test_clinic_default_and_update(self):
         with tempfile.TemporaryDirectory() as tmp:
             client = self._client(tmp)
-            self.assertEqual(client.get("/api/settings/clinic").json()["name"], "GD · DentOS")   # 中性默认
+            self.assertEqual(client.get("/api/settings/clinic").json()["name"], "口腔门诊部")   # 中性默认(开源壳阶段1)
             r = client.put("/api/settings/clinic", json={"name": "测试口腔诊所"})
             self.assertEqual(r.status_code, 200)
             self.assertEqual(client.get("/api/settings/clinic").json()["name"], "测试口腔诊所")
@@ -86,7 +86,7 @@ class AppSettingsTest(unittest.TestCase):
 
 
     def test_non_admin_cannot_change_settings(self):
-        # 前台(reception)改诊室/诊所/营业时间 → 403
+        # 审计#4：前台(reception)改诊室/诊所/营业时间 → 403
         with tempfile.TemporaryDirectory() as tmp:
             client = self._client(tmp, login="qt")
             self.assertEqual(client.put("/api/settings/rooms", json={"list": ["x"]}).status_code, 403)

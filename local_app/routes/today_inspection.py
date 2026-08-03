@@ -205,7 +205,7 @@ def create_today_inspection_router(db_path):
             if pid not in bill_by_pid:
                 bill_by_pid[pid] = []
             bill_by_pid[pid].append(b)
-            # 金额一致性用净应收(总费用−优惠 DiscountFee),否则打折已结清单被误报金额异常/待收款
+            # #688:金额一致性用净应收(总费用−优惠 DiscountFee),否则打折已结清单被误报金额异常/待收款
             bill_amount[b["bill_id"]] = b["net_receivable"] or 0
 
         for pay in payments:

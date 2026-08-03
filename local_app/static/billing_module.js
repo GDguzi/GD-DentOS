@@ -76,9 +76,9 @@ async function loadIncomeTrendChart() {
     ? workDate.value : localDateValue();
   const endD = dateFromWorkValue(end);
   const startD = new Date(endD); startD.setDate(startD.getDate() - 13);
-  const start = localDateValue(startD);   // 不能用 toISOString(转UTC会差一天)
+  const start = localDateValue(startD);   // 不能用 toISOString(转UTC会差一天,#541)
   let d;
-  // 禁止兜底——接口非 2xx 不能当零数据画平线,明确显示载入失败
+  // #803:禁止兜底——接口非 2xx 不能当零数据画平线,明确显示载入失败
   try {
     const res = await fetch(`/api/reports/income?date_from=${start}&date_to=${end}`);
     if (!res.ok) { chart.setOption({title: {text: "收入趋势载入失败", left: "center", textStyle: {fontSize: 13, color: cssToken("--danger")}}, series: []}, true); return; }
@@ -90,7 +90,7 @@ async function loadIncomeTrendChart() {
   const values = [];
   for (let i = 0; i < 14; i++) {
     const day = new Date(startD); day.setDate(startD.getDate() + i);
-    const key = localDateValue(day);   // 不能用 toISOString(转UTC会差一天)
+    const key = localDateValue(day);   // 不能用 toISOString(转UTC会差一天,#541)
     dates.push(key.slice(5));            // MM-DD
     values.push(amountByDay[key] || 0);
   }
@@ -105,14 +105,14 @@ async function loadIncomeTrendChart() {
   });
 }
 
-// 配台统计：当天按医生/护士/咨询师/助理汇总配台处置单数/项数/金额(绩效)
+// #6 配台统计：当天按医生/护士/咨询师/助理汇总配台处置单数/项数/金额(绩效)
 async function loadStaffWorkload() {
   const box = modulePanel && modulePanel.querySelector("[data-staff-workload]");
   if (!box) return;
   const day = (typeof workDate !== "undefined" && workDate && workDate.value) ? workDate.value : "";
   const q = day ? `?date_from=${encodeURIComponent(day)}&date_to=${encodeURIComponent(day)}` : "";
   let d;
-  // 禁止兜底——接口失败不能清空当"暂无配台",明确显示载入失败
+  // #803:禁止兜底——接口失败不能清空当"暂无配台",明确显示载入失败
   try {
     const res = await fetch(`/api/reports/staff-workload${q}`);
     if (!res.ok) { box.innerHTML = `<div class="sw-head">配台统计</div><div class="sw-empty">配台统计载入失败</div>`; return; }
@@ -136,11 +136,11 @@ async function loadStaffWorkload() {
 async function loadTodayCollection() {
   const box = modulePanel && modulePanel.querySelector("[data-today-collection]");
   if (!box) return;
-  // 带上当前工作日期，与未结收费列表口径一致
+  // #39：带上当前工作日期，与未结收费列表口径一致
   const day = (typeof workDate !== "undefined" && workDate && workDate.value) ? workDate.value : "";
   const q = day ? `?date=${encodeURIComponent(day)}` : "";
   let d;
-  // 禁止兜底——接口失败不能把今日营收渲染成 0.00,明确显示载入失败;
+  // #803:禁止兜底——接口失败不能把今日营收渲染成 0.00,明确显示载入失败;
   // 同时清掉收款方式饼图,否则切换工作日期失败时旧日期饼图残留冒充当前
   const fail = () => {
     box.innerHTML = `<span class="tc-collected">今日营收载入失败</span>`;

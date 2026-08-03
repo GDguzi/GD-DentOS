@@ -1,9 +1,9 @@
-// 知情同意书 (c)：收费阶段 选模板→带入患者/费用/付款方式→手写签名(患者+医生)→签署入库→打印。
+// 知情同意书 (#15c)：收费阶段 选模板→带入患者/费用/付款方式→手写签名(患者+医生)→签署入库→打印。
 // 工作流：沟通完选完处置→同意书+费用一起出→确认签字→一起付。
 
 let consentCtx = null;
-let _consentSeq = 0;     // 每次打开的请求令牌，防快速切患者/账单时旧异步结果写错弹框
-let _consentPickSeq = 0; // 模板选择序号，防快速点A再点B时乱序覆盖成错模板
+let _consentSeq = 0;     // #62：每次打开的请求令牌，防快速切患者/账单时旧异步结果写错弹框
+let _consentPickSeq = 0; // #72：模板选择序号，防快速点A再点B时乱序覆盖成错模板
 let _consentQueue = [];  // 多类别处置待签队列(逐个自动排队签)
 let _consentQueueBase = null;
 
@@ -23,11 +23,11 @@ function advanceConsentQueue() {
 }
 const _signPads = {};   // canvasId → { drawn:bool }
 
-// 异步返回后确认还是同一次打开(同 patientId/billId)，否则丢弃，不写 UI/状态
+// #62：异步返回后确认还是同一次打开(同 patientId/billId)，否则丢弃，不写 UI/状态
 function consentStale(token) {
   return !consentCtx || consentCtx.token !== token;
 }
-// 只接受 canvas 的 data:image base64 作为 <img src>，否则返回空(防注入)
+// #63：只接受 canvas 的 data:image base64 作为 <img src>，否则返回空(防注入)
 function safeSign(s) {
   return (typeof s === "string" && /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(s)) ? s : "";
 }
@@ -65,7 +65,7 @@ const TREATMENT_CONSENT_RULES = [
   [["嵌体"], n => n.includes("嵌体")],
   [["贴面"], n => n.includes("贴面")],
   [["预成冠"], n => n.includes("预成冠")],
-  // 冠/桥族：收敛到唯一模板——全瓷处置→全瓷模板;桥/冠桥→桥模板;烤瓷/普通冠→烤瓷冠模板;
+  // 冠/桥族(#242)：收敛到唯一模板——全瓷处置→全瓷模板;桥/冠桥→桥模板;烤瓷/普通冠→烤瓷冠模板;
   // 库里没对应专属(如只有合并的"烤瓷冠、桥修复")→取冠桥族第一份兜底,绝不外溢到整类修复。第3元素=收敛器。
   [["烤瓷", "桥", "全瓷", "冠"], null, (n, templates) => {
     const fam = (templates || []).filter(t => /烤瓷|全瓷|冠|桥/.test(t.name) && !t.name.includes("预成"));
@@ -117,11 +117,11 @@ async function openConsentForm(patientId, billId, feeTotal, preferCategory, item
                 templates: [], bill: null, lastSaved: null, token};
   const m = document.getElementById("consentModal");
   if (!m) return;
-  // 有账单则拉账单明细(账单号+处置项目/数量/金额)，带入同意书正文/快照/打印
+  // #61：有账单则拉账单明细(账单号+处置项目/数量/金额)，带入同意书正文/快照/打印
   if (consentCtx.billId) {
     try {
       const b = await (await fetch(`/api/bills/${encodeURIComponent(consentCtx.billId)}`)).json();
-      if (consentStale(token)) return;   // 已被新的打开取代
+      if (consentStale(token)) return;   // #62 已被新的打开取代
       if (b && b.bill_id) { consentCtx.bill = b; if (consentCtx.feeTotal == null) consentCtx.feeTotal = b.total_fee; }
     } catch { if (consentStale(token)) return; }
   }
@@ -129,7 +129,7 @@ async function openConsentForm(patientId, billId, feeTotal, preferCategory, item
   let data;
   try { data = await (await fetch("/api/consent-templates")).json(); }
   catch { data = {templates: []}; }
-  if (consentStale(token)) return;   // 
+  if (consentStale(token)) return;   // #62
   consentCtx.templates = data.templates || [];
   const btn = document.getElementById("consentPickBtn");
   if (btn) btn.textContent = "📋 选择同意书";
@@ -300,7 +300,7 @@ async function loadSignedConsents() {
   let docs = [];
   try { docs = (await (await fetch(`/api/patients/${encodeURIComponent(consentCtx.patientId)}/consent-documents`)).json()).documents || []; }
   catch { if (!consentStale(token)) box.innerHTML = ""; return; }
-  if (consentStale(token)) return;   // 切了患者，丢弃旧结果
+  if (consentStale(token)) return;   // #62 切了患者，丢弃旧结果
   if (!docs.length) { box.innerHTML = ""; return; }
   box.innerHTML = `<div class="cs-signed-head">已签同意书 ${docs.length} 份</div>` +
     docs.map(d => {
@@ -367,7 +367,7 @@ function openConsentPicker() {
   if (!picker || !consentCtx) return;
   if (!picker.hidden) { picker.hidden = true; return; }   // 再点收起
   const tpls = consentCtx.templates || [];
-  if (!tpls.length) {   // 无模板时给空态,别弹个空选择器让人以为坏了
+  if (!tpls.length) {   // 扫荡#395:无模板时给空态,别弹个空选择器让人以为坏了
     picker.innerHTML = '<div class="cp-empty">暂无同意书模板，请先到「配置管理 / 同意书模板」维护后再选</div>';
     picker.hidden = false;
     return;
@@ -381,7 +381,7 @@ function openConsentPicker() {
   picker.hidden = false;
 }
 
-// 数据走 data-*，不把名字/ID 拼进内联JS(防引号断字/注入)。选择序号防乱序覆盖。
+// #71：数据走 data-*，不把名字/ID 拼进内联JS(防引号断字/注入)。#72：选择序号防乱序覆盖。
 async function pickConsentTemplate(el) {
   if (!consentCtx || !el) return;
   const tid = el.dataset.tid || "";
@@ -395,14 +395,14 @@ async function pickConsentTemplate(el) {
   let d;
   try { d = await (await fetch(`/api/consent-templates/${encodeURIComponent(tid)}`)).json(); }
   catch { return; }
-  if (consentStale(token) || pickSeq !== _consentPickSeq) return;   // 切患者 / 非最后一次选择 → 丢弃
+  if (consentStale(token) || pickSeq !== _consentPickSeq) return;   // #62切患者 / #72非最后一次选择 → 丢弃
   consentCtx.currentBody = d.body || "";
   consentCtx.currentName = d.name || "";
   consentCtx.currentTemplateId = d.template_id || "";
   renderConsentText();
 }
 
-// 本次费用明细(账单号 + 处置项目/数量/金额 + 合计)。bill 为账单详情对象。
+// #61：本次费用明细(账单号 + 处置项目/数量/金额 + 合计)。bill 为账单详情对象。
 // 分期收费空白栏：打印出来留空，前台手填(本次收/余款/下次收款日期)
 const CONSENT_INSTALLMENT = '<div class="ct-installment">分期收费（如需·手填）：本次实收 ＿＿＿＿＿　余款 ＿＿＿＿＿　下次收款日期 ＿＿＿＿＿　金额 ＿＿＿＿＿</div>';
 
@@ -579,7 +579,7 @@ async function submitConsent() {
   if (!patientSign) { if (st) st.textContent = "请让患者手写签名"; return; }
   const doctorSign = signDataUrl("consentDoctorSign");
   if (!doctorSign) { if (st) st.textContent = "请医生手写签名（医疗同意书需医患双方签名）"; return; }
-  // 快照本次打开的 token/patientId，提交跨 await，返回后校验仍是同一次打开再落状态
+  // #64：快照本次打开的 token/patientId，提交跨 await，返回后校验仍是同一次打开再落状态
   const token = consentCtx.token;
   const patientId = consentCtx.patientId;
   const box = document.getElementById("consentText");
@@ -603,10 +603,10 @@ async function submitConsent() {
       res = await fetch(`/api/patients/${encodeURIComponent(patientId)}/consent-documents`, {
         method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload)});
     } catch { if (!consentStale(token)) { const s2 = document.getElementById("consentStatus"); if (s2) s2.textContent = "签署失败（网络异常）"; } return; }
-    if (consentStale(token)) return;   // 已切到别的患者/账单，丢弃这次结果，不写当前弹框
-    if (!res.ok) { const m = await res.json().catch(() => ({})); if (consentStale(token)) return; if (st) st.textContent = "签署失败：" + (m.detail || res.status); return; }   // 解析错误body又一异步点，写状态前再校验
+    if (consentStale(token)) return;   // #64 已切到别的患者/账单，丢弃这次结果，不写当前弹框
+    if (!res.ok) { const m = await res.json().catch(() => ({})); if (consentStale(token)) return; if (st) st.textContent = "签署失败：" + (m.detail || res.status); return; }   // #65 解析错误body又一异步点，写状态前再校验
     const body = await res.json();
-    if (consentStale(token)) return;   // 二次校验(await json 又一次异步)
+    if (consentStale(token)) return;   // #64 二次校验(await json 又一次异步)
     consentCtx.lastSaved = {...payload, content_hash: body.content_hash, signed_at: body.signed_at};
     if (st) st.textContent = "已签署保存（哈希 " + String(body.content_hash || "").slice(0, 12) + "…）";
     // 签完即清两块签名板：避免再点「签署并保存」把同一份重复存一份

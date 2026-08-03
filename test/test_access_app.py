@@ -270,34 +270,22 @@ class AccessV3AppTest(unittest.TestCase):
         self.assertIn('id="loginForm"', client.get("/").text)
         self.assertEqual(client.get("/api/auth/me").status_code, 401)
 
-    def test_handle_item_management_requires_real_system_admin_login(self):
+    def test_handle_item_management_requires_master_data_manage(self):
+        """收费项目管理归 master_data.manage：有权即可全流程，撤权后路由策略先拦、不进 handler。"""
         conn = sqlite3.connect(self.db_path)
         try:
             conn.execute(
                 "insert into role_permissions(role_key, perm_key) values (?, ?)",
                 ("front_desk", "master_data.manage"),
             )
-            conn.executemany(
+            conn.execute(
                 "insert into handle_items"
                 "(handle_id, code, name, unit, price, fee_type, stopped) "
-                "values (?, ?, ?, '次', 100, '治疗费', ?)",
-                (
-                    ("synthetic-active", "ACTIVE-100", "合成在用项目", 0),
-                    ("synthetic-stopped", "STOPPED-100", "合成停用项目", 1),
-                ),
+                "values ('synthetic-active', 'ACTIVE-100', '合成在用项目', '次', 100, '治疗费', 0)"
             )
             conn.commit()
         finally:
             conn.close()
-
-        ordinary = TestClient(self.app, raise_server_exceptions=False)
-        login = ordinary.post(
-            "/api/auth/login",
-            json={"username": USERNAME, "password": PASSWORD},
-        )
-        self.assertEqual(login.status_code, 200, login.text)
-        self.assertFalse(ordinary.get("/api/auth/me").json()["user"]["is_system_admin"])
-        self.assertEqual(ordinary.get("/api/handle-items").status_code, 200)
 
         valid_item = {
             "name": "合成收费项目",
@@ -306,60 +294,32 @@ class AccessV3AppTest(unittest.TestCase):
             "price": "200.00",
             "fee_type": "治疗费",
         }
-        with mock.patch(
-            "local_app.routes.master_data.require_system_admin",
-            side_effect=AssertionError("route policy must reject before handler"),
-        ) as handler_guard:
-            denied = (
-                ordinary.get("/api/handle-items/manage"),
-                ordinary.post("/api/handle-items", json=valid_item),
-                ordinary.put(
-                    "/api/handle-items/synthetic-active", json=valid_item
-                ),
-                ordinary.delete("/api/handle-items/synthetic-active"),
-                ordinary.post("/api/handle-items/synthetic-stopped/restore"),
-            )
-        for response in denied:
-            with self.subTest(response=response):
-                self.assertEqual(response.status_code, 403, response.text)
-                self.assertEqual(response.json(), {"detail": "access_denied"})
-        handler_guard.assert_not_called()
 
-        conn = sqlite3.connect(self.db_path)
-        try:
-            conn.execute(
-                "update users set is_system_admin = 1 where id = 'user-desk'"
-            )
-            conn.commit()
-        finally:
-            conn.close()
-
-        admin = TestClient(create_app(self.db_path, access_v3=True))
-        login = admin.post(
+        # 有 master_data.manage 的普通账号(非系统管理员)可走完管理全流程
+        manager = TestClient(create_app(self.db_path, access_v3=True))
+        login = manager.post(
             "/api/auth/login",
             json={"username": USERNAME, "password": PASSWORD},
         )
         self.assertEqual(login.status_code, 200, login.text)
-        self.assertTrue(admin.get("/api/auth/me").json()["user"]["is_system_admin"])
+        self.assertFalse(manager.get("/api/auth/me").json()["user"]["is_system_admin"])
 
-        created = admin.post("/api/handle-items", json=valid_item)
+        created = manager.post("/api/handle-items", json=valid_item)
         self.assertEqual(created.status_code, 200, created.text)
         handle_id = created.json()["handle_id"]
 
-        managed = admin.get("/api/handle-items/manage")
+        managed = manager.get("/api/handle-items/manage")
         self.assertEqual(managed.status_code, 200, managed.text)
         self.assertIn(handle_id, {item["handle_id"] for item in managed.json()["items"]})
 
-        updated_item = {
-            **valid_item,
-            "name": "合成收费项目（已修改）",
-            "price": "268.00",
-        }
-        updated = admin.put(f"/api/handle-items/{handle_id}", json=updated_item)
+        updated = manager.put(
+            f"/api/handle-items/{handle_id}",
+            json={**valid_item, "name": "合成收费项目（已修改）", "price": "268.00"},
+        )
         self.assertEqual(updated.status_code, 200, updated.text)
-        stopped = admin.delete(f"/api/handle-items/{handle_id}")
+        stopped = manager.delete(f"/api/handle-items/{handle_id}")
         self.assertEqual(stopped.status_code, 200, stopped.text)
-        restored = admin.post(f"/api/handle-items/{handle_id}/restore")
+        restored = manager.post(f"/api/handle-items/{handle_id}/restore")
         self.assertEqual(restored.status_code, 200, restored.text)
 
         conn = sqlite3.connect(self.db_path)
@@ -381,6 +341,44 @@ class AccessV3AppTest(unittest.TestCase):
                 ("restore_handle_item", USERNAME, "user-desk"),
             ],
         )
+
+        # 撤掉 master_data.manage：五个端点全 403,且路由策略先拦下,handler 守卫不得被调用
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.execute(
+                "delete from role_permissions where role_key = ? and perm_key = ?",
+                ("front_desk", "master_data.manage"),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        revoked = TestClient(
+            create_app(self.db_path, access_v3=True), raise_server_exceptions=False
+        )
+        login = revoked.post(
+            "/api/auth/login",
+            json={"username": USERNAME, "password": PASSWORD},
+        )
+        self.assertEqual(login.status_code, 200, login.text)
+        self.assertEqual(revoked.get("/api/handle-items").status_code, 200)
+
+        with mock.patch(
+            "local_app.routes.master_data.require_perm",
+            side_effect=AssertionError("route policy must reject before handler"),
+        ) as handler_guard:
+            denied = (
+                revoked.get("/api/handle-items/manage"),
+                revoked.post("/api/handle-items", json=valid_item),
+                revoked.put("/api/handle-items/synthetic-active", json=valid_item),
+                revoked.delete("/api/handle-items/synthetic-active"),
+                revoked.post(f"/api/handle-items/{handle_id}/restore"),
+            )
+        for response in denied:
+            with self.subTest(response=response):
+                self.assertEqual(response.status_code, 403, response.text)
+                self.assertEqual(response.json(), {"detail": "access_denied"})
+        handler_guard.assert_not_called()
 
     def test_system_admin_me_exposes_exact_role_permissions(self):
         conn = sqlite3.connect(self.db_path)

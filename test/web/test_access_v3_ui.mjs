@@ -32,7 +32,7 @@ const initAuth = appSrc.slice(
 const authStartupSrc = appSrc.slice(appSrc.indexOf("initAuthUI().then("));
 const permissionVisibility = appSrc.slice(
   appSrc.indexOf("function applyPermVisibility"),
-  appSrc.indexOf("function syncDialogHidden", appSrc.indexOf("function applyPermVisibility")),
+  appSrc.indexOf("// #488", appSrc.indexOf("function applyPermVisibility")),
 );
 const workspaceNavigationSrc = appSrc.slice(
   appSrc.indexOf("let activeModuleView"),
@@ -421,7 +421,7 @@ test("V3 system admin 前端全权限，primary_role 正确显示", async () => 
   assert.strictEqual(elements.acctMgrBtn.hidden, false);
 });
 
-test("V3 system admin 保留后端直接 staff entitlement，同时继续全权限", async () => {
+test("V3 system admin 始终拥有 staff 内页，同时保留后端直接 entitlement", async () => {
   const accessCenterTabsSrc = configSrc.slice(
     configSrc.indexOf("function _accessCenterTabs"),
     configSrc.indexOf("function _canAccessAccountsFromConfig"),
@@ -875,6 +875,7 @@ function configUiSandbox({
   const keydownListeners = new Set();
   const calls = {
     staff: 0,
+    newStaffForm: 0,
     roles: 0,
     staffRequests: 0,
     roleRequests: 0,
@@ -927,6 +928,12 @@ function configUiSandbox({
   sandbox = {
     document: {
       getElementById: id => elements[id] || null,
+      querySelector(selector) {
+        if (selector === ".nav-item.active[data-workspace-view]") {
+          return navButtons.find(button => button.classList.contains("active")) || null;
+        }
+        return null;
+      },
       querySelectorAll: selector => (
         selector === ".rp-table input[type=checkbox][data-role]"
           ? roleCheckboxes
@@ -954,6 +961,10 @@ function configUiSandbox({
     renderStaffInto: async () => {
       calls.staff += 1;
       await sandbox.fetch("/api/staff-admin/list");
+    },
+    openNewStaffForm: () => {
+      calls.newStaffForm += 1;
+      return true;
     },
     renderRolePermsInto: async () => { calls.roles += 1; },
     fetch: async url => {
@@ -1047,6 +1058,18 @@ async function flushConfigRender() {
 
 function buttonFor(container, datasetKey, value) {
   return container.buttons.find(button => button.dataset[datasetKey] === value);
+}
+
+function assertRolesAccessCenter(target) {
+  const roleButton = buttonFor(target.elements.cfgBody, "accessCenterTab", "roles");
+  const staffButton = buttonFor(target.elements.cfgBody, "accessCenterTab", "staff");
+  assert.ok(roleButton, "roles button should exist");
+  assert.ok(staffButton, "staff button should exist");
+  assert.ok(roleButton.classList.contains("active"), "roles button should be active");
+  assert.ok(!staffButton.classList.contains("active"), "staff button should be inactive");
+  assert.match(target.elements.accessCenterBody.innerHTML, /<span>角色与权限<\/span>/);
+  assert.doesNotMatch(target.elements.accessCenterBody.innerHTML, /<span>人员<\/span>/);
+  return {roleButton, staffButton};
 }
 
 test("V3 普通用户按新配置权限显示，角色/同步/备份不向普通用户开放", () => {
@@ -1181,11 +1204,173 @@ test("系统管理员无直接 staff 授权仍见人员页且保留账号管理�
     perms: new Set(),
     systemAdmin: true,
   });
-  sandbox.__setConfigState("access", "staff");
+  assert.deepStrictEqual(
+    {...sandbox.__getConfigState()},
+    {cfgTab: "access", accessCenterTab: "staff"},
+  );
   await sandbox.__renderAccessCenter();
   assert.deepStrictEqual(Array.from(sandbox.__accessCenterTabs(), tab => tab.key), ["staff", "roles"]);
   assert.match(elements.accessCenterBody.innerHTML, /openAccountManager\(\)/);
   assert.strictEqual(calls.staff, 1);
+});
+
+test("系统管理员从账号入口切到人员页并打开现有新建表单", async () => {
+  const {sandbox, calls} = configUiSandbox({
+    perms: new Set(),
+    systemAdmin: true,
+  });
+  sandbox.__setConfigState("access", "roles");
+
+  const result = await sandbox.openNewStaffFromConfig();
+
+  assert.strictEqual(result, true);
+  assert.deepStrictEqual(
+    {...sandbox.__getConfigState()},
+    {cfgTab: "access", accessCenterTab: "staff"},
+  );
+  assert.strictEqual(calls.staff, 1);
+  assert.strictEqual(calls.staffRequests, 1);
+  assert.strictEqual(calls.newStaffForm, 1);
+});
+
+test("系统管理员取消离开角色权限时不切人员页也不打开新建表单", async () => {
+  const {sandbox, calls} = configUiSandbox({
+    perms: new Set(),
+    systemAdmin: true,
+    includeRolePermissions: false,
+    leaveRolePermissions: async () => false,
+  });
+  sandbox.__setConfigState("access", "roles");
+
+  const result = await sandbox.openNewStaffFromConfig();
+
+  assert.strictEqual(result, null);
+  assert.deepStrictEqual(
+    {...sandbox.__getConfigState()},
+    {cfgTab: "access", accessCenterTab: "roles"},
+  );
+  assert.strictEqual(calls.staff, 0);
+  assert.strictEqual(calls.staffRequests, 0);
+  assert.strictEqual(calls.newStaffForm, 0);
+});
+
+test("无 staff.edit 的普通用户不能程序化打开新建人员表单", async () => {
+  let guardCalls = 0;
+  const {sandbox, elements, calls} = configUiSandbox({
+    perms: new Set(["staff.view"]),
+    systemAdmin: false,
+    includeRolePermissions: false,
+    leaveRolePermissions: async () => {
+      guardCalls += 1;
+      return true;
+    },
+  });
+  sandbox.__setConfigState("access", "roles");
+  const beforeState = {...sandbox.__getConfigState()};
+  const beforeHtml = elements.accessCenterBody.innerHTML;
+
+  const result = await sandbox.openNewStaffFromConfig();
+
+  assert.strictEqual(result, false);
+  assert.deepStrictEqual({...sandbox.__getConfigState()}, beforeState);
+  assert.strictEqual(calls.staff, 0);
+  assert.strictEqual(calls.staffRequests, 0);
+  assert.strictEqual(calls.newStaffForm, 0);
+  assert.strictEqual(guardCalls, 0);
+  assert.strictEqual(elements.accessCenterBody.innerHTML, beforeHtml);
+});
+
+test("离开配置工作区后账号入口不能使用持久化配置状态打开新增人员", async () => {
+  let guardCalls = 0;
+  const target = configUiSandbox({
+    perms: new Set(),
+    systemAdmin: true,
+    includeRolePermissions: false,
+    leaveRolePermissions: async () => {
+      guardCalls += 1;
+      return true;
+    },
+  });
+  target.sandbox.__setConfigState("access", "roles");
+  for (const button of target.navButtons) {
+    button.classList.toggle("active", button.dataset.workspaceView === "today");
+  }
+  const beforeState = {...target.sandbox.__getConfigState()};
+  const beforeHtml = target.elements.accessCenterBody.innerHTML;
+
+  const result = await target.sandbox.openNewStaffFromConfig();
+
+  assert.strictEqual(result, false);
+  assert.deepStrictEqual({...target.sandbox.__getConfigState()}, beforeState);
+  assert.strictEqual(target.calls.staff, 0);
+  assert.strictEqual(target.calls.staffRequests, 0);
+  assert.strictEqual(target.calls.newStaffForm, 0);
+  assert.strictEqual(guardCalls, 0);
+  assert.strictEqual(target.elements.accessCenterBody.innerHTML, beforeHtml);
+});
+
+test("人员组件渲染抛错时新增人员入口返回 false 并恢复内页状态", async () => {
+  const target = configUiSandbox({
+    perms: new Set(),
+    systemAdmin: true,
+    includeRolePermissions: false,
+    leaveRolePermissions: async () => true,
+  });
+  target.sandbox.__setConfigState("access", "roles");
+  await target.sandbox.__renderAccessCenter();
+  assertRolesAccessCenter(target);
+  target.sandbox.renderStaffInto = async () => {
+    target.calls.staff += 1;
+    throw new Error("staff render failed");
+  };
+
+  const result = await target.sandbox.openNewStaffFromConfig();
+
+  assert.strictEqual(result, false);
+  assert.deepStrictEqual(
+    {...target.sandbox.__getConfigState()},
+    {cfgTab: "access", accessCenterTab: "roles"},
+  );
+  const {roleButton} = assertRolesAccessCenter(target);
+  assert.strictEqual(target.calls.staff, 1);
+  assert.strictEqual(target.calls.staffRequests, 0);
+  assert.strictEqual(target.calls.newStaffForm, 0);
+  assert.strictEqual(target.calls.roles, 2);
+
+  await roleButton.click();
+  assertRolesAccessCenter(target);
+});
+
+test("新增人员表单抛错时入口返回 false 并恢复内页状态", async () => {
+  const target = configUiSandbox({
+    perms: new Set(),
+    systemAdmin: true,
+    includeRolePermissions: false,
+    leaveRolePermissions: async () => true,
+  });
+  target.sandbox.__setConfigState("access", "roles");
+  await target.sandbox.__renderAccessCenter();
+  assertRolesAccessCenter(target);
+  target.sandbox.openNewStaffForm = () => {
+    target.calls.newStaffForm += 1;
+    throw new Error("new staff form failed");
+  };
+
+  const result = await target.sandbox.openNewStaffFromConfig();
+
+  assert.strictEqual(result, false);
+  assert.deepStrictEqual(
+    {...target.sandbox.__getConfigState()},
+    {cfgTab: "access", accessCenterTab: "roles"},
+  );
+  const {roleButton} = assertRolesAccessCenter(target);
+  assert.strictEqual(target.calls.staff, 1);
+  assert.strictEqual(target.calls.staffRequests, 1);
+  assert.strictEqual(target.calls.newStaffForm, 1);
+  assert.strictEqual(target.calls.roles, 2);
+
+  await roleButton.click();
+  assertRolesAccessCenter(target);
 });
 
 test("真实角色权限守卫取消时保留外层、内层和 DOM，确认后恢复基线再离开", async () => {
@@ -2034,8 +2219,8 @@ test("配置中心缓存串锁定人员与权限合并版本", () => {
   assert.match(indexSrc, /\/config_center\.js\?v=2026-07-19-access-tree/);
   assert.match(indexSrc, /\/role_permissions\.js\?v=2026-07-19-access-tree/);
   assert.match(indexSrc, /\/workspace_tabs\.js\?v=2026-07-17-workspace-leave-guard/);
-  assert.match(indexSrc, /\/patient_workspace\.js\?v=2026-07-26-rail-revisit-btn/);
-  assert.match(indexSrc, /\/app\.js\?v=2026-07-17-workspace-leave-guard/);
+  assert.match(indexSrc, /\/patient_workspace\.js\?v=2026-08-02-quick-checkin-1/);
+  assert.match(indexSrc, /\/app\.js\?v=2026-08-02-quick-checkin-1/);
 });
 
 test("付款方式齿轮统一使用新旧兼容能力判断", () => {

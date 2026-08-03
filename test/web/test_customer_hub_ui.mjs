@@ -32,7 +32,7 @@ test("今日总览接聚合接口且权限缺块不伪造假零", () => {
   assert.ok(!hub.includes("data.return_visits || {"), "不得用假零兜底");
 });
 
-test("今日总览显式带当前工作日期(与今日工作台同一真相源)", () => {
+test("#729 今日总览显式带当前工作日期(与今日工作台同一真相源)", () => {
   assert.match(hub, /workDate && workDate\.value/, "应读共享 workDate.value 作为日期");
   assert.match(hub, /\/api\/customer-hub\/today\?date=\$\{_chvEncodeComponent\(day\)\}/,
     "fetch URL 应带 date=当前工作日期");

@@ -63,7 +63,7 @@ class BackupRetentionTest(unittest.TestCase):
             self.assertTrue(other.exists(), "非备份命名的文件不动")
 
     def test_backup_route_name_re_accepts_suffix(self):
-        # 同步前备份同秒会生成 _1.db,备份接口的 _NAME_RE 必须认它,否则列不出/下不了
+        # #426:同步前备份同秒会生成 _1.db,备份接口的 _NAME_RE 必须认它,否则列不出/下不了
         from local_app.routes.backup import _NAME_RE
         self.assertTrue(_NAME_RE.match("backup_20260629_120000.db"))
         self.assertTrue(_NAME_RE.match("backup_20260629_120000_1.db"), "同秒 _1 后缀也要认")
@@ -82,7 +82,7 @@ class BackupRetentionTest(unittest.TestCase):
 
 class ManualSnapshotPruneTest(unittest.TestCase):
     """手工快照(改动前"先存一份")清理:只留最近 keep 份,更旧的拷 NAS 再删本地。
-    -对抗复审确认的三个必修 + 一个建议,均已补探针锁住："""
+    #736-#739 对抗复审确认的三个必修 + 一个建议,均已补探针锁住："""
 
     def _setup(self, tmp):
         db = Path(tmp) / "clinic.sqlite3"
@@ -94,7 +94,7 @@ class ManualSnapshotPruneTest(unittest.TestCase):
 
     def _mounted(self):
         # 单测沙箱里的临时目录不是真挂载点,os.path.ismount 天然为 False;
-        # "已挂载" 场景必须显式打桩模拟,不能靠目录存在冒充(的病根)。
+        # "已挂载" 场景必须显式打桩模拟,不能靠目录存在冒充(#736 的病根)。
         return mock.patch("local_app.backup_util.os.path.ismount", return_value=True)
 
     def test_keeps_newest_moves_rest_to_nas(self):
@@ -134,7 +134,7 @@ class ManualSnapshotPruneTest(unittest.TestCase):
             self.assertTrue((bk / "clinic_before_repair_new.sqlite3").exists())
 
     def test_no_nas_mounted_skips_deletion(self):
-        # 目录"存在"不等于"已挂载"——不打桩,tmp 目录天然不是真挂载点。
+        # #736:目录"存在"不等于"已挂载"——不打桩,tmp 目录天然不是真挂载点。
         with tempfile.TemporaryDirectory() as tmp:
             db, bk, nas_dir = self._setup(tmp)
             f = _mk(db.parent, "clinic.backup_before_old.sqlite3", age_days=99)
@@ -160,7 +160,7 @@ class ManualSnapshotPruneTest(unittest.TestCase):
             self.assertEqual(result, {"moved": 0, "skipped_no_nas": 0, "skipped_conflict": 0, "failed": 0})
 
     def test_symlink_candidate_excluded(self):
-        # 候选是软链接——绝不跟随复制链接指向的任意内容,也不当成待清理项处理。
+        # #738:候选是软链接——绝不跟随复制链接指向的任意内容,也不当成待清理项处理。
         with tempfile.TemporaryDirectory() as tmp:
             db, bk, nas_dir = self._setup(tmp)
             target = Path(tmp) / "secret_elsewhere.bin"
@@ -175,7 +175,7 @@ class ManualSnapshotPruneTest(unittest.TestCase):
             self.assertFalse((nas_dir / "手工快照" / target.name).exists())
 
     def test_nas_side_symlink_conflict_not_overwritten(self):
-        # NAS 侧目标已被占成软链接(如上次异常中断留下)——不写穿,不误删本地。
+        # #738:NAS 侧目标已被占成软链接(如上次异常中断留下)——不写穿,不误删本地。
         with tempfile.TemporaryDirectory() as tmp:
             db, bk, nas_dir = self._setup(tmp)
             f = _mk(db.parent, "clinic.backup_before_old.sqlite3", age_days=99)
@@ -191,7 +191,7 @@ class ManualSnapshotPruneTest(unittest.TestCase):
             self.assertEqual(other.read_bytes(), b"do not touch", "不能写穿软链接覆盖无关文件")
 
     def test_nas_same_name_different_content_kept_as_conflict(self):
-        # data/ 和 data/backups/ 各有一份同 basename、不同内容的快照,不能互相覆盖丢数据。
+        # #737:data/ 和 data/backups/ 各有一份同 basename、不同内容的快照,不能互相覆盖丢数据。
         with tempfile.TemporaryDirectory() as tmp:
             db, bk, nas_dir = self._setup(tmp)
             f1 = _mk(db.parent, "clinic_before_dup.sqlite3", age_days=10)
@@ -208,7 +208,7 @@ class ManualSnapshotPruneTest(unittest.TestCase):
             self.assertEqual(f1.exists() + f2.exists(), 1)
 
     def test_nas_same_name_same_size_different_content_kept(self):
-        # 同名同大小但内容不同,st_size 骗过旧守卫会误删本地;必须逐字节比对判冲突
+        # #737:同名同大小但内容不同,st_size 骗过旧守卫会误删本地;必须逐字节比对判冲突
         with tempfile.TemporaryDirectory() as tmp:
             db, bk, nas_dir = self._setup(tmp)
             local = _mk(db.parent, "clinic_before_twin.sqlite3", age_days=10)
@@ -225,7 +225,7 @@ class ManualSnapshotPruneTest(unittest.TestCase):
             self.assertEqual((dest_dir / local.name).read_bytes(), b"BBBB", "NAS 侧不得被覆盖")
 
     def test_nas_same_name_identical_content_moved(self):
-        # 对照:同名且逐字节相同,才视为已归档,允许删本地
+        # #737 对照:同名且逐字节相同,才视为已归档,允许删本地
         with tempfile.TemporaryDirectory() as tmp:
             db, bk, nas_dir = self._setup(tmp)
             local = _mk(db.parent, "clinic_before_same.sqlite3", age_days=10)
@@ -240,7 +240,7 @@ class ManualSnapshotPruneTest(unittest.TestCase):
             self.assertFalse(local.exists())
 
     def test_nas_same_name_directory_kept_as_conflict(self):
-        # 同名目标是目录(st_size 可能碰巧和文件相等),绝不能删本地
+        # #738:同名目标是目录(st_size 可能碰巧和文件相等),绝不能删本地
         with tempfile.TemporaryDirectory() as tmp:
             db, bk, nas_dir = self._setup(tmp)
             dest_dir = nas_dir / "手工快照"
@@ -256,7 +256,7 @@ class ManualSnapshotPruneTest(unittest.TestCase):
             self.assertTrue(local.exists(), "同名目录必须判冲突保留本地")
 
     def test_copy_failure_keeps_local_and_does_not_abort_batch(self):
-        # 单份拷贝失败不牵连其它候选,也不留半成品 .part。
+        # #739:单份拷贝失败不牵连其它候选,也不留半成品 .part。
         with tempfile.TemporaryDirectory() as tmp:
             db, bk, nas_dir = self._setup(tmp)
             bad = _mk(db.parent, "clinic.backup_before_bad.sqlite3", age_days=10)

@@ -1,4 +1,4 @@
-"""配台人员管理：医生/护士/咨询师/助理，本地录入，供处置配台下拉 + 绩效统计。
+"""配台人员管理 (#4)：医生/护士/咨询师/助理，本地录入，供处置配台下拉 + 绩效统计。
 本地新建，软删(active=0)，不与原系统同步表重叠。"""
 import json
 from pathlib import Path
@@ -11,9 +11,9 @@ from local_app.auth import (create_user, password_is_nonblank, require_perm,
                             valid_roles)
 from local_app.db import begin_immediate, connect, new_id
 
-# 诊所岗位集：配台4 + 前台/收银员/主任/管理员/客服/助理2。
+# 诊所实际岗位集：配台4 + 前台/收银员/主任/管理员/客服/助理2。
 # staff_members 升级为统一员工表；配台下拉仍按医生/护士/咨询师/助理筛(前端 STAFF_ROLES)。
-# 按权限树蓝本补齐岗位(增 客服/助理2)。去「技师」岗位,技工职能并入助理/前台。
+# #420:按权限树蓝本补齐岗位(增 客服/助理2)。#502:去「技师」岗位,技工职能并入助理/前台。
 ROLES = ("医生", "护士", "咨询师", "助理", "前台", "收银员", "主任", "管理员", "客服", "助理2")
 
 
@@ -25,7 +25,7 @@ def create_staff_router(db_path, access_v3=False):
 
     # P2-31 员工档案补全字段(随 name/role/note 一起读写)
     profile_fields = ("job_no", "phone", "sex", "id_card", "title", "license_no", "department")
-    # 公开选人接口只回轻量字段(隐私铁律身份证/手机/执业证等敏感档案不进无守卫的下拉接口)
+    # 公开选人接口只回轻量字段(隐私铁律#291：身份证/手机/执业证等敏感档案不进无守卫的下拉接口)
     light_cols = "staff_id, name, role, roles"
     # 受 staff.manage 守的明细接口才回全档案
     full_cols = "staff_id, name, role, note, roles, " + ", ".join(profile_fields)
@@ -391,7 +391,7 @@ def create_staff_router(db_path, access_v3=False):
         set_cols = ("name = ?, role = ?, note = ?, roles = ?, "
                     + ", ".join(f"{f} = ?" for f in profile_fields) + ", updated_at = ?")
         with connect(db_path) as conn:
-            # 只改在职人员；软删(active=0)行 PUT 返回 404，防 stale 编辑把新人信息写进已删行
+            # #231：只改在职人员；软删(active=0)行 PUT 返回 404，防 stale 编辑把新人信息写进已删行
             if not conn.execute("select 1 from staff_members where staff_id = ? and active = 1", (staff_id,)).fetchone():
                 raise HTTPException(status_code=404, detail="人员不存在")
             conn.execute(

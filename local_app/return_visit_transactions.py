@@ -82,13 +82,25 @@ _MIGRATION_BASE_FIELDS = (
     "note",
     "created_at",
     "updated_at",
+    "is_deleted",
 )
 _MIGRATION_PROTECTED_BASE_FIELDS = (
     "due_time",
     "item_name",
     "status",
     "note",
+    "is_deleted",
 )
+# base_fields 契约一律走字符串;is_deleted 落库是整数,比较/写入前归一(#856后续:SaaS删除标记同步)
+_MIGRATION_INT_BASE_FIELDS = frozenset(("is_deleted",))
+
+
+def _current_base_value(current, field_name):
+    """取库里的 base 字段值,整数列归一成字符串,与 checked_base 同型可比。"""
+    value = current[field_name]
+    if field_name in _MIGRATION_INT_BASE_FIELDS:
+        return str(int(value or 0))
+    return value
 
 
 @dataclass(frozen=True)
@@ -344,8 +356,8 @@ def _create_imported_return_visit(
         "insert into return_visits("
         "return_visit_id,patient_identity,due_time,item_name,status,note,"
         "return_doctor,visitor,return_type,return_result,actual_date,"
-        "source_json,created_at,updated_at,last_batch_id,revision) "
-        "values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)",
+        "is_deleted,source_json,created_at,updated_at,last_batch_id,revision) "
+        "values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)",
         (
             return_visit_id,
             patient_identity,
@@ -358,6 +370,7 @@ def _create_imported_return_visit(
             values.get("return_type", ""),
             values.get("return_result", ""),
             values.get("actual_date", ""),
+            int(checked_base["is_deleted"]),
             source_json,
             checked_base["created_at"],
             checked_base["updated_at"],
@@ -483,9 +496,13 @@ def merge_imported_return_visit(
     protected_conflict = False
     if import_mode:
         protected_updates = {
-            field_name: checked_base[field_name]
+            field_name: (
+                int(checked_base[field_name])
+                if field_name in _MIGRATION_INT_BASE_FIELDS
+                else checked_base[field_name]
+            )
             for field_name in _MIGRATION_PROTECTED_BASE_FIELDS
-            if checked_base[field_name] != current[field_name]
+            if checked_base[field_name] != _current_base_value(current, field_name)
         }
         if not current["created_at"] and checked_base["created_at"]:
             metadata_created_at = checked_base["created_at"]
@@ -501,7 +518,7 @@ def merge_imported_return_visit(
                 return_visit_id=return_visit_id,
                 field_name="row",
                 local_value=stable_json({
-                    field_name: current[field_name]
+                    field_name: _current_base_value(current, field_name)
                     for field_name in _MIGRATION_PROTECTED_BASE_FIELDS
                 }),
                 incoming_value=stable_json({

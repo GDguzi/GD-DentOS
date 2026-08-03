@@ -8,6 +8,7 @@ Phase 1 只做「已知患者的手动上传/回访手机录音 + 回放」；�
 """
 
 import hashlib
+import importlib.util
 import re
 import uuid
 from contextlib import closing
@@ -51,7 +52,14 @@ from local_app.timeutil import now_str
 AUDIO_EXTS = (".wav", ".mp3", ".ogg", ".m4a", ".webm", ".amr")
 AUDIO_MAX_BYTES = 100 * 1024 * 1024          # 录音上限 100MB
 DIRECTIONS = ("inbound", "outbound")          # 呼入 / 呼出
-UPLOAD_SOURCES = ("manual_import", "return_visit_mobile")   # Phase1 允许的来源
+UPLOAD_SOURCES = ("manual_import", "return_visit_mobile", "desktop_mic")   # Phase1 允许的来源(+三期③桌面直录)
+
+
+def call_ai_available():
+    """通话 AI 扩展模块是否在场。
+    不在场 → 上传照常、转写路由不挂载;在场则完整行为。
+    同 api.migration_available() 的可切除范式:探测模块本身,不 import。"""
+    return importlib.util.find_spec("local_app.call_transcribe") is not None
 
 
 def normalize_phone(raw):
@@ -67,6 +75,7 @@ def create_calls_router(db_path, images_dir):
     router = APIRouter()
     db_path = Path(db_path)
     images_dir = Path(images_dir)
+    has_call_ai = call_ai_available()
 
     def _form_revision(value):
         if type(value) is not str or not value.isdigit() or int(value) < 1:
@@ -294,6 +303,12 @@ def create_calls_router(db_path, images_dir):
                 )
                 conn.commit()
             recover_attachment_file_operation(db_path, images_dir, operation_id)
+            # #856 二期改向:上传成功即后台转写(模块在场且配置齐全才启动;
+            # 模块缺席或未配置=特性静默缺席,不建行不挡上传)
+            if has_call_ai:
+                from local_app.call_transcribe import _asr_ready, _start_background_transcribe
+                if _asr_ready()[1]:
+                    _start_background_transcribe(call_id, db_path, images_dir)
             return {
                 "ok": True,
                 "call_id": call_id,
@@ -412,4 +427,7 @@ def create_calls_router(db_path, images_dir):
         except BaseException as error:
             _recover_failure(operation_id, error)
 
+    if has_call_ai:   # #856 二期：转写路由(通话 AI 模块在场才挂)
+        from local_app.call_transcribe import register_transcribe_routes
+        register_transcribe_routes(router, db_path, images_dir)
     return router

@@ -1,9 +1,9 @@
 // 新增预约弹窗 + 取消预约。配合 module_views.js 的预约模块（视图/状态过滤在那）。
-// 防注入：患者数据用 data-* + 事件委托，不拼进内联 JS（同 同意书选择器）。
+// 防注入：患者数据用 data-* + 事件委托，不拼进内联 JS（同 #71 同意书选择器）。
 
 let _apptPicked = null;       // 选中的患者 {patient_identity, display_name}
 let _apptSearchSeq = 0;       // 患者搜索请求序号，防乱序覆盖
-let _apptEditId = null;       // 非空=编辑既有预约(PUT)，空=新增(POST)(双击改约)
+let _apptEditId = null;       // 非空=编辑既有预约(PUT)，空=新增(POST)(#275 双击改约)
 
 // 预约项目常用清单(对标官方勾选网格)；勾选项 + 自填"其他项目"合并为 item_name
 const APPT_ITEMS = [
@@ -128,11 +128,11 @@ async function renderApptTimeline() {
       (doctor ? `&doctor_name=${encodeURIComponent(doctor)}` : "") + `&pagesize=200`)).json()).list || [];
   } catch { appts = []; }
   if (seq !== _apptTimelineSeq) return;   // 旧请求/已换日期,丢弃
-  // 占用判断:排除已取消/爽约,且排除正在编辑的本预约(否则编辑时把自己的时段判为占用)
+  // 占用判断:排除已取消/爽约,且排除正在编辑的本预约(#408:否则编辑时把自己的时段判为占用)
   const _occupies = (a, hhmm) => String(a.start_time || "").slice(11, 16) === hhmm
     && String(a.status || "") !== "已取消" && String(a.status || "") !== "3"
     && !(_apptEditId && a.appointment_id === _apptEditId);
-  // 若当前预选时刻已被占用(且不是本预约自己),取消预选(不诱导重叠),让用户改选空档
+  // 扫荡#396:若当前预选时刻已被占用(且不是本预约自己),取消预选(不诱导重叠),让用户改选空档
   if (_apptTime && appts.some(a => _occupies(a, _apptTime))) {
     _apptTime = "";
     if (typeof updateApptStart === "function") updateApptStart();   // 同步清 start/end + 已选标签
@@ -159,11 +159,12 @@ function openNewAppointment(prefill) {
   const m = document.getElementById("appointmentModal");
   if (!m) return;
   // 复位为「新增」模式 UI(编辑模式会在 openEditAppointment 里覆盖)
-  const title = document.getElementById("apptModalTitle"); if (title) title.textContent = "新增预约";
-  const sbtn = document.getElementById("apptSubmitBtn"); if (sbtn) sbtn.textContent = "保存预约";
+  const isWalkIn = prefill.registerType === "到店";
+  const title = document.getElementById("apptModalTitle"); if (title) title.textContent = isWalkIn ? "新增挂号" : "新增预约";
+  const sbtn = document.getElementById("apptSubmitBtn"); if (sbtn) sbtn.textContent = isWalkIn ? "确认挂号" : "保存预约";
   const pfield = document.getElementById("apptPatientField"); if (pfield) { pfield.hidden = false; pfield.style.display = ""; }
   const search = document.getElementById("apptPatientSearch");
-  if (search) search.disabled = false;   // 新增模式恢复可搜可编辑
+  if (search) search.disabled = false;   // #329:新增模式恢复可搜可编辑
   const results = document.getElementById("apptPatientResults");
   const picked = document.getElementById("apptPatientPicked");
   const status = document.getElementById("apptStatus");
@@ -171,7 +172,7 @@ function openNewAppointment(prefill) {
   if (results) { results.hidden = true; results.innerHTML = ""; }
   if (picked) { picked.hidden = true; picked.innerHTML = ""; }
   if (status) status.textContent = "";
-  // 支持预选患者(候诊队列/患者详情点「预约」带入当前患者);带入后锁住搜索框,不可改选别人
+  // #332:支持预选患者(候诊队列/患者详情点「预约」带入当前患者);#343:带入后锁住搜索框,不可改选别人
   if (prefill.patient && prefill.patient.patient_identity) {
     _apptPicked = {patient_identity: prefill.patient.patient_identity, display_name: prefill.patient.display_name || ""};
     if (picked) { picked.hidden = false; picked.textContent = `已选患者：${_apptPicked.display_name || _apptPicked.patient_identity}`; }
@@ -200,7 +201,7 @@ function openNewAppointment(prefill) {
   if (normalType) normalType.checked = true;
   const normalReg = document.querySelector('input[name="apptRegisterType"][value="预约"]');
   if (normalReg) normalReg.checked = true;
-  // ＋挂号 走「到店登记」而非默认「预约」,名实相符
+  // #339:＋挂号 走「到店登记」而非默认「预约」,名实相符
   if (prefill.registerType) {
     const reg = document.querySelector(`input[name="apptRegisterType"][value="${prefill.registerType}"]`);
     if (reg) reg.checked = true;
@@ -231,13 +232,13 @@ function closeNewAppointment() {
 function _apptSetRadio(name, val) {
   val = String(val || "").trim();
   const group = document.querySelectorAll(`input[name="${name}"]`);
-  // 原值为空→全不选(提交回空,保留原空值),不继承新增模式的默认值(初诊/普通预约)
+  // #297：原值为空→全不选(提交回空,保留原空值),不继承新增模式的默认值(初诊/普通预约)
   if (!val) { group.forEach(el => { el.checked = false; }); return; }
   const el = document.querySelector(`input[name="${name}"][value="${CSS.escape(val)}"]`);
   if (el) el.checked = true;
 }
 
-// 双击预约块 → 以「编辑既有预约」模式打开弹窗并回填(患者锁定,保存走 PUT)。
+// #275 双击预约块 → 以「编辑既有预约」模式打开弹窗并回填(患者锁定,保存走 PUT)。
 // appt 需含完整字段(由 /api/appointments/{id} 取),见 appointment_grid.js 的双击钩子。
 function openEditAppointment(appt) {
   if (!appt) return;
@@ -247,7 +248,7 @@ function openEditAppointment(appt) {
   _apptEditId = appt.appointment_id || "";
   const title = document.getElementById("apptModalTitle"); if (title) title.textContent = "编辑预约";
   const sbtn = document.getElementById("apptSubmitBtn"); if (sbtn) sbtn.textContent = "保存修改";
-  // 患者锁定:隐藏+禁用搜索框,显示当前患者(PUT 不改患者)。[hidden] 会被 .appt-field display 覆盖,
+  // 患者锁定:隐藏+禁用搜索框,显示当前患者(PUT 不改患者)。#329:[hidden] 会被 .appt-field display 覆盖,
   // 故同时 style 强隐 + disable 输入框,确保改约时患者字段不可编辑。
   _apptPicked = {patient_identity: appt.patient_identity, display_name: appt.display_name || ""};
   const pfield = document.getElementById("apptPatientField"); if (pfield) { pfield.hidden = true; pfield.style.display = "none"; }
@@ -275,7 +276,7 @@ function openEditAppointment(appt) {
   set("apptSource", appt.patient_source);
   set("apptBookedBy", appt.booked_by);
   set("apptRemark", appt.remark);
-  // 显式回填原始 start/end —— openNewAppointment 经 updateApptStart 会把 apptEnd 默认成"开始+60分",
+  // #297：显式回填原始 start/end —— openNewAppointment 经 updateApptStart 会把 apptEnd 默认成"开始+60分",
   // 若不覆盖,双击后即使不改时间直接保存,也会把原时长(如 09:00-09:30)静默改成 60 分。覆盖回真实值。
   const startEl = document.getElementById("apptStart"), endEl = document.getElementById("apptEnd");
   if (startEl && appt.start_time) startEl.value = String(appt.start_time).slice(0, 16);
@@ -331,7 +332,7 @@ async function submitNewAppointment() {
   // 预约项目 = 勾选网格 + 自填"其他项目"，合并去重
   const checked = Array.from(document.querySelectorAll('#apptItemGrid input[type="checkbox"]:checked')).map(c => c.value);
   const custom = ((document.getElementById("apptItem") || {}).value || "").trim();
-  const itemName = [...new Set([...checked, ...(custom ? [custom] : [])])].join("、");   // 去重(自填与勾选相同不重复)
+  const itemName = [...new Set([...checked, ...(custom ? [custom] : [])])].join("、");   // #115 去重(自填与勾选相同不重复)
   if (!itemName) { if (status) status.textContent = "请选/填预约项目"; return; }
   const picked = name => (document.querySelector(`input[name="${name}"]:checked`) || {}).value || "";
   const editing = !!_apptEditId;
@@ -369,7 +370,7 @@ async function submitNewAppointment() {
   closeNewAppointment();
   if (typeof reloadModuleFromFirstPage === "function") reloadModuleFromFirstPage("loadAppointmentModule");
   _refreshVisitsAfterApptChange();   // 预约并入就诊:若正看患者就诊页,改完即时刷新
-  if (typeof loadTodayWork === "function") loadTodayWork();   // 保存后即时刷新今日工作台,不必手点"刷新今日"
+  if (typeof loadTodayWork === "function") loadTodayWork();   // #544:保存后即时刷新今日工作台,不必手点"刷新今日"
 }
 
 // 预约改/取消后:失效就诊缓存;若就诊面板正显示则即时重渲(预约已并入就诊时间轴)
@@ -397,7 +398,7 @@ async function cancelAppointment(appointmentId) {
   if (!res.ok) { const m = await res.json().catch(() => ({})); window.alert("取消失败：" + (m.detail || res.status)); return; }
   if (typeof reloadModuleFromFirstPage === "function") reloadModuleFromFirstPage("loadAppointmentModule");
   _refreshVisitsAfterApptChange();
-  if (typeof loadTodayWork === "function") loadTodayWork();   // 取消后即时刷新今日队列,不留旧状态(如仍显示已到达)
+  if (typeof loadTodayWork === "function") loadTodayWork();   // #544:取消后即时刷新今日队列,不留旧状态(如仍显示已到达)
 }
 
 Object.assign(window, {

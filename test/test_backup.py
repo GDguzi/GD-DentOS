@@ -58,7 +58,7 @@ class BackupTest(unittest.TestCase):
             self.assertTrue(any(n.startswith("images/") for n in names))
 
     def test_backup_skips_file_deleted_during_zip(self):
-        # 打包时文件被并发删(os.walk 枚举后消失)→ 跳过该文件,备份仍成功,不 500/不残缺 zip
+        # #568:打包时文件被并发删(os.walk 枚举后消失)→ 跳过该文件,备份仍成功,不 500/不残缺 zip
         from unittest import mock
         with tempfile.TemporaryDirectory() as tmp:
             db, images, client = _client(tmp)
@@ -74,7 +74,7 @@ class BackupTest(unittest.TestCase):
             self.assertNotIn("images/ghost.jpg", names)          # 消失的文件被跳过
 
     def test_backup_does_not_swallow_real_io_error(self):
-        # 磁盘满/权限/IO 等真故障(非 FileNotFoundError)不得被吞——备份必须失败,不伪装成功
+        # #568:磁盘满/权限/IO 等真故障(非 FileNotFoundError)不得被吞——备份必须失败,不伪装成功
         import errno
         from unittest import mock
         with tempfile.TemporaryDirectory() as tmp:
@@ -96,7 +96,7 @@ class BackupTest(unittest.TestCase):
             self.assertFalse(ok200, "磁盘满等真故障不得被静默跳过、不得返回 200 成功")
 
     def test_failed_backup_leaves_no_halfbaked_files(self):
-        # 打包中途磁盘满,半截 zip/中间 db 不得以正式备份名留在盘上——
+        # Y24(代码审计_2026-07-17):打包中途磁盘满,半截 zip/中间 db 不得以正式备份名留在盘上——
         # 正式名会进 /api/backup/list 被当成正常备份,真恢复时才发现是空炮。
         import errno
         from unittest import mock
@@ -120,7 +120,7 @@ class BackupTest(unittest.TestCase):
             self.assertEqual(leftovers, [], f"失败的备份不得留任何文件: {leftovers}")
 
     def test_same_second_backup_gets_suffix_not_409(self):
-        # 每日自动备份同秒先落了 backup_X.db 时,手工备份不得被 409 误拒——
+        # 二轮:每日自动备份同秒先落了 backup_X.db 时,手工备份不得被 409 误拒——
         # 撞名由认领逻辑原子挂 _n 后缀,两份各自完整。
         from unittest import mock
         with tempfile.TemporaryDirectory() as tmp:
@@ -154,7 +154,7 @@ class BackupTest(unittest.TestCase):
             self.assertEqual(client.get("/api/backup/whatever.db/download").status_code, 404)
 
     def test_non_admin_forbidden(self):
-        # 备份含全量隐私,非管理员不能创建/列出/下载
+        # #102 备份含全量隐私,非管理员不能创建/列出/下载
         with tempfile.TemporaryDirectory() as tmp:
             db, images, _ = _client(tmp)
             with connect(db) as conn:

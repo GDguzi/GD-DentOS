@@ -1,4 +1,4 @@
-"""门诊日志(对标行业通用口径)：每条就诊一行 + 病历正文(诊断/措施) + 住址。"""
+"""门诊日志(对标 SaaS)：每条就诊一行 + 病历正文(诊断/措施) + 住址。"""
 import json
 import tempfile
 import unittest
@@ -45,7 +45,7 @@ class ClinicLogTest(unittest.TestCase):
         self.assertEqual(_emr_text("not json", "TR"), "")
 
     def test_emr_text_nested(self):
-        # 嵌套对象/数组套嵌套 → 递归提叶子文本,不吐 Python 字面量
+        # #687: 嵌套对象/数组套嵌套 → 递归提叶子文本,不吐 Python 字面量
         self.assertEqual(_emr_text(json.dumps({"DG": {"name": "龋齿", "detail": "牙髓炎"}}), "DG"),
                          "龋齿；牙髓炎")
         self.assertEqual(_emr_text(json.dumps({"TR": [{"op": "去腐", "steps": ["开髓", "充填"]}]}), "TR"),

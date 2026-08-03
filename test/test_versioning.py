@@ -70,7 +70,7 @@ class PatientVersioningTest(unittest.TestCase):
         self.assertEqual(versions, 1)
 
     def test_archived_version_hash_consistent_with_source_json(self):
-        # 归档到 patient_versions 的 version_hash 必须与被归档的 source_json 自洽,
+        # #552:归档到 patient_versions 的 version_hash 必须与被归档的 source_json 自洽,
         # 不能直接抄可能已被本地编辑/合并偏离的 current_hash
         import json
         from local_app.versioning import stable_json
@@ -100,7 +100,7 @@ class PatientVersioningTest(unittest.TestCase):
             self.assertNotEqual(v[0], "LIVE_EDITED_HASH")          # 不再抄偏离的 current_hash
 
     def test_upsert_empty_customerid_keeps_existing_binding(self):
-        # 重导入带空 customerid 不能静默清空已绑定的 source_customer_id
+        # 审计#27：重导入带空 customerid 不能静默清空已绑定的 source_customer_id
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "clinic.sqlite3"
             init_db(db_path)
@@ -113,7 +113,7 @@ class PatientVersioningTest(unittest.TestCase):
                     patient_identity="p1", source_customer_id="c1", display_name="测试患者",
                     phone="10086", source={"patient_identity": "p1"}, updated_at="2026-06-07 10:00:00",
                 ), batch_id="b1")
-                # 再次导入同一患者,但 customerid 为空(外部系统 该字段缺失)
+                # 再次导入同一患者,但 customerid 为空(SaaS 该字段缺失)
                 upsert_patient_with_version(conn, PatientSnapshot(
                     patient_identity="p1", source_customer_id="", display_name="测试患者改",
                     phone="10086", source={"patient_identity": "p1", "x": 1}, updated_at="2026-06-07 11:00:00",

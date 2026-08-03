@@ -1,7 +1,7 @@
-"""撤单/作废账单(历史数字撤单码 900/500/400/200 + 本地 voided)不计入合计/欠费/营收。
+"""撤单/作废账单(SaaS 撤单码 900/500/400/200 + 本地 voided)不计入合计/欠费/营收。
 
-背景：导入的历史账单用数字码标记撤单；本地之前只认字符串 'voided'，漏了数字撤单码，
-导致撤单单进了应收/欠费/合计(冒出大量幽灵欠费)。
+背景：SaaS 把撤单单藏起来不算钱；本地之前只认字符串 'voided'，漏了 SaaS 数字撤单码，
+导致撤单单进了应收/欠费/合计(实测出现过明显的幽灵欠费)。
 """
 import datetime as dt
 import tempfile
@@ -92,7 +92,7 @@ def _add_bill(db, bill_no, total, paid, state, discount=0, when=None):
 
 
 class DiscountArrearsTest(unittest.TestCase):
-    """打折单：应收=总价-优惠(DiscountFee)，本地之前不扣优惠→冒幽灵欠费。"""
+    """SaaS 打折单：应收=总价-优惠(DiscountFee)，本地之前不扣优惠→冒幽灵欠费(按真实账单形态构造)。"""
 
     def test_discount_settled_not_arrears(self):
         # 总价1000 优惠300 已付700 → 净应收700=已付 → 欠0(不是300)
@@ -128,7 +128,7 @@ class DiscountArrearsTest(unittest.TestCase):
             self.assertEqual(bill["is_void"], 0)
 
     def test_discount_with_thousands_comma(self):
-        # 大额优惠 DiscountFee 可能带千分位逗号 "1,400.00"。
+        # 真实形态:大额优惠 DiscountFee 带千分位逗号 "1,400.00"。
         # SQLite 字符串转数值读到逗号即停→当成1→9400-1=9399 凭空欠1399。修:取数前 replace 去逗号。
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)

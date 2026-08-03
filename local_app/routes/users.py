@@ -114,7 +114,7 @@ def create_users_router(db_path, access_v3=False):
             conn.execute("delete from sessions where user_id = ?", (user_id,))  # 改密后强制重登
             conn.commit()
         if target_name and target_name["username"] == "admin":
-            # 重置 admin 密码同样让首启明文初始密码文件失效并删除
+            # #583/#783:重置 admin 密码同样让首启明文初始密码文件失效并删除
             (Path(db_path).parent / ".admin_initial_password").unlink(missing_ok=True)
         return {"ok": True}
 
@@ -132,10 +132,10 @@ def create_users_router(db_path, access_v3=False):
                 raise HTTPException(status_code=400, detail="原密码错误")
             conn.execute("update users set password_hash = ?, updated_at = ? where id = ?",
                          (auth.hash_password(new), now_str(), user["id"]))
-            conn.execute("delete from sessions where user_id = ?", (user["id"],))  # 改密后强制各端重登(同管理员重置)
+            conn.execute("delete from sessions where user_id = ?", (user["id"],))  # #18 改密后强制各端重登(同管理员重置)
             conn.commit()
         if user.get("username") == "admin":
-            # admin 改密后首启明文初始密码文件即失效,立即删除——不让凭据常驻磁盘/跟着备份外泄
+            # #583:admin 改密后首启明文初始密码文件即失效,立即删除——不让凭据常驻磁盘/跟着备份外泄
             (Path(db_path).parent / ".admin_initial_password").unlink(missing_ok=True)
         return {"ok": True}
 

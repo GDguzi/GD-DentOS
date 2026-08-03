@@ -16,7 +16,7 @@ class RescheduleBadgeTest(unittest.TestCase):
         with connect(db) as conn:
             conn.execute("insert into patients(patient_identity, display_name, updated_at, current_hash) "
                          "values ('p1','张三','x','h1')")
-            # 模拟 外部导入的预约：source_json 带原约时间 ScheduleStartTime
+            # 模拟 SaaS 导入的预约：source_json 带原约时间 ScheduleStartTime
             conn.execute(
                 "insert into appointments(appointment_id, patient_identity, start_time, status, source_json, updated_at) "
                 "values ('a1','p1','2026-06-18 16:30','0', ?, 'x')",
@@ -36,7 +36,7 @@ class RescheduleBadgeTest(unittest.TestCase):
             self.assertEqual(a["original_start_time"][:16], a["start_time"][:16])
 
     def test_local_reschedule_exposes_original(self):
-        # 本地改预约时间 → start_time 变,original_start_time 仍是 外部系统 原约(前端据此标改约)
+        # 本地改预约时间 → start_time 变,original_start_time 仍是 SaaS 原约(前端据此标改约)
         with tempfile.TemporaryDirectory() as tmp:
             _, client = self._setup(tmp)
             r = client.put("/api/appointments/a1", json={"start_time": "2026-06-18 10:00"})

@@ -1,6 +1,6 @@
 """旧 35 权限键 → 新 99 权限键迁移映射：数据常量 + 纯函数，不触碰任何数据库。
 
-映射规则：
+唯一真相源 = docs/权限映射_旧到新_2026-07-18.md 第 3 节（D1-D9 全部拍板）：
 - 3.1 同名直留 11 键（SAME_NAME_KEEP）。
 - 3.2 一对多展开 21 键：19 键无条件展开（EXPANSION_MAP）+ report.view/data.export
   按 D3+D11 报表门禁（REPORT_GATED_LEGACY_KEYS + ROLE_BLANKET_GRANTS）。
@@ -167,7 +167,7 @@ EXPANSION_MAP = {
 }
 
 # D3+D11 拍板：报表键仅主任/收银员/前台经 ROLE_BLANKET_GRANTS 获得（与旧键持有无关）；
-# 其余角色即使持有 report.view/data.export 也按 收紧丢弃，不派生。
+# 其余角色即使持有 report.view/data.export 也按 #512 收紧丢弃，不派生。
 REPORT_GATED_LEGACY_KEYS = frozenset({"report.view", "data.export"})
 
 # 3.3 移除（D6 确认）：三键迁往系统管理员专属能力，不可分配给角色，迁移时从各角色键集删除。
@@ -231,7 +231,7 @@ RESULT_DERIVED_GRANTS = {
 def dependency_closure(keys):
     """PERMISSION_DEPENDENCIES 传递闭包（排除不可分配键）。
 
-    拍板：映射/拍板/blanket/派生生成集合后，必须统一补齐依赖闭包，
+    #859 拍板：映射/拍板/blanket/派生生成集合后，必须统一补齐依赖闭包，
     使任何输入键集的结果都能通过新 GUI 保存校验（_validate_dependencies）。
     """
     result = set(keys)

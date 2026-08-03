@@ -1,4 +1,4 @@
-"""同意书冠/桥模板推荐收敛到唯一：处置词→唯一模板,不外溢多签。
+"""#242 同意书冠/桥模板推荐收敛到唯一：处置词→唯一模板,不外溢多签。
 用 node vm 探针执行 consent_form.js 的 consentTemplatesForItem(纯函数,无DOM)。"""
 import json
 import subprocess
@@ -10,7 +10,7 @@ const src=fs.readFileSync("local_app/static/consent_form.js","utf8");
 const sb={document:{getElementById:()=>null,querySelector:()=>null,addEventListener:()=>{}},window:{},console};
 vm.createContext(sb);
 try{vm.runInContext(src,sb);}catch(e){}
-// 复现 同时存在 全瓷冠修复 与 烤瓷冠、桥修复
+// 复现 #242 场景:同时存在 全瓷冠修复 与 烤瓷冠、桥修复
 const T=[{name:"全瓷冠修复知情同意书",category:"修复"},
          {name:"烤瓷冠、桥修复知情同意书",category:"修复"},
          {name:"贴面修复知情同意书",category:"修复"},

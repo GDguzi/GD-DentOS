@@ -1,4 +1,5 @@
 // 影像组图查看:正畸标准模板位版式 + 两期对比 + 导出拼图(纯前端,零后端)。
+// 规格: docs/superpowers/specs/2026-07-03-影像组图-design.md
 // 约定:顶层只放常量与函数声明(test_image_grouping_logic.mjs 用 vm 整文件求值),DOM 只在函数内碰。
 
 // 视图位映射:标签逐字对齐 patient_images.category 的实际取值(全量枚举过,别改字)。
@@ -13,7 +14,7 @@ function igDateKey(image) {
   return String(image.image_date || "").slice(0, 10) || "未知日期";
 }
 
-// 按拍摄日分组,升序(最早=治疗前 排最上,和 外部系统 一致)
+// 按拍摄日分组,升序(最早=治疗前 排最上,和 SaaS 一致)
 function groupImagesByDate(images) {
   const byDate = new Map();
   for (const im of images) {
@@ -26,7 +27,7 @@ function groupImagesByDate(images) {
     .map(([date, list]) => ({ date, images: list }));
 }
 
-// 整月差(不按日修正:2024-06-29→2025-08-18 记 14 个月,同 外部系统 口径),异常/倒序钳 0
+// 整月差(不按日修正:2024-06-29→2025-08-18 记 14 个月,同 SaaS 口径),异常/倒序钳 0
 function monthsBetween(baseDate, date) {
   const a = String(baseDate).split("-").map(Number);
   const b = String(date).split("-").map(Number);
@@ -82,7 +83,7 @@ function splitOthersForTab(others, tab) {
   return others.slice();
 }
 
-// 该期是否为组图:只认落库标记(医生手点"做组图"或历史成套种子),自动不判(产品决策
+// 该期是否为组图:只认落库标记(医生手点"做组图"或历史成套种子),自动不判(用户拍板 2026-07-03)
 function igIsSetDate(setDates, date) {
   return Array.isArray(setDates) && setDates.indexOf(date) !== -1;
 }
@@ -129,7 +130,7 @@ const igState = { periods: [], activeDate: null, compareDates: [], tab: "all", f
 
 function igEscapeHtml(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, c => (
-    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&;" }[c]));
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
 function igFileUrl(image) {
@@ -164,7 +165,7 @@ function closeImageGrouping() {
   if (ov) ov.hidden = true;
 }
 
-// 事件委托只绑一次(面板反复重渲染,重复 addEventListener 会累积——见 教训)
+// 事件委托只绑一次(面板反复重渲染,重复 addEventListener 会累积——见 #315 教训)
 function igBindOnce(ov) {
   if (ov.dataset.igBound) return;
   ov.dataset.igBound = "1";
@@ -323,7 +324,7 @@ function igLoadImage(url) {
 async function igExportCollage() {
   if (igState.compareDates.length === 2) { alert("对比模式暂不支持导出,先取消对比勾选"); return; }
   const period = igActivePeriod();
-  // 与单期渲染同口径:未手点成组的日期不导出「正畸组图」
+  // 与单期渲染同口径:未手点成组的日期不导出「正畸组图」(#540)
   if (!igIsSetDate(igState.setDates, period.date)) { alert("本期未做正畸组图,先点「做正畸组图」把照片归位再导出"); return; }
   const plan = igCollagePlan(buildTemplateModel(period.images));
   if (!plan.cells.length) { alert("本期没有可导出的照片"); return; }

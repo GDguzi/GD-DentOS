@@ -1,6 +1,6 @@
 """会员储值（纯储值最小闭环）：充值 / 消费扣减(不透支) / 退储值(退现) / 余额+流水查询。
 改钱模块——金额走 _clean_amount 守卫，余额随每笔事务更新，每笔写流水 + audit_logs。
-本地业务表(member_*)，不回写导入镜像。"""
+本地业务表(member_*)，不回写 SaaS 镜像。"""
 import json
 import math
 from pathlib import Path
@@ -12,7 +12,7 @@ from local_app.auth import audit_operator, audit_write, require_admin, require_p
 from local_app.db import connect, new_id
 # 审计R2:软删患者按不存在处理,收敛到共享校验(原本地拷贝不查 is_deleted)
 from local_app.routes.patient_common import require_patient as _require_patient
-# 审计R4:充值/消费/退储值幂等,直接复用 收退款的 payment_requests 范式
+# 审计R4:充值/消费/退储值幂等,直接复用 #800 收退款的 payment_requests 范式
 # (同号同载荷重放首次响应,同号异载荷 409,缺号 400)。表已在 schema.sql,scope 用
 # patient_identity 落 bill_id 列,kind 前缀 member_ 与收退款隔开。
 from local_app.routes.billing_ops import _idempotent_replay, _record_request, _request_key
@@ -45,7 +45,7 @@ def _clean_amount(value, field="amount"):
     if not math.isfinite(amount) or amount <= 0:
         raise HTTPException(status_code=400, detail=f"{field} 必须是大于 0 的有限数")
     amount = round(amount, 2)
-    if amount <= 0:   # 四舍五入到分后仍须>0(挡 0.004 这类亚分无效额)
+    if amount <= 0: # 复审：四舍五入到分后仍须>0(挡 0.004 这类亚分无效额)
         raise HTTPException(status_code=400, detail=f"{field} 不能小于 0.01 元")
     return amount
 
@@ -55,7 +55,7 @@ def create_membership_router(db_path):
     db_path = Path(db_path)
 
     def _lock(conn):
-        # 改钱前抢写锁，把同患者并发的读-改-写串行化，杜绝丢更新/绕过不透支。
+        # #165：改钱前抢写锁，把同患者并发的读-改-写串行化，杜绝丢更新/绕过不透支。
         # busy_timeout 让第二个写者排队等待而非立刻报 database is locked。
         conn.isolation_level = None
         conn.execute("pragma busy_timeout = 5000")
@@ -91,7 +91,7 @@ def create_membership_router(db_path):
             (txn_id, patient_identity, txn_type, amount, new_balance,
              note, bill_id, audit_operator(), now),
         )
-        # 审计 old/new_json 用 JSON 对象(与其它审计一致),不用裸 str(数字)
+        # 审查#23：审计 old/new_json 用 JSON 对象(与其它审计一致),不用裸 str(数字)
         audit_write(
             conn, "member_account", patient_identity, "member_" + txn_type,
             old_json=json.dumps({"balance": round(new_balance - _signed(txn_type, amount), 2),
@@ -103,7 +103,7 @@ def create_membership_router(db_path):
 
     @router.get("/api/patients/{patient_identity}/member-account")
     def get_member_account(patient_identity: str):
-        require_perm("billing.view")   # 会员储值余额属财务,按 billing.view 守卫
+        require_perm("billing.view")   # #482：会员储值余额属财务,按 billing.view 守卫
         with connect(db_path) as conn:
             _require_patient(conn, patient_identity)
             balance = _balance(conn, patient_identity)
@@ -124,7 +124,7 @@ def create_membership_router(db_path):
 
     @router.post("/api/patients/{patient_identity}/member-account/topup")
     def topup(patient_identity: str, payload: dict):
-        require_admin()   # 改余额/退现仅管理员
+        require_admin()   # 审查#15：改余额/退现仅管理员
         rid, phash = _request_key(payload, patient_identity, "member_topup")   # 审计R4:幂等键必填
         amount = _clean_amount((payload or {}).get("amount"))
         note = str((payload or {}).get("note") or "").strip()
@@ -144,7 +144,7 @@ def create_membership_router(db_path):
 
     @router.post("/api/patients/{patient_identity}/member-account/consume")
     def consume(patient_identity: str, payload: dict):
-        require_admin()   # 
+        require_admin()   # 审查#15
         rid, phash = _request_key(payload, patient_identity, "member_consume")   # 审计R4:幂等键必填
         amount = _clean_amount((payload or {}).get("amount"))
         bill_id = str((payload or {}).get("bill_id") or "").strip()
@@ -169,7 +169,7 @@ def create_membership_router(db_path):
     @router.post("/api/patients/{patient_identity}/member-account/refund")
     def refund(patient_identity: str, payload: dict):
         # 退储值(退现)：把未消费余额退回现金，冲减余额
-        require_admin()   # 退现仅管理员
+        require_admin()   # 审查#15：退现仅管理员
         rid, phash = _request_key(payload, patient_identity, "member_refund")   # 审计R4:幂等键必填
         amount = _clean_amount((payload or {}).get("amount"))
         note = str((payload or {}).get("note") or "").strip()

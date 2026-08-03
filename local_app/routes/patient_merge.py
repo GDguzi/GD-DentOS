@@ -2,7 +2,7 @@
 
 同一个人重复建档(姓名+电话相同,不同 patient_identity/病历号)时用。合并不可逆——
 全程写审计(含次患者完整快照可追溯),但不进回收站(级联还原过于复杂)。
-核心逻辑在 merge_patients()(抽出):路由和运维脚本共用同一真相源。
+核心逻辑在 merge_patients()(#636 抽出):路由和运维脚本共用同一真相源。
 """
 import json
 from pathlib import Path
@@ -24,9 +24,9 @@ _MERGE_TABLES = [
     "consults", "surgeries", "oral_exams", "patient_images", "image_download_tasks",
     "lab_orders", "consent_documents", "local_notes", "patient_versions",
     "member_transactions",
-    # 客户沟通：通话录音 / 沟通记录 / 微信截图（都带 patient_identity）也随合并改指主患者
+    # #725 客户沟通：通话录音 / 沟通记录 / 微信截图（都带 patient_identity）也随合并改指主患者
     "calls", "communications", "communication_images",
-    # 回访截图（新表漏登记的第二课）。此清单由 test_patient_merge 守卫测试对着
+    # #733 回访截图（新表漏登记的第二课）。此清单由 test_patient_merge 守卫测试对着
     # schema.sql 全量核对：新表带 patient_identity 却没进清单/豁免名单,测试直接红。
     "return_visit_images",
     # CT/CBCT 云端检查档案(study_key 为主键,重指 patient_identity 安全)
@@ -75,7 +75,7 @@ def merge_patients(db_path, primary, secondary, reason, operator=None):
                 conn.execute("update member_accounts set balance=?, updated_at=? where patient_identity=?",
                              (new_bal, now, primary))
                 conn.execute("delete from member_accounts where patient_identity=?", (secondary,))
-                # 余额迁移必须有流水,否则主余额变了无任何 member_transactions 能解释(改钱审计断链)。
+                # #221/#250:余额迁移必须有流水,否则主余额变了无任何 member_transactions 能解释(改钱审计断链)。
                 # 记一笔"合并入账",balance_after=合并后新余额,让审计链可追溯当前余额。
                 if sec_bal:
                     conn.execute(
@@ -91,7 +91,7 @@ def merge_patients(db_path, primary, secondary, reason, operator=None):
                              (primary, now, secondary))
             moved["member_accounts"] = 1
             moved["member_balance_moved"] = sec_bal
-        # 1c) 影像日期分组：主键(patient_identity, image_date)不能盲改(两边同日期撞主键)，
+        # 1c) #765 影像日期分组：主键(patient_identity, image_date)不能盲改(两边同日期撞主键)，
         # 先给主患者补上缺的日期组，再删次患者的——照 member_accounts 特例套路。
         cur = conn.execute(
             "insert or ignore into patient_image_sets(patient_identity, image_date, created_at) "
@@ -100,8 +100,8 @@ def merge_patients(db_path, primary, secondary, reason, operator=None):
         cur = conn.execute("delete from patient_image_sets where patient_identity=?", (secondary,))
         if cur.rowcount:
             moved["patient_image_sets"] = cur.rowcount
-        # 1d) 患者标签：tag_id 独立主键可直接重指；重指后主患者同名标签去重
-        # (保留 tag_id 最小的一条，确定性取舍；产品决策=标签跟过去+去重)。
+        # 1d) #766 患者标签：tag_id 独立主键可直接重指；重指后主患者同名标签去重
+        # (保留 tag_id 最小的一条，确定性取舍；用户拍板=标签跟过去+去重)。
         cur = conn.execute("update patient_tags set patient_identity=? where patient_identity=?",
                            (primary, secondary))
         if cur.rowcount:
@@ -117,12 +117,12 @@ def merge_patients(db_path, primary, secondary, reason, operator=None):
                 filled[f] = se[f]
         if filled:
             sets = ", ".join(f"{f}=?" for f in filled)
-            # 补全主患者字段=本地编辑,要留版本快照+更新 current_hash(否则版本链漏这次合并变更)
+            # 审查#26：补全主患者字段=本地编辑,要留版本快照+更新 current_hash(否则版本链漏这次合并变更)
             old_snap = patient_profile_snapshot(pm)
             conn.execute("insert into patient_versions(patient_identity, version_hash, source_json, batch_id) "
                          "values (?, ?, ?, ?)", (primary, stable_hash(old_snap), stable_json(old_snap), None))
             new_snap = dict(old_snap); new_snap.update(filled); new_snap["updated_at"] = now
-            # current_hash 用 new_snap(updated_at=now)算,UPDATE 必须同时写 updated_at=now,
+            # #191：current_hash 用 new_snap(updated_at=now)算,UPDATE 必须同时写 updated_at=now,
             # 否则 row.updated_at 留旧值→current_hash != stable_hash(patient_profile_snapshot(row))。
             # 口径=合并后整行快照可复现(merge 不加 edit_source,故 hash 能从行复算)。
             conn.execute(f"update patients set {sets}, current_hash=?, updated_at=?, local_updated_at=? where patient_identity=?",
@@ -153,7 +153,7 @@ def create_patient_merge_router(db_path):
 
     @router.post("/api/patients/{primary}/merge")
     def merge_patient(primary: str, payload: dict):
-        require_admin()   # 合并不可逆且跨表重指数据,仅管理员(前台等非管理员 403)
+        require_admin()   # #123：合并不可逆且跨表重指数据,仅管理员(前台等非管理员 403)
         payload = payload or {}
         secondary = str(payload.get("secondary") or "").strip()
         reason = str(payload.get("reason") or "").strip()

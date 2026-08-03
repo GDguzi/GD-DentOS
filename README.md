@@ -20,7 +20,7 @@
 `DENTAL_LOCAL_ONLY=0` 再启动（非本机设备需访问口令，见下表）。
 
 > exe 由 GitHub Actions 在干净的 Windows 机器上自动构建并做启动冒烟验证
-> （见 `.github/workflows/build-windows.yml`）。想自己打包：
+> （见 `.github/workflows/build-release.yml`）。想自己打包：
 > `pip install -r requirements.txt pyinstaller`，再执行
 > `pyinstaller packaging/windows/good-dental.spec --distpath dist --clean --noconfirm`。
 

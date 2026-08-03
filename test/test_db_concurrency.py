@@ -615,7 +615,7 @@ if __name__ == "__main__":
 
 
 class RecordItemsReplaceRaceTest(unittest.TestCase):
-    """并发替换病历牙位条目——begin_immediate 抢锁把读-改-写串行化,
+    """#571:并发替换病历牙位条目——begin_immediate 抢锁把读-改-写串行化,
     否则第二个保存读到过期旧值,审计链断档(old_json 指向被覆盖前的状态)。"""
 
     def test_concurrent_replace_no_audit_chain_gap(self):

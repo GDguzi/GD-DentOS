@@ -52,7 +52,7 @@ def create_lab_orders_router(db_path, images_dir):
     def in_progress_ledger(overdue_days: int = 7):
         """跨患者列出在制(status=sent)技工单：join 患者名，按送出日升序(最早最该催在前)，
         送出超过 overdue_days 天标 overdue。供工作台「在制义齿」催单。"""
-        require_perm("lab_order.manage")   # 技工单(含患者名)读守卫用本模块对应权限
+        require_perm("lab_order.manage")   # #482：技工单(含患者名)读守卫用本模块对应权限
         with connect(db_path) as conn:
             rows = [dict(r) for r in conn.execute(
                 """
@@ -76,7 +76,7 @@ def create_lab_orders_router(db_path, images_dir):
     # ---------- 列表（含配图） ----------
     @router.get("/api/patients/{patient_identity}/lab-orders")
     def list_orders(patient_identity: str):
-        require_perm("lab_order.manage")   # 技工单读守卫用本模块对应权限
+        require_perm("lab_order.manage")   # #482：技工单读守卫用本模块对应权限
         with connect(db_path) as conn:
             if not conn.execute("select 1 from patients where patient_identity = ?", (patient_identity,)).fetchone():
                 raise HTTPException(status_code=404, detail="patient not found")
@@ -232,7 +232,7 @@ def create_lab_orders_router(db_path, images_dir):
     # ---------- 配图文件 ----------
     @router.get("/api/lab-orders/images/{img_id}/file")
     def image_file(img_id: str):
-        require_perm("lab_order.manage")   # 技工单图片读守卫用本模块对应权限
+        require_perm("lab_order.manage")   # #482：技工单图片读守卫用本模块对应权限
         with connect(db_path) as conn:
             row = conn.execute(
                 "select rel_path from lab_order_images where img_id = ?", (img_id,)
@@ -261,7 +261,7 @@ def create_lab_orders_router(db_path, images_dir):
         _safe_unlink(images_dir, row["rel_path"])
         return {"img_id": img_id, "deleted": True}
 
-    # ---------- 技工所/项目/比色候选项（KV） ----------
+    # ---------- 技工所/项目/比色候选项（KV，对应 exe 的 lab-config） ----------
     @router.get("/api/lab-config/{kind}")
     def get_config(kind: str):
         key = _CONFIG_KINDS.get(kind)

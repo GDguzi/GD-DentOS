@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 
 from local_app.timeutil import now_str
-from local_app.auth import audit_write, require_admin, require_system_admin
+from local_app.auth import audit_write, require_perm
 from local_app.db import begin_immediate, connect, new_id
 
 
@@ -105,8 +105,8 @@ def _normalize_code(value):
 
 
 def _has_sync_trace(row):
-    """该 handle_items 行是否带外部导入痕迹(批次号 或 非空镜像 payload)。
-    source_json 按 JSON 解析判空，避免 ' { } ' 这类带空白的语义空对象被误判为痕迹。"""
+    """该 handle_items 行是否带 SaaS 同步痕迹(批次号 或 非空镜像 payload)。
+    #158：source_json 按 JSON 解析判空，避免 ' { } ' 这类带空白的语义空对象被误判为痕迹。"""
     if str(row["last_batch_id"] or "").strip():
         return True
     raw = str(row["source_json"] or "").strip()
@@ -123,9 +123,7 @@ def create_master_data_router(db_path, *, access_v3=True):
     db_path = Path(db_path)
 
     def _require_handle_item_manager():
-        if access_v3:
-            return require_system_admin()
-        return require_admin()
+        return require_perm("master_data.manage")
 
     def _require_item(conn, handle_id):
         row = conn.execute(

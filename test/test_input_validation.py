@@ -154,9 +154,9 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class ImportedMicrosecondTimeTest(unittest.TestCase):
-    def test_imported_microsecond_visit_time_accepted(self):
-        """外部导入病历 visit_time 形如 09:43:00.000000，编辑保存不得被 400 拦下。"""
+class SaasMicrosecondTimeTest(unittest.TestCase):
+    def test_saas_microsecond_visit_time_accepted(self):
+        """SaaS 同步病历 visit_time 形如 09:43:00.000000，编辑保存不得被 400 拦下。"""
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path, client = _client(tmpdir)
             resp = client.put(

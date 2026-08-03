@@ -1,4 +1,4 @@
-"""患者分类：按本地列 patient_group 逗号拆分统计分组计数。"""
+"""患者分类：按本地列 patient_group 逗号拆分统计分组计数(开源壳阶段2迁列)。"""
 import tempfile
 import unittest
 from pathlib import Path

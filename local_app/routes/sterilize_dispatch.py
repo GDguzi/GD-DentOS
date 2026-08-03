@@ -1,6 +1,6 @@
 """消毒/灭菌追溯 · 器械送消单(第1环)：临床→消毒供应室的交接登记。
 状态机 draft草稿→submitted已送审→audited已审核；audited 可撤销审核回 submitted。
-送消单号 dispatch_no 是全链路串联键。删除/编辑仅限 draft。"""
+送消单号 dispatch_no 是全链路串联键。删除/编辑仅限 draft。规格：docs/官方规格/消毒.md。"""
 import sqlite3
 import uuid
 from pathlib import Path
@@ -191,7 +191,7 @@ def create_sterilize_dispatch_router(db_path):
                 "update sterilize_dispatch set is_deleted = 1, updated_at = ? where id = ?",
                 (now, dispatch_id),
             )
-            # 删除写审计(回收站要显示谁/何时删)
+            # #93 删除写审计(回收站要显示谁/何时删)
             audit_write(conn, "sterilize_dispatch", dispatch_id, "soft_delete_dispatch", created_at=now)
             conn.commit()
         return {"id": dispatch_id, "is_deleted": 1}

@@ -13,7 +13,7 @@ from local_app.db import connect, init_db
 
 
 def _admin_client(db):
-    """带 admin 登录的 client（患者导出 需 data_export 权限）。"""
+    """带 admin 登录的 client（患者导出 #220 需 data_export 权限）。"""
     with connect(db) as conn:
         if not conn.execute("select 1 from users where username='admin'").fetchone():
             auth.create_user(conn, "admin", "管理员", "admin123", role="admin")
@@ -32,7 +32,7 @@ class PatientListTest(unittest.TestCase):
         db = Path(tmp) / "clinic.sqlite3"
         init_db(db)
         with connect(db) as conn:
-            # 分组真相源=patient_group 列(同步建档/回填已落列)
+            # 开源壳阶段2:分组真相源=patient_group 列(同步建档#454/回填已落列)
             conn.execute(
                 "insert into patients(patient_identity, display_name, updated_at, current_hash, patient_group) "
                 "values ('p1','张三','x','h1','种植牙,最近患者')")
@@ -54,7 +54,7 @@ class PatientListTest(unittest.TestCase):
         return _admin_client(db)
 
     def test_search_by_chart_no(self):
-        # 搜索框支持病历号(chart_no 列 + 回退 source_json.patientid)
+        # 看板#210:搜索框支持病历号(chart_no 列 + 回退 source_json.patientid)
         with tempfile.TemporaryDirectory() as tmp:
             c = self._client(tmp)
             db = Path(tmp) / "clinic.sqlite3"
@@ -81,12 +81,12 @@ class PatientListTest(unittest.TestCase):
             c = self._client(tmp)
             today_ids = [p["patient_identity"] for p in c.get("/api/patients?scope=today").json()["list"]]
             self.assertEqual(today_ids, ["p1"])           # 只有 p1 今天有约
-            # 最近 = 外部系统「最近患者」分组(p1 groupname 含最近患者, p2 不含)，与计数同源
+            # #109 最近 = SaaS「最近患者」分组(p1 groupname 含最近患者, p2 不含)，与计数同源
             recent_ids = {p["patient_identity"] for p in c.get("/api/patients?scope=recent").json()["list"]}
             self.assertEqual(recent_ids, {"p1"})
 
     def test_group_filter_space_tolerant(self):
-        # groupname 带空格("正畸患者, 种植牙")时筛选仍命中，与计数口径一致
+        # 动态扫#108：groupname 带空格("正畸患者, 种植牙")时筛选仍命中，与计数口径一致
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "clinic.sqlite3"
             init_db(db)
@@ -140,7 +140,7 @@ class PatientListTest(unittest.TestCase):
             self.assertIn("张三", text)
 
     def test_export_search_by_chart_no(self):
-        # 导出 q 口径与列表一致——按病历号筛选后导出也只含命中患者(非空CSV)
+        # 看板#218:导出 q 口径与列表一致——按病历号筛选后导出也只含命中患者(非空CSV)
         with tempfile.TemporaryDirectory() as tmp:
             c = self._client(tmp)
             db = Path(tmp) / "clinic.sqlite3"
@@ -152,7 +152,7 @@ class PatientListTest(unittest.TestCase):
             self.assertNotIn("李四", text)     # 非命中不导出
 
     def test_export_respects_birthday_filter(self):
-        # 在"今日生日"筛选里导出,只导出今天生日的患者,不能导出全量
+        # #124：在"今日生日"筛选里导出,只导出今天生日的患者,不能导出全量
         other = (dt.date.today() - dt.timedelta(days=40)).isoformat()  # 40天前→MM-DD 必不等于今天
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "clinic.sqlite3"
@@ -169,7 +169,7 @@ class PatientListTest(unittest.TestCase):
             self.assertNotIn("路人", text)
 
     def test_has_record_excludes_ai_draft(self):
-        # has_record 只算正式病历(draft_status=''), AI草稿不点亮"史"
+        # 动态扫#7：has_record 只算正式病历(draft_status=''), AI草稿不点亮"史"
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "clinic.sqlite3"
             init_db(db)
@@ -183,7 +183,7 @@ class PatientListTest(unittest.TestCase):
             self.assertFalse(row["has_record"])   # 只有AI草稿 → 不算有病历
 
     def test_group_filter_escapes_wildcards(self):
-        # group 含 LIKE 通配符 % 不能匹配全部
+        # 动态扫#14：group 含 LIKE 通配符 % 不能匹配全部
         with tempfile.TemporaryDirectory() as tmp:
             c = self._client(tmp)
             # group='%' 字面不存在该分组 → 0 命中(不是匹配所有人)

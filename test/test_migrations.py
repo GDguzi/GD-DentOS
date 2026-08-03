@@ -152,7 +152,7 @@ class SchemaDiffPropertyTest(unittest.TestCase):
                          if r[1] == "refunded_fee")
             self.assertEqual((r[2].lower(), r[3], r[4]), ("real", 1, "0"))
     def test_nonconstant_default_red_line_fails_loud(self):
-        """红线兜底:非常量默认(current_timestamp)的列若从存量库缺失,差分补列必须
+        """#788 红线兜底:非常量默认(current_timestamp)的列若从存量库缺失,差分补列必须
         响亮报错(SQLite 的 ADD COLUMN 拒绝非常量默认)——绝不静默跳过留下缺列库。
         用真 schema 的 audit_logs.created_at(default current_timestamp)实测。"""
         import sqlite3 as _sq

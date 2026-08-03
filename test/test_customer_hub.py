@@ -83,7 +83,7 @@ class CustomerHubTest(unittest.TestCase):
             self.assertNotIn("calls", body, "无 call.view 不应返回录音块")
 
     def test_bad_date_param_400(self):
-        # 坏日期不静默返回空,一律 400(收紧到 YYYY-MM-DD,防 substr 永不匹配伪装成"无记录")
+        # #729 坏日期不静默返回空,一律 400(收紧到 YYYY-MM-DD,防 substr 永不匹配伪装成"无记录")
         with tempfile.TemporaryDirectory() as tmp:
             db = self._seed(tmp)
             client = TestClient(create_app(db, images_dir=Path(tmp) / "img"))

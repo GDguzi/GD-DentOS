@@ -193,7 +193,7 @@ def audit_write(conn, entity_type, entity_id, action, *,
 def require_admin():
     """管理员守卫：非 admin 抛 403。
 
-    v3 目标模式下同样硬闸：路由策略层是第一道门,这里是第二道——患者合并/储值退现等
+    v3 目标模式下同样硬闸(审计Y20)：路由策略层是第一道门,这里是第二道——患者合并/储值退现等
     "仅管理员"操作,普通角色即便勾了对应权限点也 403。若产品层面要放开某个入口给非管理员,
     须显式把该调用点改成 require_perm 并拍板,不得靠守卫静默失效。
 
@@ -292,8 +292,8 @@ _TARGET_HAS_PERM_ALIASES = {
 }
 
 # 预置角色(is_system=1，不可删，权限可在矩阵里改)。(role_key, name, sort)
-# 按权限树蓝本补齐角色——新增 主任/收银员/客服/助理2 独立角色(不再把主任并到 admin)。
-# 产品决策去掉「技师」独立角色,技工功能并入 助理/前台;旧库 technician 账号/技师员工
+# #420:按权限树蓝本补齐角色——新增 主任/收银员/客服/助理2 独立角色(不再把主任并到 admin)。
+# #502:用户拍板去掉「技师」独立角色,技工功能并入 助理/前台;旧库 technician 账号/技师员工
 # 由 migrate_technician_role 一次性迁到 assistant/助理。升级用 ensure_preset_roles_present 幂等补缺。
 PRESET_ROLES = [
     ("admin",      "管理员", 0),
@@ -322,24 +322,24 @@ DEFAULT_ROLE_PERMS = {
         "patient.view", "medical_record.view", "treatment.manage",
         "sterilize.manage", "warehouse.view",
     },
-    "reception": {  # 技工功能并入前台,加 lab_order.manage
+    "reception": {  # #502:技工功能并入前台,加 lab_order.manage
         "patient.view", "patient.create", "patient.edit",
         "billing.view", "billing.pay", "membership.manage", "lab_order.manage",
         "call.view", "call.manage",   # 前台=电话沟通主力(录入人:前台)
         "communication.view", "communication.manage",
     },
-    "consultant": {  # report.view 收归管理员(业绩/门诊报表只有院长可查)
+    "consultant": {  # #512:report.view 收归管理员(业绩/门诊报表只有院长可查)
         "patient.view", "patient.edit", "consult.manage", "billing.view",
         "call.view", "call.manage",
         "communication.view", "communication.manage",
     },
-    "assistant": {  # 技工功能并入助理(lab_order/warehouse);尾巴拍板再补患者建档/编辑
+    "assistant": {  # #502:技工功能并入助理(lab_order/warehouse);尾巴拍板再补患者建档/编辑
         "patient.view", "patient.create", "patient.edit",
         "medical_record.view", "treatment.manage", "sterilize.manage",
         "lab_order.manage", "warehouse.view",
     },
-    # 新增 5 类(可在权限矩阵随时调)
-    "director": {   # 主任:全科临床 + 财务可见,不含系统/账号管理;报表收归 admin
+    # #420 新增 5 类(可在权限矩阵随时调)
+    "director": {   # 主任:全科临床 + 财务可见,不含系统/账号管理;#512:报表收归 admin
         "patient.view", "patient.create", "patient.edit",
         "medical_record.view", "medical_record.edit",
         "treatment.manage", "lab_order.manage", "surgery.manage", "oral_exam.manage",
@@ -349,7 +349,7 @@ DEFAULT_ROLE_PERMS = {
         "call.view", "call.manage",
         "communication.view", "communication.manage",
     },
-    "cashier": {    # 收银员:收费/退费/储值;报表收归 admin
+    "cashier": {    # 收银员:收费/退费/储值;#512:报表收归 admin
         "patient.view", "billing.view", "billing.pay", "billing.refund",
         "membership.manage",
     },
@@ -358,7 +358,7 @@ DEFAULT_ROLE_PERMS = {
         "medical_record.view", "treatment.manage", "sterilize.manage",
         "lab_order.manage", "warehouse.view",
     },
-    "support": {     # 客服:档案 + 咨询沟通;报表收归 admin
+    "support": {     # 客服:档案 + 咨询沟通;#512:报表收归 admin
         "patient.view", "patient.create", "patient.edit", "consult.manage",
         "call.view", "call.manage",
         "communication.view", "communication.manage",
@@ -388,7 +388,7 @@ def require_perm(action):
     本机免登录模式(require_login=False)视作可信全权，与 audit_operator 返回 'local_user' 一致。
     登录后则严格判权：admin(perms=['*']) 全通过，其余按角色权限点，缺权抛 403。
 
-    v3 目标模式下：动作能映射到 v3 权限的(别名表优先,其次动作名本身就是合法
+    v3 目标模式下(审计Y20/#494)：动作能映射到 v3 权限的(别名表优先,其次动作名本身就是合法
     v3 权限键)必须真查权限——这是回收站 patient.view 这类"二次门禁"的守卫;无 v3 对应物的
     动作放行,由路由策略层把关(每路由必有一条策略,有守卫测试锁定,放行不属兜底)。"""
     target_mode, target_user = _target_user_context()
@@ -492,7 +492,7 @@ def ensure_seed_admin(db_path=DEFAULT_DB_PATH):
         if conn.execute("select count(*) from users").fetchone()[0]:
             return None
         # DENTAL_ADMIN_PASSWORD 可显式预设首启密码(演示与运维自动化);
-        # 未设则生成 128bit 随机口令,打印到终端并存 .admin_initial_password。
+        # 未设则生成 128bit 随机口令(#583),打印到终端并存 .admin_initial_password。
         pw = os.environ.get("DENTAL_ADMIN_PASSWORD", "").strip() or secrets.token_hex(16)
         user_cols = {row[1] for row in conn.execute("pragma table_info(users)")}
         if "is_system_admin" in user_cols:
@@ -554,7 +554,7 @@ class AuthContextMiddleware:
                     if path.startswith("/api/"):
                         resp = JSONResponse({"detail": "需要登录"}, status_code=401)
                     else:
-                        # no-store:登录页与骨架页都禁缓存,防登出后浏览器回放缓存页
+                        # no-store(#808):登录页与骨架页都禁缓存,防登出后浏览器回放缓存页
                         resp = HTMLResponse(render_login_html(self.db_path),
                                             headers={"Cache-Control": "no-store"})
                     return await resp(scope, receive, send)
@@ -570,7 +570,7 @@ class AuthContextMiddleware:
 # **绝不记录请求体**(患者明文不进 audit)。
 _AUDIT_MUTATING = {"POST", "PUT", "DELETE", "PATCH"}
 # 这些不审计:认证(无业务)、同步触发(另有 sync_batches 批次记录)。
-_AUDIT_SKIP = ("/api/auth",)
+_AUDIT_SKIP = ("/api/auth", "/api/sync")
 
 
 def _audit_entity_from_path(path):
@@ -584,8 +584,8 @@ def _audit_entity_from_path(path):
 
 def should_audit_operation(method, path, status):
     """这次 API 调用是否"候选"补通用操作审计(改数据 + 成功 + 非认证/同步)。纯函数。
-    不再用资源前缀白名单(太粗会把"患者子资源 手术/面诊"也跳过→漏审计)。是否真补由中间件
-    按本请求 cell(,db._audit_trace 写回)精确判:路由自审计(audited)→不重复;库改了但没审计
+    #435:不再用资源前缀白名单(太粗会把"患者子资源 手术/面诊"也跳过→漏审计)。是否真补由中间件
+    按本请求 cell(#437,db._audit_trace 写回)精确判:路由自审计(audited)→不重复;库改了但没审计
     (changed)→兜底补;库没改(no-op 保存)→不记。每请求各自一个 cell=并发安全。"""
     return (method in _AUDIT_MUTATING and path.startswith("/api/") and 200 <= int(status) < 400
             and not path.startswith(_AUDIT_SKIP))
@@ -614,7 +614,7 @@ class OperationAuditMiddleware:
         path = scope.get("path", "")
         candidate = (method in _AUDIT_MUTATING and path.startswith("/api/")
                      and not path.startswith(_AUDIT_SKIP))
-        # 改并发安全:给本请求挂一个独立 cell,任何连接的 insert/update/delete 经 db._audit_trace
+        # #437 改并发安全:给本请求挂一个独立 cell,任何连接的 insert/update/delete 经 db._audit_trace
         # 写回它(changed=库真改了, audited=路由已自写 audit_logs)。每请求各自一个 cell,
         # 不再读全局 max(audit_id)/data_version(并发下会被别的请求的 audit 写污染→漏审计)。
         reset = None
@@ -690,7 +690,7 @@ def _is_login_asset(path):
 
 
 # ---------- 登录页(内联) ----------
-# 标题/抬头显示配置的诊所名(占位符渲染时替换;未配置=中性默认)
+# 标题/抬头显示配置的诊所名(占位符渲染时替换,开源壳阶段1去硬编码;未配置=中性默认)
 LOGIN_HTML_TMPL = """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>登录 · __CLINIC_NAME__本地系统</title>
 <style>body{font-family:-apple-system,"PingFang SC",sans-serif;display:flex;align-items:center;

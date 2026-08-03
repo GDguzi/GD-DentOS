@@ -1,4 +1,4 @@
-"""店内统计——只读聚合，不反写业务表。
+"""店内统计（对标 SaaS「本店统计」）——只读聚合，不反写业务表。
 
 Phase4 分层试点：聚合本体已搬 services/finance_service.py（口径要点见该文件与
 git 历史），本文件只剩路由层三件事——验权限、收发参数（校验/默认值/400）、拼 HTTP 响应。
@@ -106,7 +106,7 @@ def create_store_stats_router(db_path):
     @router.get("/api/store-stats/reconcile-calendar")
     def reconcile_calendar(month: str = ""):
         """对账日历：某月每天 收(当日收款)/支(当日退费)/合(净额) + 月合计。
-        产品决策：支=当日退费金额(本地无支出记账)。收退口径同收银(排作废原单)。"""
+        用户拍板：支=当日退费金额(本地无支出记账)。收退口径同收银(排作废原单)。"""
         require_access("report.operations.view")
         m = (month or "").strip() or bj_now().strftime("%Y-%m")
         if len(m) != 7 or m[4] != "-" or not (m[:4].isdigit() and m[5:].isdigit()):

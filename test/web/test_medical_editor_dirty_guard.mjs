@@ -1,4 +1,4 @@
-// 回归:病历编辑层「未保存拦截」守卫。无 DOM 测试栈——抽出 markMedicalEditorDirty +
+// #335 回归:病历编辑层「未保存拦截」守卫。无 DOM 测试栈——抽出 markMedicalEditorDirty +
 // closeMedicalEditorOverlay 源码,用 stub document/window 在沙箱 eval,真测脏守卫行为。
 // 跑：node --test test/web/test_medical_editor_dirty_guard.mjs
 import { test } from "node:test";
@@ -27,7 +27,7 @@ function makeSandbox(initialDirty, confirmReturns) {
   const sandbox = {
     document: {
       getElementById: id => (id === "medicalEditorOverlay" ? overlay : null),
-      querySelector: () => null,   // 非 force 关闭后会查病历面板重渲,返回 null 即跳过
+      querySelector: () => null,   // #411:非 force 关闭后会查病历面板重渲,返回 null 即跳过
       body: { classList: { add() {}, remove() {} } },
     },
     window: { confirm: () => confirmReturns },

@@ -170,7 +170,7 @@ async function toggleCallMicRecord() {
   } catch { if (status) status.textContent = "无法访问麦克风（请允许权限）"; return; }
   _callMicChunks = [];
   _callMicStart = Date.now();
-  _callMicPid = workspacePatientId;   // 锁定开始录音时的患者,停止上传只认这个,防录音中切患者挂错病历
+  _callMicPid = workspacePatientId;   // #700 锁定开始录音时的患者,停止上传只认这个,防录音中切患者挂错病历
   const mime = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "";
   _callMicRec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
   _callMicRec.ondataavailable = e => { if (e.data && e.data.size) _callMicChunks.push(e.data); };
@@ -180,7 +180,7 @@ async function toggleCallMicRecord() {
     const sec = Math.round((Date.now() - _callMicStart) / 1000);
     const durField = form.querySelector('[data-field="duration_sec"]');
     if (durField && !durField.value.trim()) durField.value = String(sec);
-    if (_callMicPid !== workspacePatientId) {   // 录音中切了患者/离开:不能挂到当前患者,取消上传并提示
+    if (_callMicPid !== workspacePatientId) {   // #700 录音中切了患者/离开:不能挂到当前患者,取消上传并提示
       if (status) status.textContent = "录音中切换了患者，已取消上传（请回到原患者重录）";
       return;
     }
@@ -200,7 +200,7 @@ function reloadCallsInPlace() {
 }
 
 async function setCallDeal(callId, revision, value) {
-  // 禁止静默假保存:PATCH 失败必须明确告警并重载列表(把下拉回滚到服务端真值)
+  // #702 禁止静默假保存:PATCH 失败必须明确告警并重载列表(把下拉回滚到服务端真值)
   if (!Number.isInteger(revision) || revision < 1) {
     alert("数据版本已失效，请刷新后重试");
     reloadCallsInPlace();
@@ -235,14 +235,14 @@ async function deleteCall(callId, revision) {
       method: "DELETE", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ expected_revision: revision }),
     });
-  } catch { alert("删除失败（网络异常），请重试"); return; }   // 不吞错
+  } catch { alert("删除失败（网络异常），请重试"); return; }   // #702 不吞错
   if (res.status === 409) {
     alert("数据已被其他操作更新，请确认最新内容后重试");
     reloadCallsInPlace();
     return;
   }
   if (!res.ok) { alert("删除失败（" + res.status + "）"); return; }
-  // 后端删盘失败会返回 file_removed:false(录音文件还在磁盘,已记审计待清理)→ 明确告警,不当成功掩盖
+  // #716 后端删盘失败会返回 file_removed:false(录音文件还在磁盘,已记审计待清理)→ 明确告警,不当成功掩盖
   const body = await res.json().catch(() => ({}));
   if (body && body.file_removed === false) {
     alert("记录已删除，但录音文件未能从磁盘删除（已记审计待清理），请联系管理员处理。");

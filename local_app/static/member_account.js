@@ -63,7 +63,7 @@ async function renderWorkspaceMemberTab(panel) {
 }
 
 // 网络异常(结果未知)的请求号暂存:同患者同动作同载荷(金额+备注,与后端整体哈希口径一致)重试时
-// 复用同号(对齐 弹窗内重试复用),后端同号重放不落第二笔——否则"已入账但响应丢了"的
+// 复用同号(对齐 #800 弹窗内重试复用),后端同号重放不落第二笔——否则"已入账但响应丢了"的
 // 超时场景,重试就是新号照样重复扣。载荷不同=新意图新号。
 const _memberPendingReq = {};
 // 进行中请求闸:同患者同动作的请求未返回前,拒绝再次提交——否则第二次是新号,后端视为两笔合法交易
@@ -92,7 +92,7 @@ async function memberAction(act, pid, panel) {
       note = rawNote;
     }
     if (status) status.textContent = "处理中...";
-    // 审计R4:改钱端点强制幂等键,复用 的 newPaymentRequestId(workspace_billing.js,先于本文件加载)。
+    // 审计R4:改钱端点强制幂等键,复用 #800 的 newPaymentRequestId(workspace_billing.js,先于本文件加载)。
     const pending = _memberPendingReq[reqKey];
     const requestId = (pending && pending.amount === amount && pending.note === note)
       ? pending.requestId : newPaymentRequestId();

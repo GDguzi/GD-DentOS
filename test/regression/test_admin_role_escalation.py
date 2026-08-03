@@ -1,6 +1,6 @@
 """回归：v3 下自勾遗留 admin 角色不得越过 require_admin 硬闸。
 
-已复现的提权路径：空库 v3 会种出零权限的遗留 admin 角色，
+复审复现的提权路径：空库 v3 会种出零权限的遗留 admin 角色，
 持有 staff.edit 的账号可给自己勾上它，从而通过患者合并/储值退现等仅管理员接口。
 修法：require_admin 在 v3 目标模式下只认 is_system_admin。
 """

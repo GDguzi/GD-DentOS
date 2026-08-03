@@ -1,4 +1,4 @@
-"""日结报表明细(对标行业通用口径)：每条就诊一行 + 患者信息 + 账单财务。"""
+"""日结报表明细(对标 SaaS)：每条就诊一行 + 患者信息 + 账单财务。"""
 import json
 import tempfile
 import unittest
@@ -91,7 +91,7 @@ class DailySettlementTest(unittest.TestCase):
             self.assertIn("初诊", text)
 
     def test_same_study_multiple_bills_aggregate(self):
-        # 同一就诊(study)两张账单 → 聚合(300),不只取第一张
+        # #683: 同一就诊(study)两张账单 → 聚合(300),不只取第一张
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             with connect(db) as c:
@@ -105,7 +105,7 @@ class DailySettlementTest(unittest.TestCase):
             self.assertEqual(d["rows"][0]["paid"], 250.0)          # 100+150
 
     def test_same_day_bills_not_duplicated(self):
-        # 同患者同日两就诊 + 两张无study账单 → 每张只用一次、不重复计第一张
+        # #683: 同患者同日两就诊 + 两张无study账单 → 每张只用一次、不重复计第一张
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             with connect(db) as c:
@@ -121,7 +121,7 @@ class DailySettlementTest(unittest.TestCase):
             self.assertEqual(d["total"]["paid"], 300.0)
 
     def test_empty_record_type_excluded_no_duplicate(self):
-        # 同患者同日多一条空 record_type 的草稿病历,不得在日结里产生重复行
+        # #691: 同患者同日多一条空 record_type 的草稿病历,不得在日结里产生重复行
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             with connect(db) as c:
@@ -133,7 +133,7 @@ class DailySettlementTest(unittest.TestCase):
             self.assertEqual(d["rows"][0]["visit_type"], "复诊")
 
     def test_invalid_birthday_returns_empty_age(self):
-        # 非法生日不猜年龄
+        # #684: 非法生日不猜年龄
         from local_app.services.finance_service import age_from_birthday as _age_from_birthday
         self.assertEqual(_age_from_birthday("1990-13-01"), "")   # 13月
         self.assertEqual(_age_from_birthday("1990-02-30"), "")   # 2-30不存在
@@ -151,7 +151,7 @@ class DailySettlementTest(unittest.TestCase):
             self.assertEqual(self._q(client, consultant="别人")["count"], 0)
 
     def test_softdeleted_patient_history_stays_in_settlement_813(self):
-        # ②:软删患者的历史就诊+已收账单仍进日结(财务史实不可变),与收入报表口径一致
+        # #813②:软删患者的历史就诊+已收账单仍进日结(财务史实不可变),与收入报表口径一致
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             with connect(db) as c:

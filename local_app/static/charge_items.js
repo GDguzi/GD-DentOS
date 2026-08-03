@@ -1,4 +1,4 @@
-// 收费项目配置页：所有可见角色均可查看，只有系统管理员可以新增、编辑、停用或恢复。
+// 收费项目配置页：所有可见角色均可查看，持有 master_data.manage 的账号可新增、编辑、停用或恢复。
 // 保留 loadChargeItemsModule 等既有全局接口，继续由 config_center.js 装载到 cfgBody。
 
 let _ciItems = [];
@@ -16,7 +16,7 @@ let _ciSaveToken = 0;
 let _ciToken = 0;
 
 function ciCanManage() {
-  return window.__isSystemAdmin === true;
+  return typeof hasPerm === "function" && hasPerm("master_data.manage") === true;
 }
 
 function ciFlattenGroups(groups) {

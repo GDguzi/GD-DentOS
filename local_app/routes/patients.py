@@ -18,7 +18,7 @@ from local_app.versioning import stable_hash, stable_json
 
 def build_patient_filter(q="", birthday_on="", group="", scope="", doctor="", first_doctor=""):
     """患者筛选 WHERE 构建，列表与导出共用。返回 (where_sql, params)，where_sql 以 'where ' 开头，
-    恒含「排除已合并/删除」。铁律：两端筛选口径必须一致——历史上各抄一份漂移出过
+    恒含「排除已合并/删除」。#218/#124 铁律：两端筛选口径必须一致——历史上各抄一份漂移出过
     bug(按病历号筛选后导出空CSV)，收敛成单一构建器。"""
     q = (q or "").strip()
     birthday_on = (birthday_on or "").strip()
@@ -31,7 +31,7 @@ def build_patient_filter(q="", birthday_on="", group="", scope="", doctor="", fi
     params = []
     if q:
         like = f"%{q}%"
-        # q 口径含病历号 chart_no + 回退 source_json.patientid
+        # q 口径含病历号 chart_no + 回退 source_json.patientid(#218)
         where_parts.append(
             "(patient_identity like ? or source_customer_id like ? or display_name like ? "
             "or phone like ? or address like ? or name_pinyin like ? "
@@ -47,8 +47,8 @@ def build_patient_filter(q="", birthday_on="", group="", scope="", doctor="", fi
         params.append(birthday_on)
     # patient_group 是逗号拼接的多分组（"最近患者,种植牙" 或带空格 "最近患者, 种植牙"）。
     # 匹配时去掉所有空格再前后补逗号做精确成员匹配，与 /api/patient-groups 计数(按逗号拆strip)
-    # 同源；转义 LIKE 通配符 %/_ 避免组名含这些字符误命中。
-    # 真相源=本地列 patient_group(同步建档/箱子回填已落列),不再读 source_json。
+    # 同源(#108)；转义 LIKE 通配符 %/_ 避免组名含这些字符误命中(#14)。
+    # 开源壳阶段2：真相源=本地列 patient_group(同步建档#454/箱子回填已落列),不再读 source_json。
     groupname_norm = "(',' || replace(coalesce(patient_group, ''), ' ', '') || ',')"
     if group:
         g = group.replace(" ", "").replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -60,7 +60,7 @@ def build_patient_filter(q="", birthday_on="", group="", scope="", doctor="", fi
             "and coalesce(a.status, '') not in ('3', '已取消') "
             "and substr(coalesce(a.start_time, ''), 1, 10) = date('now', 'localtime'))")
     elif scope == "recent":
-        # 「最近」分组与 /api/patient-groups 的 recent 计数同源
+        # #109 「最近」= SaaS「最近患者」分组，与 /api/patient-groups 的 recent 计数同源
         where_parts.append(f"{groupname_norm} like '%,最近患者,%'")
     if doctor:   # 主治医生：有该医生的(未取消)预约
         where_parts.append(
@@ -171,11 +171,11 @@ def create_patients_router(db_path):
     def patients_export(q: str = "", group: str = "", scope: str = "",
                         doctor: str = "", first_doctor: str = "", birthday_on: str = ""):
         """按当前筛选导出患者为 CSV(UTF-8 BOM,Excel 可直接打开)。用户本机下载。"""
-        require_perm("data_export")   # 导出含患者姓名/手机/病历号等隐私，仅 admin
+        require_perm("data_export")   # #220：导出含患者姓名/手机/病历号等隐私，仅 admin
         import csv
         import io as _io
-        # 导出必须复用列表的当前筛选，否则在筛选结果里点导出会导出全量患者。
-        # 与列表共用 build_patient_filter(口径一致铁律)；顺带补齐历史缺口——
+        # #124：导出必须复用列表的当前筛选，否则在筛选结果里点导出会导出全量患者。
+        # 与列表共用 build_patient_filter(#218 口径一致铁律)；顺带补齐历史缺口——
         # 旧导出不认 scope=today,在「今日」筛选下点导出会静默导出全量。
         where, params = build_patient_filter(q=q, birthday_on=birthday_on, group=group,
                                              scope=scope, doctor=doctor, first_doctor=first_doctor)
@@ -382,7 +382,7 @@ def create_patients_router(db_path):
                 (patient_identity, stable_hash(old_snapshot), old_json, None),
             )
 
-            # 镜像层红线：本地编辑绝不改写 patients.source_json（导入时的原始 payload）
+            # 镜像层红线：本地编辑绝不改写 patients.source_json（SaaS 原始 payload）
             conn.execute(
                 """
                 update patients

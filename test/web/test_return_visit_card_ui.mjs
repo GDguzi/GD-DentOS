@@ -49,14 +49,14 @@ test("回访卡片:编辑/标记已回访/电话录音/微信截图 + 失败不�
   assert.match(card, /Object\.assign\(window,[\s\S]*?openReturnVisitCard/, "卡片函数应暴露 window");
 });
 
-test("修2 状态下拉保留 导入原始状态值,不静默改回待回访", () => {
+test("修2 状态下拉保留 SaaS 原始状态值,不静默改回待回访", () => {
   assert.ok(card.includes("stdVals") && card.includes("原值"),
     "非标准状态(done/完成/4)应补当前原值选项并选中,避免保存时被覆盖为待回访");
 });
 
 test("独立回访卡片保留快捷录音，不再绑定退役 study 视图", () => {
   assert.ok(card.includes("toggleRvCardMicRecord") && card.includes("快捷录音"), "卡片应有快捷录音按钮");
-  assert.ok(card.includes("return_visit_mobile") && card.includes("_rvCardGen"), "快捷录音应标 source 且用卡片代数锁会话防挂错");
+  assert.ok(card.includes("return_visit_mobile") && card.includes("_rvCardGen"), "快捷录音应标 source 且用卡片代数锁会话防挂错(#734)");
 });
 
 test("快捷录音防麦克风泄漏:关卡片停录 + 开麦异步防二次点击", () => {
@@ -66,5 +66,5 @@ test("快捷录音防麦克风泄漏:关卡片停录 + 开麦异步防二次点�
   // 开麦异步窗口防并发申请两条流
   assert.ok(card.includes("_rvMicStarting"), "应有开麦 in-flight 标志防二次点击");
   assert.match(card, /if \(gen !== _rvCardGen\)[\s\S]*?getTracks\(\)\.forEach[\s\S]*?stop\(\)/,
-    "开麦期间卡片代数变了(关/切/重开)应弃流(stop tracks),不起录音机");
+    "开麦期间卡片代数变了(关/切/重开)应弃流(stop tracks),不起录音机(#734)");
 });

@@ -1,4 +1,4 @@
-"""影像组图标记(跟进):组图只认医生手点;种子只预标历史真成套的期(>=6视图位)。"""
+"""影像组图标记(#534跟进):组图只认医生手点;种子只预标历史真成套的期(>=6视图位)。"""
 import tempfile
 import unittest
 from pathlib import Path

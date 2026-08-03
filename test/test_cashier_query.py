@@ -1,8 +1,10 @@
 """Phase C 收银查询报表：逐笔收款 + 付款方式透视 + 处置类别分摊 + CSV 导出。"""
+import os
 import tempfile
 import unittest
 import uuid
 from pathlib import Path
+from unittest import mock
 
 from fastapi.testclient import TestClient
 
@@ -58,19 +60,19 @@ class CashierQueryTest(unittest.TestCase):
             db, client = _client(tmp)
             b = _bill(client, [{"item_name": "种植体", "unit_price": 800, "quantity": 1, "fee_type": "种植费"},
                                {"item_name": "拔牙", "unit_price": 200, "quantity": 1, "fee_type": "拔牙费"}])
-            client.post(f"/api/bills/{b}/pay", json={"methods": [{"method": "现金", "amount": 600}, {"method": "云闪付", "amount": 400}], "request_id": uuid.uuid4().hex})
+            client.post(f"/api/bills/{b}/pay", json={"methods": [{"method": "现金", "amount": 600}, {"method": "扫码付", "amount": 400}], "request_id": uuid.uuid4().hex})
             d = client.get("/api/reports/cashier-query?date_from=2026-01-01&date_to=2030-01-01").json()
             self.assertEqual(d["count"], 2)                       # 两笔(每方式一行)
             for row in d["rows"]:
                 self.assertEqual(round(sum(row["categories"].values()), 2), row["amount"])  # 每行分摊合计=该行金额
             self.assertEqual(round(d["total_amount"], 2), 1000)
-            self.assertEqual(d["by_method"], {"现金": 600, "云闪付": 400})
+            self.assertEqual(d["by_method"], {"现金": 600, "扫码付": 400})
 
     def test_filter_by_method(self):
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             b = _bill(client, [{"item_name": "x", "unit_price": 1000, "quantity": 1, "fee_type": "种植费"}])
-            client.post(f"/api/bills/{b}/pay", json={"methods": [{"method": "现金", "amount": 600}, {"method": "云闪付", "amount": 400}], "request_id": uuid.uuid4().hex})
+            client.post(f"/api/bills/{b}/pay", json={"methods": [{"method": "现金", "amount": 600}, {"method": "扫码付", "amount": 400}], "request_id": uuid.uuid4().hex})
             d = client.get("/api/reports/cashier-query?date_from=2026-01-01&date_to=2030-01-01&method=现金").json()
             self.assertEqual(d["count"], 1)
             self.assertEqual(d["rows"][0]["pay_type"], "现金")
@@ -137,7 +139,7 @@ class CashierQueryTest(unittest.TestCase):
             self.assertTrue(text.startswith("收款时间"))       # BOM 被 utf-8-sig 解码掉
 
     def test_operator_filter(self):
-        # 收银查询按收银员筛选
+        # 看板#212:收银查询按收银员筛选
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             b1 = _bill(client, [{"item_name": "x", "unit_price": 100, "quantity": 1, "fee_type": "洗牙费"}])
@@ -151,7 +153,7 @@ class CashierQueryTest(unittest.TestCase):
             self.assertEqual(d["rows"][0]["operator"], "前台A")
 
     def test_phone_and_multilevel_source_columns(self):
-        # 对齐通用口径 收银查询:联系电话 + 患者来源/二级/三级来源逐笔带出并进 CSV
+        # 对齐 SaaS 收银查询:联系电话 + 患者来源/二级/三级来源逐笔带出并进 CSV
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             with connect(db) as c:
@@ -171,26 +173,34 @@ class CashierQueryTest(unittest.TestCase):
             self.assertIn("碧桂园", text)
 
     def test_income_by_method_and_receivable(self):
-        # 营收日报 日×付款方式透视 + 应收列
+        # 看板#213:营收日报 日×付款方式透视 + 应收列
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             b = _bill(client, [{"item_name": "x", "unit_price": 1000, "quantity": 1, "fee_type": "种植费"}])
-            client.post(f"/api/bills/{b}/pay", json={"methods": [{"method": "现金", "amount": 600}, {"method": "云闪付", "amount": 400}], "request_id": uuid.uuid4().hex})
+            client.post(f"/api/bills/{b}/pay", json={"methods": [{"method": "现金", "amount": 600}, {"method": "扫码付", "amount": 400}], "request_id": uuid.uuid4().hex})
             d = client.get("/api/reports/income?date_from=2026-01-01&date_to=2030-01-01").json()
             self.assertIn("现金", d["methods"])
-            self.assertIn("云闪付", d["methods"])
+            self.assertIn("扫码付", d["methods"])
             self.assertEqual(d["total_amount"], 1000)
             self.assertEqual(d["total_receivable"], 1000)        # 账单净应收
             day = d["days"][0]
             self.assertEqual(day["methods"]["现金"], 600)
-            self.assertEqual(day["methods"]["云闪付"], 400)
+            self.assertEqual(day["methods"]["扫码付"], 400)
             self.assertEqual(day["receivable"], 1000)
 
     def test_paytype_parse_from_paiddetail(self):
         from local_app.paid_detail import paytype_from_detail
-        self.assertEqual(paytype_from_detail("云闪付:1233.00"), "云闪付")
-        self.assertEqual(paytype_from_detail("云闪付:200||现金:800"), "多种")
+        self.assertEqual(paytype_from_detail("扫码付:1233.00"), "扫码付")
+        self.assertEqual(paytype_from_detail("扫码付:200||现金:800"), "多种")
         self.assertEqual(paytype_from_detail(""), "")
+
+    def test_paytype_applies_configured_alias(self):
+        """上游写法与本地收款选项写法不一致时，靠 DENTAL_PAY_METHOD_ALIASES 归一；没配就按原文落。"""
+        from local_app.paid_detail import paytype_from_detail
+        with mock.patch.dict(os.environ, {"DENTAL_PAY_METHOD_ALIASES": "扫码Pay=扫码付"}):
+            self.assertEqual(paytype_from_detail("扫码Pay:1233.00"), "扫码付")
+        with mock.patch.dict(os.environ, {"DENTAL_PAY_METHOD_ALIASES": ""}):
+            self.assertEqual(paytype_from_detail("扫码Pay:1233.00"), "扫码Pay")
 
 
 if __name__ == "__main__":

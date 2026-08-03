@@ -33,6 +33,7 @@ REPORT_ROUTES = (
     ("/api/reports/staff-workload", "report.performance.view"),
     ("/api/store-stats/role-perf", "report.performance.view"),
     ("/api/reports/handle-category", "report.operations.view"),
+    ("/api/reports/reconcile", "report.operations.view"),
     ("/api/store-stats/reconcile-calendar", "report.operations.view"),
     ("/api/store-stats/clinic-log", "report.operations.view"),
 )

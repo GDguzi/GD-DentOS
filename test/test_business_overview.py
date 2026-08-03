@@ -16,7 +16,7 @@ def _setup(tmp):
         auth.create_user(conn, "admin", "管理员", "admin123", role="admin")
         conn.execute("insert into patients(patient_identity, display_name, updated_at, current_hash) "
                      "values ('P','张三','x','h')")
-        # 累计消费口径：有效收款1000计入;作废原单(CancelMark且正500)排除;退费-200冲减 → 净800
+        # 累计消费口径(#276)：有效收款1000计入;作废原单(CancelMark且正500)排除;退费-200冲减 → 净800
         conn.execute("insert into payments(payment_id, patient_identity, amount, pay_time, source_json) "
                      "values ('y1','P',1000,'2026-01-01 10:00','{}')")
         conn.execute("insert into payments(payment_id, patient_identity, amount, pay_time, source_json) "

@@ -1,8 +1,8 @@
-// 回归:window.prompt() 在嵌入式浏览器/自动化环境可能不支持("prompt() is not
+// #548 回归:window.prompt() 在嵌入式浏览器/自动化环境可能不支持("prompt() is not
 // supported")。appPrompt(message, defaultValue) 是应用内modal替代品，接口对齐
 // window.prompt——resolve 输入字符串，取消/Esc resolve null。
 // 抽出 helpers.js 的 appPrompt，stub 最小 document，沙箱 eval 真测交互路径。
-// 跑：node --test test/web/test_app_prompt.mjs
+// 跑：node --test test/web/test_app_prompt_548.mjs
 import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
@@ -82,7 +82,7 @@ function makeSandbox() {
   return sandbox;
 }
 
-test("点确定 → resolve 输入框当前值", async () => {
+test("#548 点确定 → resolve 输入框当前值", async () => {
   const sandbox = makeSandbox();
   const p = sandbox.__appPrompt("取消原因（必填）：", "");
   sandbox.__lastOverlay.children.input.value = "患者要求退款";
@@ -92,7 +92,7 @@ test("点确定 → resolve 输入框当前值", async () => {
   assert.strictEqual(sandbox.__lastOverlay.removed, true, "确认后应移除overlay");
 });
 
-test("点取消 → resolve null", async () => {
+test("#548 点取消 → resolve null", async () => {
   const sandbox = makeSandbox();
   const p = sandbox.__appPrompt("撤销理由：", "");
   sandbox.__lastOverlay.children.cancelBtn.click();
@@ -100,7 +100,7 @@ test("点取消 → resolve null", async () => {
   assert.strictEqual(result, null);
 });
 
-test("按 Escape → resolve null(对齐原生prompt取消语义)", async () => {
+test("#548 按 Escape → resolve null(对齐原生prompt取消语义)", async () => {
   const sandbox = makeSandbox();
   const p = sandbox.__appPrompt("请输入：", "");
   sandbox.__fireKeydown("Escape");
@@ -108,7 +108,7 @@ test("按 Escape → resolve null(对齐原生prompt取消语义)", async () => 
   assert.strictEqual(result, null);
 });
 
-test("按 Enter → resolve 输入框当前值(对齐原生prompt回车确认)", async () => {
+test("#548 按 Enter → resolve 输入框当前值(对齐原生prompt回车确认)", async () => {
   const sandbox = makeSandbox();
   const p = sandbox.__appPrompt("请输入：", "默认值");
   sandbox.__lastOverlay.children.input.value = "改过的值";
@@ -117,7 +117,7 @@ test("按 Enter → resolve 输入框当前值(对齐原生prompt回车确认)",
   assert.strictEqual(result, "改过的值");
 });
 
-test("defaultValue 预填进输入框", async () => {
+test("#548 defaultValue 预填进输入框", async () => {
   const sandbox = makeSandbox();
   sandbox.__appPrompt("返回日期", "2026-07-05");
   assert.strictEqual(sandbox.__lastOverlay.children.input.value, "2026-07-05");
@@ -125,7 +125,7 @@ test("defaultValue 预填进输入框", async () => {
   assert.strictEqual(sandbox.__lastOverlay.children.input.autocomplete, "off");
 });
 
-test("appPrompt overlay 可见且高于已知最高业务浮层", () => {
+test("#548 appPrompt overlay 可见且高于已知最高业务浮层", () => {
   const sandbox = makeSandbox();
   sandbox.__appPrompt("请输入：", "");
   const overlay = sandbox.__lastOverlay;
@@ -137,7 +137,7 @@ test("appPrompt overlay 可见且高于已知最高业务浮层", () => {
   );
 });
 
-test("password 模式隐藏输入并不在 HTML 预填 value", async () => {
+test("#548 password 模式隐藏输入并不在 HTML 预填 value", async () => {
   const sandbox = makeSandbox();
   const p = sandbox.__appPrompt("请输入当前密码：", "", {type: "password"});
   const {input, inputTag} = sandbox.__lastOverlay.children;
@@ -152,7 +152,7 @@ test("password 模式隐藏输入并不在 HTML 预填 value", async () => {
   assert.doesNotMatch(sandbox.__lastOverlay.innerHTML, /机密密码/);
 });
 
-test("password 的非空 defaultValue 只写 DOM property，Enter/确定都返回原值", async () => {
+test("#548 password 的非空 defaultValue 只写 DOM property，Enter/确定都返回原值", async () => {
   const sentinel = "非空密码哨兵";
   for (const action of ["Enter", "确定"]) {
     const sandbox = makeSandbox();
@@ -168,7 +168,7 @@ test("password 的非空 defaultValue 只写 DOM property，Enter/确定都返�
   }
 });
 
-test("显式 autocomplete 经属性转义，恶意 type 降级为 text", () => {
+test("#548 显式 autocomplete 经属性转义，恶意 type 降级为 text", () => {
   const sandbox = makeSandbox();
   sandbox.__appPrompt("请输入：", "默认值", {
     type: 'password" autofocus onfocus="steal',

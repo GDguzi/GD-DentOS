@@ -82,12 +82,17 @@ jobs:
       - name: 安装依赖与 PyInstaller
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt pyinstaller
+          # 必须带 requirements-ocr.txt：拍照建档走苹果 Vision，靠 pyobjc 桥接。
+          # 源码方式跑一般不用装(系统自带 /usr/bin/python3 预装了 pyobjc)，但这里是
+          # setup-python 装的独立解释器,冻结后借不到系统 PyObjC —— 漏了这行,发出去的
+          # Mac 包 /api/ocr/status 就是 available:false,拍照建档入口整个隐藏。
+          # 本机实测:装了即 available:true(engine=macos-vision),现有 spec 无需加 hiddenimports。
+          pip install -r requirements.txt -r requirements-ocr.txt pyinstaller
 
       - name: 打包一键包
         run: pyinstaller packaging/macos/good-dental-mac.spec --distpath dist --workpath build --clean --noconfirm
 
-      - name: 冒烟——启动、健康检查、登录页 200
+      - name: 冒烟——启动、健康检查、登录页 200、拍照建档可用
         run: |
           set -euo pipefail
           mkdir -p smoke && cp dist/good-dental-clinic smoke/
@@ -103,7 +108,22 @@ jobs:
           done
           if [ "$ok" != "1" ]; then grep -v "已建管理员" out.log || true; kill $pid 2>/dev/null || true; exit 1; fi
           curl -sf -o /dev/null http://127.0.0.1:8892/ || { kill $pid 2>/dev/null || true; exit 1; }
-          echo "smoke ok: health 200 / login page 200"
+          # 拍照建档：/api/ocr/status 要登录才给看，用首启打印的管理员口令登一下。
+          # 不断言这条，OCR 依赖漏装时包照样打得出来、冒烟照样绿，只有用户下载后才发现入口没了。
+          # `|| true` 不可省：grep 没命中会让整条管道在 pipefail 下失败，set -e 当场静默退出，
+          # 下面那句诊断根本打不出来 —— CI 里就成了"失败但不说为什么"(本机实测踩到)。
+          pw="$(grep -o 'admin / [a-f0-9]*' out.log | head -1 | awk '{print $3}' || true)"
+          [ -n "$pw" ] || { echo "没从启动输出里取到首启口令，冒烟无法验证 OCR"; kill $pid 2>/dev/null || true; exit 1; }
+          curl -sf -c jar.txt -X POST http://127.0.0.1:8892/api/auth/login \
+            -H 'Content-Type: application/json' -d "{\"username\":\"admin\",\"password\":\"$pw\"}" -o /dev/null \
+            || { echo "冒烟登录失败"; kill $pid 2>/dev/null || true; exit 1; }
+          ocr="$(curl -sf -b jar.txt http://127.0.0.1:8892/api/ocr/status)"
+          echo "ocr status: $ocr"
+          case "$ocr" in
+            *'"available":true'*) : ;;
+            *) echo "❌ 拍照建档不可用——多半是漏装 requirements-ocr.txt(pyobjc)"; kill $pid 2>/dev/null || true; exit 1;;
+          esac
+          echo "smoke ok: health 200 / login page 200 / ocr available"
           kill $pid 2>/dev/null || true
 
       - name: 打包 zip（改名 .command 才能双击启动）

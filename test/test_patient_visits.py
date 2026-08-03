@@ -85,7 +85,7 @@ class PatientVisitsTimelineTest(unittest.TestCase):
         self.assertEqual(len(d0601["medical_records"]), 2)
         self.assertEqual(len(d0601["bills"]), 1)
         self.assertEqual(len(d0601["appointments"]), 1)
-        # 就诊行要显示时分:预约对象必须带 start_time(SQL 查了不能在组装时漏放)
+        # #444/#446 就诊行要显示时分:预约对象必须带 start_time(SQL 查了不能在组装时漏放)
         self.assertEqual(d0601["appointments"][0]["start_time"], "2026-06-01 09:00")
         self.assertEqual(len(d0601["return_visits"]), 0)
         self.assertEqual(len(d0601["treatments"]), 2)

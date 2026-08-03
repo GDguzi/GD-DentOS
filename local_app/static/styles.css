@@ -66,7 +66,7 @@
 .today-status-item strong,
 .today-kpi-item strong,
 .today-card-head strong,
-.today-work-entry strong,
+.today-saas-entry strong,
 .treatment-visit-total,
 .treatment-items td,
 .bill-group {
@@ -121,7 +121,7 @@ body {
   color: #b3bcc4;
   font-size: 11px;
   letter-spacing: 0.3px;
-  /* 版本号禁止断词折行,窄栏内截断出省略号(悬停title看全) */
+  /* #763 版本号禁止断词折行,窄栏内截断出省略号(悬停title看全) */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -704,14 +704,14 @@ select,
   font-size: 12px;
 }
 
-.today-work-layout {
+.today-saas-layout {
   display: grid;
   grid-template-columns: minmax(150px, 190px) minmax(0, 1fr);
   gap: 10px;
   align-items: start;
 }
 
-.today-work-entry-list {
+.today-saas-entry-list {
   display: grid;
   gap: 2px;
   border: 1px solid var(--line);
@@ -721,7 +721,7 @@ select,
   overflow: hidden;
 }
 
-.today-work-entry {
+.today-saas-entry {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
@@ -736,21 +736,21 @@ select,
   text-align: left;
 }
 
-.today-work-entry:last-child {
+.today-saas-entry:last-child {
   border-bottom: 0;
 }
 
-.today-work-entry:hover {
+.today-saas-entry:hover {
   color: var(--ink);
   background: var(--surface-2);
 }
 
-.today-work-entry.active {
+.today-saas-entry.active {
   color: var(--accent-dark);
   background: var(--accent-soft);
 }
 
-.today-work-entry span {
+.today-saas-entry span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -759,12 +759,12 @@ select,
   font-weight: 700;
 }
 
-.today-work-entry strong {
+.today-saas-entry strong {
   color: var(--accent-dark);
   font-size: 13px;
 }
 
-.today-work-main {
+.today-saas-main {
   display: grid;
   gap: 10px;
   min-width: 0;
@@ -905,7 +905,7 @@ select,
 .today-queue-row {
   display: grid;
   /* 操作列固定宽:单排小按钮(5状态+7操作共12键)，表头与各行列边一致对齐 | 患者 | 时间·诊室 | 医生·项目 | 状态 */
-  /* 12键*36px(原32px太窄挤字) */
+  /* #545:12键*36px(原32px太窄挤字) */
   grid-template-columns: 450px minmax(150px, 1.1fr) minmax(110px, 1.1fr) minmax(120px, 1.3fr) 78px;
   min-height: 32px;
   align-items: center;
@@ -986,7 +986,7 @@ select,
 .tq-proj-today { color: var(--ink); }
 .tq-proj-today b { color: var(--ok); background: #e7f6ee; }
 .tq-arr { color: var(--ok); font-size: 11px; }
-/* 约/到/离时间标签化小块,清晰可辨 */
+/* 扫荡#397:约/到/离时间标签化小块,清晰可辨 */
 .tq-t { display: inline-block; font-size: 11px; padding: 0 5px; margin: 0 3px 2px 0; border-radius: 8px; background: var(--surface-2); color: var(--ink); white-space: nowrap; }
 .tq-t b { font-weight: 600; color: var(--muted); margin-right: 2px; }
 .tq-t-arr { background: var(--ok-soft); color: var(--ok); }
@@ -1117,7 +1117,7 @@ select,
   text-align: center;
 }
 
-/* 简表被后端 limit 截断时的说明(如生日 显示前50条/共68) */
+/* #487:简表被后端 limit 截断时的说明(如生日 显示前50条/共68) */
 .today-limit-note {
   font-size: 12px;
   color: var(--muted);
@@ -1129,7 +1129,7 @@ select,
   padding: 6px;
 }
 
-/* 左入口右侧简表 */
+/* #321/#362 左入口右侧简表 */
 .today-simple-list {
   padding: 6px;
 }
@@ -1162,7 +1162,7 @@ select,
   white-space: nowrap;
 }
 
-/* 今日结算表格:表头/数据行/合计行同一套网格列,金额右对齐。
+/* 今日结算表格(对齐SaaS):表头/数据行/合计行同一套网格列,金额右对齐。
    置于 .today-row 之后使 grid 覆盖其 display:block。 */
 .settle-row {
   display: grid;
@@ -1780,11 +1780,252 @@ select,
   line-height: 1.5;
 }
 
+.sync-status-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+/* #484 运维红绿灯:会话保活/全量同步/最近备份 */
+.sync-health-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.sync-health-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 13px;
+  background: var(--surface);
+}
+
+.sync-health-item small {
+  color: var(--muted);
+}
+
+.sh-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.sh-ok .sh-dot { background: var(--ok); }
+.sh-warn .sh-dot { background: var(--warn); }
+.sh-bad .sh-dot { background: var(--danger); }
+.sh-bad { border-color: var(--danger); background: var(--danger-soft); }
+.sh-warn { border-color: var(--warn); background: var(--warn-soft); }
+
+.sync-status-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(110px, 1fr));
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+}
+
+.sync-status-item {
+  min-height: 54px;
+  padding: 8px 10px;
+  border-right: 1px solid var(--line);
+}
+
+.sync-status-item:last-child {
+  border-right: 0;
+}
+
+.sync-status-item span,
+.sync-image-status span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.sync-status-item strong,
+.sync-image-status strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 16px;
+}
+
+.sync-status-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(220px, 0.8fr);
+  gap: 10px;
+}
+
+.sync-status-block {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+}
+
+.sync-status-head {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  font-weight: 700;
+}
+
+.sync-batch-list {
+  display: grid;
+}
+
+.sync-batch-row {
+  display: grid;
+  grid-template-columns: 1fr 0.7fr 0.7fr 1.1fr 1.2fr;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.sync-batch-row:last-child {
+  border-bottom: 0;
+}
+
+.sync-batch-row span,
+.sync-batch-row small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sync-batch-row small {
+  color: var(--muted);
+}
+
+.sync-image-status {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 10px;
+}
+
+/* 立即同步按钮条 */
+.sync-now-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0 4px;
+}
+
+.sync-now-status {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* #367 全量九维同步主按钮:主色块 + 副标题 */
+.sync-full-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 14px;
+  background: var(--accent);
+  color: var(--white);
+  border: 0;
+  border-radius: 4px;
+}
+.sync-full-btn small,
+.sync-now-bar .plain-button small {
+  display: block;
+  font-weight: 400;
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+/* 九维对账面板 */
+.reconcile-panel {
+  margin-top: 16px;
+}
+
+.reconcile-table {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+  overflow-x: auto;
+}
+
+.reconcile-row {
+  display: grid;
+  grid-template-columns: 92px repeat(9, minmax(46px, 1fr)) 52px;
+  gap: 6px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  align-items: center;
+  min-width: 700px;
+}
+
+.reconcile-row:last-child {
+  border-bottom: 0;
+}
+
+.reconcile-head {
+  font-weight: 700;
+  color: var(--muted);
+  font-size: 12px;
+  background: #f7faf9;
+}
+
+.recon-cell {
+  text-align: center;
+}
+
+.recon-ok {
+  color: var(--ok);
+}
+
+.recon-diff {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.recon-na {
+  color: var(--muted);
+  text-align: center;
+}
+
+.recon-date {
+  white-space: nowrap;
+}
+
+.recon-diff-badge {
+  margin-left: 8px;
+  color: var(--danger);
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.recon-ok-badge {
+  margin-left: 8px;
+  color: var(--ok);
+  font-weight: 700;
+  font-size: 12px;
+}
+
 .reconcile-empty,
 .reconcile-hint {
   padding: 10px;
   color: var(--muted);
   font-size: 12px;
+}
+
+.sync-image-status small {
+  grid-column: 1 / -1;
+  color: var(--muted);
 }
 
 .image-library-status {
@@ -2467,7 +2708,7 @@ textarea {
 }
 
 .workspace-tabs {
-  /* 产品决策:13个tab永远单行,放不下横向滚动——高度稳定不抖,无孤儿tab */
+  /* #763 用户拍板:13个tab永远单行,放不下横向滚动——高度稳定不抖,无孤儿tab */
   display: flex;
   flex-wrap: nowrap;
   overflow-x: auto;
@@ -2482,7 +2723,7 @@ textarea {
 
 .workspace-tab {
   display: inline-flex;
-  flex-shrink: 0;          /* 单行滚动模式下按钮不许被压瘪换行 */
+  flex-shrink: 0;          /* #763 单行滚动模式下按钮不许被压瘪换行 */
   white-space: nowrap;
   gap: 6px;
   align-items: center;
@@ -3295,7 +3536,7 @@ textarea {
 .tooth-item-form textarea { min-height: 50px; }
 .tooth-item-form-actions { display: flex; gap: 10px; align-items: center; }
 
-/* === 病历编辑器版面 === */
+/* === 病历编辑器官方版面 (对标 docs/官方UI截图/04) === */
 .official-editor .editor-topbar {
   display: flex;
   align-items: center;
@@ -3421,7 +3662,7 @@ textarea {
 }
 .editor-save-btn:hover { background: var(--accent-dark); }
 
-/* === 牙位选择器 === */
+/* === 官方版牙位选择器 (对标 docs/官方UI截图/05) === */
 .official-tooth-modal { min-width: 680px; max-width: 720px; }
 /* 覆盖旧版四象限两列网格：官方版上下两排牙弓 */
 .official-tooth-modal .tooth-grid {
@@ -3675,7 +3916,7 @@ body.editor-overlay-open { overflow: hidden; }
   display: flex;
   align-items: center;
   gap: 6px;
-  /* 禁换行+行内滚动会把备注/删除键推出1280宽可视区,改换行,窄屏折行仍全可见可点 */
+  /* #545:禁换行+行内滚动会把备注/删除键推出1280宽可视区,改换行,窄屏折行仍全可见可点 */
   flex-wrap: wrap;
 }
 .plan-tooth-cell {
@@ -3688,7 +3929,7 @@ body.editor-overlay-open { overflow: hidden; }
   cursor: pointer;
 }
 .plan-tooth-empty { color: var(--muted); font-size: 12px; }
-.plan-handle-btn { flex: 0 0 150px; }   /* 原选择器 .plan-handle 与类名不符,宽度约束一直没生效 */
+.plan-handle-btn { flex: 0 0 150px; }   /* #545:原选择器 .plan-handle 与类名不符,宽度约束一直没生效 */
 .plan-name { flex: 1 1 120px; min-width: 100px; }
 .plan-price { flex: 0 0 80px; }
 .plan-qty { flex: 0 0 50px; }
@@ -3791,10 +4032,10 @@ body.editor-overlay-open { overflow: hidden; }
 .bill-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .bill-table th, .bill-table td { padding: 8px 10px; border-bottom: 1px solid #eef1f4; text-align: left; white-space: nowrap; }
 .bill-table thead th { background: #f7f9fb; color: var(--muted); font-weight: 600; position: sticky; top: 0; }
-.bill-table .num { text-align: right; min-width: 66px; }   /* 防金额列被挤窄→右对齐 nowrap 文字向左溢出叠到邻列(750.00750.00) */
+.bill-table .num { text-align: right; min-width: 66px; }   /* #378 防金额列被挤窄→右对齐 nowrap 文字向左溢出叠到邻列(750.00750.00) */
 .bill-table tfoot td { font-weight: 700; border-top: 2px solid var(--line); background: #fafbfc; }
 .bt-row:hover { background: #f7faf9; }
-/* 14列表格默认1280宽度下"打印/详情"操作列会滚到屏幕外——固定在右侧,横向滚动时始终可点。 */
+/* #545:14列表格默认1280宽度下"打印/详情"操作列会滚到屏幕外——固定在右侧,横向滚动时始终可点。 */
 .bill-table .bt-ops, .bill-table th.bt-ops-h { position: sticky; right: 0; background: var(--white); box-shadow: -6px 0 6px -6px rgba(0, 0, 0, .12); }
 .bill-table th.bt-ops-h { background: #f7f9fb; }
 .bt-row:hover td.bt-ops { background: #f7faf9; }
@@ -3810,11 +4051,11 @@ body.editor-overlay-open { overflow: hidden; }
 .bt-dtitle { font-size: 12px; color: var(--muted); margin: 6px 0 3px; }
 .bt-items { width: auto; min-width: 360px; border-collapse: collapse; font-size: 12px; }
 .bt-items td { padding: 2px 14px 2px 0; border: 0; white-space: nowrap; }
-.bt-items td.num { min-width: 60px; }   /* 详情金额列防溢出叠字 */
+.bt-items td.num { min-width: 60px; }   /* #378 详情金额列防溢出叠字 */
 .bt-ft { color: var(--muted); }
 .bt-pay { font-size: 12px; color: var(--ink); padding: 1px 0; }
 .bt-pay-void { color: var(--muted); text-decoration: line-through; }
-/* 收费单卡片 */
+/* #14 收费单卡片 */
 .bc-card { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; background: var(--white); border-left: 3px solid var(--line); }
 .bc-card.bc-pending { border-left-color: var(--warn); }
 .bc-card.bc-paid { border-left-color: var(--accent); }
@@ -3825,7 +4066,7 @@ body.editor-overlay-open { overflow: hidden; }
 .bc-state { margin-left: auto; font-size: 12px; padding: 1px 10px; border-radius: 10px; background: var(--surface-2); color: var(--muted); }
 .bc-card.bc-pending .bc-state { background: #fdf6ec; color: var(--warn); }
 .bc-card.bc-paid .bc-state { background: var(--ok-soft); color: var(--accent-dark); }
-.bc-card.bc-refunded { border-left-color: var(--danger); opacity: 0.75; }   /* 已退费 */
+.bc-card.bc-refunded { border-left-color: var(--danger); opacity: 0.75; }   /* 扫荡#392 已退费 */
 .bc-refunded .bc-state { background: var(--danger-soft); color: var(--danger); }
 .bc-items { margin: 6px 0; border-top: 1px solid var(--line); padding-top: 4px; }
 .bc-item { display: grid; grid-template-columns: minmax(0,1fr) auto 44px 70px; gap: 6px; align-items: baseline; font-size: 12px; padding: 1px 0; }
@@ -3847,9 +4088,9 @@ body.editor-overlay-open { overflow: hidden; }
 .lo-head { display: flex; gap: 10px; align-items: center; font-weight: 600; margin-bottom: 4px; }
 .lo-actions { margin-left: auto; display: flex; gap: 6px; }
 .lo-btn { padding: 8px 20px; border-radius: 8px; font-size: 14px; cursor: pointer; border: 1px solid var(--line); background: var(--white); color: var(--ink); }
-.lo-edit { border-color: var(--accent); color: var(--accent-dark); font-weight: 600; }   /* 突出编辑(主流程) */
+.lo-edit { border-color: var(--accent); color: var(--accent-dark); font-weight: 600; }   /* #371 突出编辑(主流程) */
 .lo-price { border-color: var(--accent); color: var(--accent-dark); }
-.treatments-add-extra { font-size: 12px; color: var(--muted); }   /* 弱化「另开处置单」为次级 */
+.treatments-add-extra { font-size: 12px; color: var(--muted); }   /* #371 弱化「另开处置单」为次级 */
 .lo-pay { background: var(--accent); color: var(--white); border-color: var(--accent); }
 .lo-void { color: var(--danger); }
 .lo-consent { border-color: var(--accent); color: var(--accent-dark); }
@@ -3862,8 +4103,8 @@ body.editor-overlay-open { overflow: hidden; }
 .st-priced { background: #fdf3e3; color: var(--warn); }
 .st-paid { background: #e6f5ea; color: var(--ok); }
 .st-voided { background: #f3f4f5; color: var(--muted); }
-.st-refunded { background: var(--danger-soft); color: var(--danger); }   /* 已退费 */
-.lo-disc { font-size: 11px; color: var(--muted); font-weight: 400; margin-left: 4px; }   /* 原价/优惠提示 */
+.st-refunded { background: var(--danger-soft); color: var(--danger); }   /* #379 已退费 */
+.lo-disc { font-size: 11px; color: var(--muted); font-weight: 400; margin-left: 4px; }   /* 扫荡#391 原价/优惠提示 */
 .lo-card.lo-refunded { opacity: 0.7; }
 /* 划价弹框行 */
 .ord-tip { font-size: 12px; color: var(--muted); margin: 4px 0 8px; }
@@ -3883,16 +4124,16 @@ body.editor-overlay-open { overflow: hidden; }
 .pr-total { font-weight: 700; margin-left: auto; }
 
 /* === 收款弹框 === */
-/* 回访工作流 */
+/* #13 回访工作流 */
 .return-visit-editor.rv-done { border-left: 3px solid var(--accent); }
 .return-visit-editor textarea { width: 100%; min-height: 44px; margin-top: 6px; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font-size: 13px; }
 .rv-actions { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
 .rv-done-btn { background: var(--accent); color: var(--white); border: 1px solid var(--accent); border-radius: 6px; padding: 4px 14px; cursor: pointer; font-size: 13px; }
 .rv-done-btn:hover { filter: brightness(1.05); }
-/* 知情同意书 — 患者页顶部直达签字入口 */
+/* #15 知情同意书 — 患者页顶部直达签字入口 */
 .consent-entry-btn { margin-left: auto; padding: 6px 16px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent); color: var(--white); font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; }
 .consent-entry-btn:hover { filter: brightness(1.05); }
-/* 知情同意书 */
+/* #15 知情同意书 */
 .bill-consent-btn { padding: 3px 12px; border: 1px solid var(--accent); border-radius: 6px; background: var(--white); color: var(--accent-dark); font-size: 13px; cursor: pointer; }
 .bill-consent-btn:hover { background: var(--accent); color: var(--white); }
 .consent-modal { background: var(--white); border-radius: var(--radius-md); width: min(880px, 96vw); height: min(94vh, 1100px); max-height: 96vh; display: flex; flex-direction: column; overflow: hidden; }
@@ -3904,7 +4145,7 @@ body.editor-overlay-open { overflow: hidden; }
 /* C 处置单式同意书选择器 */
 .consent-pick-btn { padding: 8px 16px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent); color: var(--white); font-size: 14px; font-weight: 600; cursor: pointer; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .consent-picker { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; max-height: 46vh; overflow: auto; background: var(--white); }
-.cp-empty { padding: 12px; font-size: 13px; color: var(--muted); text-align: center; }   /* 无模板空态 */
+.cp-empty { padding: 12px; font-size: 13px; color: var(--muted); text-align: center; }   /* 扫荡#395 无模板空态 */
 .cp-group { margin-bottom: 8px; }
 .cp-cat { font-size: 12px; color: var(--muted); margin: 4px 0; position: sticky; top: 0; background: var(--white); }
 .cp-item { display: block; width: 100%; text-align: left; padding: 9px 12px; margin: 3px 0; border: 1px solid var(--line); border-radius: 8px; background: var(--white); color: var(--ink); font-size: 14px; cursor: pointer; }
@@ -3934,13 +4175,13 @@ body.editor-overlay-open { overflow: hidden; }
 .consent-sign { flex: 1; min-width: 280px; }
 .cs-label { font-size: 13px; color: var(--muted); margin-bottom: 4px; display: flex; gap: 10px; align-items: center; }
 .sign-pad { border: 1px dashed var(--line); border-radius: 8px; width: 100%; max-width: 320px; height: 120px; touch-action: none; background: var(--white); cursor: crosshair; }
-/* 配台人员管理弹框 */
+/* #4 配台人员管理弹框 */
 .staff-modal { background: var(--white); border-radius: var(--radius-md); width: min(520px, 94vw); max-height: 86vh; display: flex; flex-direction: column; overflow: hidden; }
 .staff-body { padding: 14px 16px; overflow: auto; }
 /* 新增预约弹窗 */
 .appt-modal { background: var(--white); border-radius: var(--radius-md); width: min(460px, 94vw); max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; }
 .appt-body { padding: 14px 16px; overflow: auto; display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0; }
-/* 头尾不可被压缩,只有中间内容区滚动(同 .pay-modal 已验证写法),
+/* #543:头尾不可被压缩,只有中间内容区滚动(同 .pay-modal 已验证写法),
    否则内容撑满时 90vh 溢出会被 overflow:hidden 裁掉底部保存按钮。 */
 .appt-modal .modal-head, .appt-modal .modal-actions { flex: 0 0 auto; }
 
@@ -4085,10 +4326,10 @@ body.editor-overlay-open { overflow: hidden; }
 /* ===== 新增预约弹窗:三栏(日历+时段表+项目)对标官方 ===== */
 .appt-modal-wide { width: min(1040px, 97vw); }
 /* 高度+滚动放在每一栏(非容器):否则 grid 列高=内容高、超出被容器裁掉、缺 min-height:0 列也滚不动 */
-/* 78vh 是拍脑袋的固定值,没扣 modal-head/modal-actions 高度,720p 下三者叠加超 90vh,
+/* #543:78vh 是拍脑袋的固定值,没扣 modal-head/modal-actions 高度,720p 下三者叠加超 90vh,
    底部"预约"按钮被 overflow:hidden 裁掉。appt-dialog 收缩到 appt-modal 的剩余可用空间
    (grid-template-rows:minmax(0,1fr) 让单行随容器收缩,而非按内容撑高)，各栏用 height:100%
-   跟随实际可用高度，而不是猜一个 vh 比例；每栏仍各自独立滚动，不影响 的既有修复。 */
+   跟随实际可用高度，而不是猜一个 vh 比例；每栏仍各自独立滚动，不影响 #267 的既有修复。 */
 .appt-dialog { display: grid; grid-template-columns: 286px 1fr 1fr; flex: 1 1 auto; min-height: 0; grid-template-rows: minmax(0, 1fr); }
 .appt-col { padding: 12px 14px; height: 100%; overflow-y: auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
 .appt-col-left, .appt-col-mid { border-right: 1px solid var(--line); }
@@ -4099,7 +4340,7 @@ body.editor-overlay-open { overflow: hidden; }
 .appt-cal-nav { border: 0; background: none; cursor: pointer; font-size: 16px; color: var(--accent-dark); padding: 0 6px; }
 .appt-cal-dow { display: grid; grid-template-columns: repeat(7,1fr); font-size: 11px; color: var(--muted); text-align: center; }
 .appt-cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 1px; }
-.appt-cal-cell { border: 0; background: none; cursor: pointer; aspect-ratio: 1; font-size: 12px; border-radius: 50%; color: var(--ink); }
+.appt-cal-cell { width: 100%; min-width: 0; min-height: 0; padding: 0; border: 0; background: none; cursor: pointer; aspect-ratio: 1; font-size: 12px; border-radius: 50%; color: var(--ink); }
 .appt-cal-cell.empty { cursor: default; }
 .appt-cal-cell:hover:not(.empty) { background: var(--accent-soft); }
 .appt-cal-cell.today { color: var(--accent-dark); font-weight: 700; }
@@ -4260,7 +4501,7 @@ body.editor-overlay-open { overflow: hidden; }
 .ord-team { min-width: 96px; }
 .pay-modal { background: var(--white); border-radius: var(--radius-md); width: min(380px, 92vw); display: flex; flex-direction: column; overflow: hidden; }
 .pay-modal { width: min(560px, 94vw); }
-/* 多方式拆分后弹窗变高,小屏(1280×720/iPad)会顶出视口、确认按钮被截。
+/* 扫荡#394:多方式拆分后弹窗变高,小屏(1280×720/iPad)会顶出视口、确认按钮被截。
    封顶高度+正文滚动+头尾固定,保证「确认收款」始终可点。 */
 .pay-modal { max-height: 92vh; }
 .pay-modal .pay-body { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
@@ -4284,7 +4525,7 @@ body.editor-overlay-open { overflow: hidden; }
 .pay-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
 .pay-input { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-size: 14px; }
 
-/* 付款方式自定义：收费方式行内⚙️ + 设置弹窗列表 */
+/* #638 付款方式自定义：收费方式行内⚙️ + 设置弹窗列表 */
 .pay-method-line { display: flex; gap: 6px; align-items: center; }
 .pay-method-line select { flex: 1; }
 .pm-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
@@ -4322,7 +4563,7 @@ body.editor-overlay-open { overflow: hidden; }
 .tc-collected strong { color: var(--ok); font-size: 16px; }
 .tc-pending strong { color: var(--accent-dark); font-size: 16px; }
 .tc-methods { color: var(--muted); }
-/* 配台统计 */
+/* #6 配台统计 */
 .staff-workload { margin: 6px 0; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--soft); padding: 8px 12px; font-size: 13px; }
 .sw-head { font-weight: 600; color: var(--accent-dark); margin-bottom: 6px; }
 .sw-empty { color: var(--muted); font-size: 12px; }
@@ -4485,7 +4726,7 @@ body.editor-overlay-open { overflow: hidden; }
 .wh-sec { margin: 14px 0 6px; font-size: 14px; color: var(--ink); }
 
 /* 退费弹框 */
-/* 确认/取消按钮原来混在整块可滚动内容流里,得滚到底才看得到;
+/* #543:确认/取消按钮原来混在整块可滚动内容流里,得滚到底才看得到;
    改成同 .pay-modal 一致的写法——头尾固定,只有中间内容(.refund-scroll)滚动。 */
 .refund-modal { background: var(--white); border-radius: 10px; width: min(880px, 94vw); max-height: 92vh; padding: 16px 20px; display: flex; flex-direction: column; overflow: hidden; }
 .refund-modal .modal-head, .refund-modal .modal-actions { flex: 0 0 auto; }
@@ -4500,7 +4741,7 @@ body.editor-overlay-open { overflow: hidden; }
 .refund-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--ink); }
 .refund-status { color: var(--danger); font-size: 13px; min-height: 18px; }
 
-/* 应用内输入弹窗(替代 window.prompt，见 helpers.js appPrompt) */
+/* #548:应用内输入弹窗(替代 window.prompt，见 helpers.js appPrompt) */
 .app-prompt-modal { background: var(--white); border-radius: var(--radius-md); width: min(420px, 92vw); display: flex; flex-direction: column; }
 .app-prompt-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
 .app-prompt-msg { margin: 0; white-space: pre-line; font-size: 14px; color: var(--ink); }
@@ -4517,7 +4758,7 @@ body.editor-overlay-open { overflow: hidden; }
 .rpt-note { font-size: 12px; color: var(--muted); margin: 0 2px 12px; }
 .rpt-filter .ord-input { max-width: 200px; }
 
-/* === 店内统计：左竖菜单 + 内容区 === */
+/* === 店内统计：SaaS 风格左竖菜单 + 内容区(对标本店统计截图) === */
 /* 不设 overflow:hidden——会裁掉日期选择器等绝对定位弹层；圆角靠子元素自身处理。 */
 .rpt-shell { display: flex; min-height: 560px; background: var(--white); border: 1px solid var(--line); border-radius: 12px; }
 .rpt-sidenav { flex: 0 0 168px; background: #fafbfc; border-right: 1px solid #eef1ef; padding: 12px 10px;
@@ -4595,9 +4836,9 @@ body.editor-overlay-open { overflow: hidden; }
 .rp-month { width: 224px; }
 .rp-mhead { text-align: center; font-weight: 600; margin-bottom: 6px; }
 .rp-week { display: grid; grid-template-columns: repeat(7, 1fr); color: #9aa6a1; font-size: 12px; text-align: center; }
-/* 横向间隙设 0(只留竖向 3px),选中区间的高亮才连成一条、不再一格一格断开。 */
+/* #689:横向间隙设 0(只留竖向 3px),选中区间的高亮才连成一条、不再一格一格断开。 */
 .rp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px 0; margin-top: 2px; }
-/* 全局 button{color:#fff;padding:7px 14px;min-height:34px} 会污染日历格子(白字+撑宽挤破布局)——全部清掉 */
+/* 全局 button{color:#fff;padding:7px 14px;min-height:34px} 会污染日历格子(白字+撑宽挤破布局)——全部清掉(#691) */
 .rp-cell { height: 32px; padding: 0; min-height: 0; min-width: 0; border: none; background: transparent;
   cursor: pointer; border-radius: 50%; font-size: 13px; color: var(--ink); }
 .rp-cell:hover:not(.rp-empty):not(.rp-end) { background: #e6f2ed; }
@@ -4667,7 +4908,7 @@ body.editor-overlay-open { overflow: hidden; }
 /* 配置管理（设置中心） */
 .cfg-body { margin-top: 12px; }
 .cfg-hint { font-size: 12px; color: var(--muted); font-weight: normal; }
-/* 第3步 全店设置表单 */
+/* #617第3步 全店设置表单 */
 .cfg-shop { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center; }
 .cfg-shop label { display: flex; align-items: center; gap: 6px; font-size: 13px; }
 .cfg-shop .cfg-wide { flex: 1 1 100%; }
@@ -4796,7 +5037,7 @@ body.editor-overlay-open { overflow: hidden; }
 
 /* 候诊队列:已收费/已处置的预约删除按钮锁定置灰(不可删,防对不上号) */
 .tq-step.tq-locked{opacity:.3;cursor:not-allowed}
-.tq-step:disabled{opacity:.3;cursor:not-allowed}   /* 已离开闭环/已治疗收费:真禁用按钮置灰 */
+.tq-step:disabled{opacity:.3;cursor:not-allowed}   /* #330 已离开闭环/已治疗收费:真禁用按钮置灰 */
 
 /* 操作历史(审计日志)页 */
 .audit-filters{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0;align-items:center}
@@ -5184,7 +5425,7 @@ body.theme-pearl .today-kpi-item:last-child { border-right: 1px solid var(--glas
 body.theme-pearl .today-kpi-item strong { margin-top: 8px; color: var(--ink); font-size: 22px; }
 
 body.theme-pearl .today-status-strip,
-body.theme-pearl .today-work-entry-list,
+body.theme-pearl .today-saas-entry-list,
 body.theme-pearl .today-queue-panel {
   border-color: var(--glass-border);
   background: var(--glass-surface);
@@ -5192,12 +5433,12 @@ body.theme-pearl .today-queue-panel {
 }
 
 body.theme-pearl .today-status-strip { min-height: 62px; border-radius: 18px; }
-body.theme-pearl .today-work-layout { gap: 14px; grid-template-columns: minmax(168px, 194px) minmax(0, 1fr); }
-body.theme-pearl .today-work-entry-list,
+body.theme-pearl .today-saas-layout { gap: 14px; grid-template-columns: minmax(168px, 194px) minmax(0, 1fr); }
+body.theme-pearl .today-saas-entry-list,
 body.theme-pearl .today-queue-panel { border-radius: 18px; }
-body.theme-pearl .today-work-entry { background: rgba(255, 255, 255, .38); }
-body.theme-pearl .today-work-entry:hover { background: rgba(232, 243, 244, .82); }
-body.theme-pearl .today-work-entry.active {
+body.theme-pearl .today-saas-entry { background: rgba(255, 255, 255, .38); }
+body.theme-pearl .today-saas-entry:hover { background: rgba(232, 243, 244, .82); }
+body.theme-pearl .today-saas-entry.active {
   background: rgba(218, 239, 240, .9);
   box-shadow: inset 3px 0 0 var(--accent);
 }
@@ -5216,7 +5457,7 @@ body.theme-pearl :focus-visible {
   body.theme-pearl .topbar,
   body.theme-pearl .today-kpi-item,
   body.theme-pearl .today-status-strip,
-  body.theme-pearl .today-work-entry-list,
+  body.theme-pearl .today-saas-entry-list,
   body.theme-pearl .today-queue-panel {
     background: var(--glass-surface-solid);
   }
@@ -5260,7 +5501,7 @@ body.theme-pearl :focus-visible {
     grid-template-columns: minmax(240px, .72fr) minmax(0, 1.28fr);
   }
   body.theme-pearl .today-kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  body.theme-pearl .today-work-layout { grid-template-columns: 168px minmax(0, 1fr); }
+  body.theme-pearl .today-saas-layout { grid-template-columns: 168px minmax(0, 1fr); }
 }
 
 @media (max-width: 840px) {
@@ -5271,14 +5512,14 @@ body.theme-pearl :focus-visible {
   body.theme-pearl .today-work-panel { padding: 10px; }
   body.theme-pearl .today-overview-grid { grid-template-columns: 1fr; }
   body.theme-pearl .today-kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  body.theme-pearl .today-work-layout { grid-template-columns: 1fr; }
-  body.theme-pearl .today-work-entry-list {
+  body.theme-pearl .today-saas-layout { grid-template-columns: 1fr; }
+  body.theme-pearl .today-saas-entry-list {
     display: flex;
     max-width: 100%;
     overflow-x: auto;
     scrollbar-width: thin;
   }
-  body.theme-pearl .today-work-entry {
+  body.theme-pearl .today-saas-entry {
     flex: 0 0 138px;
     border-right: 1px solid rgba(108, 150, 156, .12);
     border-bottom: 0;

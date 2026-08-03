@@ -1,6 +1,6 @@
 """店内统计 · 医生统计(病历为轴)口径回归。
 
-合成诊室场景，锁住：
+合成诊室场景，锁住（含 #672~#676 复审修复）：
 - 初诊/复诊 量按病历 record_type；
 - 实收按收款时间 pay_time 落区间、剔除作废原单、退费负数冲减；
 - 实收以区间内全部收款为全集，账单连不上就诊（含无病历患者）进「未归类」；
@@ -106,7 +106,7 @@ class DoctorPerfTest(unittest.TestCase):
             self.assertEqual(self._row(self._q(client), "测试医生B")["first"]["paid"], 700.0)
 
     def test_paid_filtered_by_pay_time(self):
-        # 同一账单跨月收款，查 7 月只计 7 月现金流
+        # #673: 同一账单跨月收款，查 7 月只计 7 月现金流
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             with connect(db) as c:
@@ -119,7 +119,7 @@ class DoctorPerfTest(unittest.TestCase):
             self.assertEqual(row["first"]["paid"], 400.0)         # 只算7月现金流
 
     def test_unclassified_covers_no_record_patient(self):
-        # 区间内无任何病历患者的收款也要进未归类(与收银闭合)
+        # #673: 区间内无任何病历患者的收款也要进未归类(与收银闭合)
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             with connect(db) as c:
@@ -135,12 +135,12 @@ class DoctorPerfTest(unittest.TestCase):
             self.assertEqual(self._row(d, "测试医生B")["first"]["paid"], 200.0)
 
     def test_voided_bill_receivable_excluded(self):
-        # 作废账单应收不计入
+        # #674: 作废账单应收不计入
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             with connect(db) as c:
                 _visit(c, "r8", "p1", "测试医生B", "初诊", "2026-07-08", study="S8")
-                _bill(c, "b8", "p1", "2026-07-08", 1000, study="S8", state="900")  # 外部系统撤单码
+                _bill(c, "b8", "p1", "2026-07-08", 1000, study="S8", state="900")  # SaaS撤单码
                 c.commit()
             d = self._q(client)
             rows = [r for r in d["rows"] if r["name"] == "测试医生B"]
@@ -148,7 +148,7 @@ class DoctorPerfTest(unittest.TestCase):
             self.assertEqual(recv, 0)   # 作废单不进应收
 
     def test_receivable_nets_discount(self):
-        # 应收扣 DiscountFee 净额
+        # #675: 应收扣 DiscountFee 净额
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             with connect(db) as c:
@@ -161,7 +161,7 @@ class DoctorPerfTest(unittest.TestCase):
             self.assertEqual(row["first"]["paid"], 700.0)
 
     def test_discount_with_thousands_comma(self):
-        # DiscountFee 带千分位逗号 "1,400.00"
+        # #675: DiscountFee 带千分位逗号 "1,400.00"
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             with connect(db) as c:
@@ -172,7 +172,7 @@ class DoctorPerfTest(unittest.TestCase):
             self.assertEqual(row["first"]["receivable"], 3600.0)   # 5000 - 1400
 
     def test_same_day_multi_record_earliest(self):
-        # 同患者同日多病历，退化匹配取当日最早就诊
+        # #676: 同患者同日多病历，退化匹配取当日最早就诊
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             with connect(db) as c:
@@ -202,7 +202,7 @@ class DoctorPerfTest(unittest.TestCase):
             self.assertEqual(d["total"]["first"]["deal"] + d["total"]["revisit"]["deal"], 2)
 
     def test_staff_filter_no_cross_doctor_unclassified(self):
-        # 按单医生筛选时，别的医生的收款不得落进当前视图的未归类(防串账)
+        # #678: 按单医生筛选时，别的医生的收款不得落进当前视图的未归类(防串账)
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             with connect(db) as c:

@@ -5,7 +5,7 @@
 const ORDER_STATUS_LABEL = {recorded: "待划价", priced: "待收费", paid: "已收费", voided: "已撤销", refunded: "已退费"};
 const ORDER_STATUS_CLASS = {recorded: "st-recorded", priced: "st-priced", paid: "st-paid", voided: "st-voided", refunded: "st-refunded"};
 
-// 处置→病情诊断 联想（与病种联想检查 诊断→检查 互为反向）。
+// #5：处置→病情诊断 联想（与病种联想检查 诊断→检查 互为反向）。
 // 处置名里命中关键词 → 推荐对应常见病情诊断。
 const HANDLE_DG_HINTS = [
   {kw: ["根管", "开髓", "拔髓", "盖髓", "充根", "牙髓", "干髓"], dg: "牙髓炎/根尖周炎"},
@@ -28,7 +28,7 @@ function newOrderRow() {
           tooth: "", unit_price: "", quantity: 1, fee_type: ""};
 }
 function freshOrderModel() {
-  // 配台默认带出上次选择(记住上次)；离职/停用人员不带入新单
+  // #4：配台默认带出上次选择(记住上次)；#52：离职/停用人员不带入新单
   let last = (typeof lastTeam === "function") ? lastTeam() : {};
   if (typeof activeTeam === "function") last = activeTeam(last);
   return {
@@ -52,7 +52,7 @@ async function openTreatmentOrder(editOrder) {
   if (!workspacePatientId) return;
   const m = document.getElementById("treatmentOrderModal");
   if (!m) return;
-  if (typeof ensureStaff === "function") await ensureStaff();  // 先载人员库；freshOrderModel据此过滤离职配台
+  if (typeof ensureStaff === "function") await ensureStaff();  // #4 先载人员库；#52 freshOrderModel据此过滤离职配台
   const pid = workspacePatientId;
   _orderTodayVisit = null;
   try {
@@ -61,7 +61,7 @@ async function openTreatmentOrder(editOrder) {
     if (r.ok) _orderTodayVisit = await r.json();
   } catch { _orderTodayVisit = null; }
   if (pid !== workspacePatientId) return;
-  // 编辑既有单标题应为「编辑处置」,不再笼统显示「新增处置」
+  // #372:编辑既有单标题应为「编辑处置」,不再笼统显示「新增处置」
   const title = document.getElementById("treatmentOrderTitle");
   if (title) title.textContent = editOrder ? "编辑处置" : "新增处置";
   if (editOrder) {
@@ -126,7 +126,7 @@ function renderOrderRow(ri, row) {
 function renderTreatmentOrderEditor() {
   const box = orderEditorEl();
   if (!box || !orderModel) return;
-  // 先挂号后处置：今天没挂号时给「挂号并继续」引导(选医生→建今日挂号→默认带入)
+  // 先挂号后处置：今天没挂号时给「挂号并继续」引导，选中医生只带入当前处置。
   const noReg = _orderTodayVisit && _orderTodayVisit.has_today === false;
   const regBanner = noReg ? `
     <div class="ord-reg-banner">
@@ -174,7 +174,7 @@ function pickOrderTooth(ri) {
   const row = orderModel.rows[ri]; if (!row) return;
   openToothSelectorWith(row.tooth, teeth => { row.tooth = (teeth || []).join(","); renderTreatmentOrderEditor(); });
 }
-// 按已选处置推荐病情诊断，命中的诊断去重追加到诊断框(不覆盖已填)
+// #5：按已选处置推荐病情诊断，命中的诊断去重追加到诊断框(不覆盖已填)
 function suggestOrderDiagnosis() {
   orderSyncFromDom();
   const names = orderModel.rows.map(r => String(r.item_name || "")).join(" ");
@@ -195,7 +195,7 @@ function suggestOrderDiagnosis() {
 
 async function saveTreatmentOrder(priceNow = false) {
   orderSyncFromDom();
-  const pid = workspacePatientId;   // 快照本次开单的患者，跨 await 不再读全局，防开单期间切患者把本单弹到别人档案
+  const pid = workspacePatientId;   // #77 快照本次开单的患者，跨 await 不再读全局，防开单期间切患者把本单弹到别人档案
   const status = document.getElementById("treatmentOrderStatus");
   const items = orderModel.rows.filter(r => String(r.item_name || "").trim()).map(r => ({
     handle_id: r.handle_id, item_name: r.item_name, item_code: r.item_code, tooth: r.tooth, fee_type: r.fee_type || "",
@@ -203,7 +203,7 @@ async function saveTreatmentOrder(priceNow = false) {
   }));
   if (!items.length) { if (status) status.textContent = "至少选一个处置"; return; }
   if (status) status.textContent = priceNow ? "开单划价中..." : "保存中...";
-  // 配台人员落库 + 记住上次选择
+  // #4：配台人员落库 + 记住上次选择
   const team = {
     doctor_name: orderModel.doctor_name || "", nurse_name: orderModel.nurse_name || "",
     consultant_name: orderModel.consultant_name || "", assistant_name: orderModel.assistant_name || "",
@@ -222,7 +222,7 @@ async function saveTreatmentOrder(priceNow = false) {
   if (!res.ok) { const m = await res.json().catch(() => ({})); if (status) status.textContent = "保存失败：" + (m.detail || res.status); return; }
   const resp = await res.json().catch(() => ({}));
   closeTreatmentOrder();
-  // 开单期间已切到别的患者 → 丢弃后续刷新/弹同意书，避免把本单弹到当前别人的档案
+  // #77：开单期间已切到别的患者 → 丢弃后续刷新/弹同意书，避免把本单弹到当前别人的档案
   if (pid !== workspacePatientId) return;
   refreshTreatmentsTab();
   // 「开单并划价」：处置存为"待划价"后**自动进入划价界面**(选价/打折/免单)→确认才生成待收费单。
@@ -237,7 +237,7 @@ async function saveTreatmentOrder(priceNow = false) {
 
 function refreshTreatmentsTab() {
   if (typeof workspaceLoadedTabs !== "undefined") workspaceLoadedTabs.delete("treatments");
-  if (typeof evictVisitsCache === "function") evictVisitsCache();  // 处置/划价影响就诊时间轴
+  if (typeof evictVisitsCache === "function") evictVisitsCache();  // #57 处置/划价影响就诊时间轴
   if (typeof switchWorkspaceTab === "function") switchWorkspaceTab("treatments");
   if (typeof loadAuditLogs === "function") loadAuditLogs();
 }
@@ -270,7 +270,7 @@ async function loadLocalOrders() {
     if (pid !== workspacePatientId) return;
   }
   localOrdersCache = orders;
-  // 产品决策:撤销/作废的单不显示;退费的显示(钱退了要留痕)。
+  // #381 用户拍板:撤销/作废的单不显示;退费的显示(钱退了要留痕)。
   // 缓存仍存全量——编辑/划价按 order_id 查缓存不受影响。
   const shownOrders = orders.filter(o => (o.effective_status || o.status) !== "voided");
   if (!shownOrders.length) { box.innerHTML = ""; return; }
@@ -285,7 +285,7 @@ function renderLocalOrderCard(o) {
   const orderItems = o.items || [];
   const lineFee = it => (it.total_fee != null ? Number(it.total_fee) : (Number(it.unit_price) || 0) * (Number(it.quantity) || 1));
   const grossFee = orderItems.reduce((s, it) => s + lineFee(it), 0);   // 各项原价合计
-  // 已划价单合计要用账单净额(扣整单优惠后),与收费单一致,不能只显示各项原价和。
+  // 扫荡#391:已划价单合计要用账单净额(扣整单优惠后),与收费单一致,不能只显示各项原价和。
   const discount = Number(o.discount) || 0;
   const hasBill = !!(o.bill_id && o.bill_total != null);
   const totalFee = hasBill ? Number(o.bill_total) : Math.max(grossFee - discount, 0);
@@ -311,7 +311,7 @@ function renderLocalOrderCard(o) {
   // 空单(无明细)不能划价(否则出0元空账单);有项目才显示划价
   if (o.status === "recorded" && orderItems.length) btns.push(`<button type="button" class="lo-btn lo-price" onclick="openPriceOrder('${escapeAttr(o.order_id)}')">划价</button>`);
   // 用户:处置页面不放"收费"。划价后收费统一走收费tab/收费模块,处置页不再出收费按钮。
-  // 已退费(effective_status=refunded)不能再撤销/收费,只读展示。
+  // #379:已退费(effective_status=refunded)不能再撤销/收费,只读展示。
   if (st !== "paid" && st !== "refunded" && o.status !== "voided") btns.push(`<button type="button" class="lo-btn lo-void" onclick="voidOrder('${escapeAttr(o.order_id)}')">撤销</button>`);
   if (o.status === "priced" || st === "paid" || st === "refunded") btns.push(`<button type="button" class="lo-btn" onclick="printOrder('${escapeAttr(o.order_id)}')">打印</button>`);
   // 每张处置单上签它对应的知情同意书(带本次处置项目/费用，自动匹配类别)
@@ -351,12 +351,12 @@ function openOrderConsent(orderId) {
   }
 }
 
-// 撤单理由预设；末项「其他」走手填
+// 撤单理由预设(对齐原系统 SaaS 高频撤单理由)；末项「其他」走手填
 const VOID_REASONS = ["收费方式选择错误", "收费医生选择错误", "折扣错误", "收费金额错误",
   "处置选择错误", "患者个人原因", "患者要求改方案"];
 
 function voidOrder(orderId) {
-  // 撤销必须填理由。改为 外部系统 风格预设下拉(选一个)+其他手填
+  // #9：撤销必须填理由。改为 SaaS 风格预设下拉(选一个)+其他手填
   let m = document.getElementById("voidReasonModal");
   if (!m) { m = document.createElement("div"); m.id = "voidReasonModal"; m.className = "modal-backdrop"; document.body.appendChild(m); }
   m.hidden = false;
@@ -435,7 +435,7 @@ function openReceiptPrint(opts) {
       .tot{display:flex;justify-content:space-between;font-size:13px;margin-top:8px;font-weight:700;}
       .foot{text-align:center;color:#8a96a3;font-size:11px;margin-top:14px;}
     </style></head><body onload="window.print()">
-    <h2>${escapeHtml(window.CLINIC_NAME || "GD · DentOS")}</h2>
+    <h2>${escapeHtml(window.CLINIC_NAME || "口腔门诊部")}</h2>
     <div class="sub">${escapeHtml(opts.subtitle || "收费凭单")}</div>
     <div class="meta">${metaLines.join("<br>")}</div>
     <table><thead><tr><th>项目</th><th>牙位</th><th class="r">单价</th><th class="r">数量</th><th class="r">金额</th></tr></thead><tbody>${rows || '<tr><td colspan="5">（无明细）</td></tr>'}</tbody></table>
@@ -463,7 +463,7 @@ function printOrder(orderId) {
   });
 }
 
-// 从按钮 data-* 读取参数（HTML属性转义安全），避免把患者姓名拼进 inline onclick 的 JS 字符串
+// #35：从按钮 data-* 读取参数（HTML属性转义安全），避免把患者姓名拼进 inline onclick 的 JS 字符串
 function printBillFromEl(el) {
   if (!el) return;
   const d = el.dataset;
@@ -508,7 +508,7 @@ async function openPriceOrder(orderId) {
     items: (order.items || []).map(it => {
       const up = it.unit_price || 0, q = it.quantity || 1;
       const gross = up * q;
-      // 直填"本项金额"(默认=原价)，自动算折率；免单勾选
+      // #1：直填"本项金额"(默认=原价)，自动算折率；免单勾选
       return { item_id: it.item_id, item_name: it.item_name, unit_price: up,
                quantity: q, gross: gross, free: false, amount: String(gross) };
     }),
@@ -532,7 +532,7 @@ function priceLineFee(it) {
   if (it.free) return 0;
   return priceValidAmount(it.amount);
 }
-// 自动折率显示：本项金额/原价。免单→留空(免单复选框已表意,避免与其并列成"免单 免单")；
+// 自动折率显示：本项金额/原价。免单→留空(免单复选框已表意,避免与其并列成"免单 免单",#375)；
 // 原价及以上→"原价"；否则 x.x折
 function priceRateText(it) {
   if (it.free) return "—";
@@ -540,7 +540,7 @@ function priceRateText(it) {
   if (fee == null) return "无效";
   const g = it.gross || 0;
   if (g <= 0) return "—";
-  if (fee <= 0.005) return "免费";   // 改价为0=免费,不显示误导的「0.0折」
+  if (fee <= 0.005) return "免费";   // 扫荡#399:改价为0=免费,不显示误导的「0.0折」
   const r = fee / g;
   if (r >= 1) return "原价";
   return (r * 10).toFixed(1) + "折";
@@ -569,7 +569,7 @@ function renderPriceEditor() {
       <label class="pr-free"><input type="checkbox" ${it.free ? "checked" : ""} onchange="priceToggleFree(${i},this.checked)">免单</label>
       <span class="pr-line" data-pr-line="${i}">${priceLineFee(it) == null ? "无效" : priceLineFee(it)}</span>
     </div>`).join("");
-  // 全部免单/小计为0时,整单优惠无意义→禁用并提示,避免前台以为又减了一笔
+  // #375:全部免单/小计为0时,整单优惠无意义→禁用并提示,避免前台以为又减了一笔
   const subtotal = (priceModel.items || []).reduce((s, it) => s + (priceLineFee(it) || 0), 0);
   const noDiscount = subtotal <= 0.005;
   box.innerHTML = `
@@ -628,50 +628,31 @@ async function submitPriceOrder() {
   } catch { if (status) status.textContent = "划价失败（网络异常）"; return; }
   if (!res.ok) { const m = await res.json().catch(() => ({})); if (status) status.textContent = "划价失败：" + (m.detail || res.status); return; }
   closePriceOrder();
-  // 划价生成本地待收费单 → 刷新患者详情缓存并清收费 tab,否则收费 tab 仍是旧的0账单
+  // #374:划价生成本地待收费单 → 刷新患者详情缓存并清收费 tab,否则收费 tab 仍是旧的0账单
   if (typeof refreshWorkspaceDetail === "function") await refreshWorkspaceDetail();
   if (typeof workspaceLoadedTabs !== "undefined") workspaceLoadedTabs.delete("billing");
   refreshTreatmentsTab();
 }
 
-// 「挂号并继续」：选医生→建今日挂号(已到诊)→处置医生默认带入→去掉横幅继续录处置
+// 「挂号并继续」：原子快速挂号→处置医生带入→去掉横幅继续录处置。
 async function registerTodayThenOrder() {
   const sel = orderEditorEl() && orderEditorEl().querySelector("[data-reg-doctor]");
   const doctor = (sel && sel.value || "").trim();
-  if (!doctor) { window.alert("请先选挂号医生"); return; }
+  if (!doctor) { window.alert("请先选处置医生"); return; }
   const pid = workspacePatientId;
-  // 建号前重查一次——横幅弹出后前台/其他设备可能已挂号,此时并入当前就诊上下文,
-  // 绝不再造同日第二条"挂号"队列行;重查失败明确提示,不盲建。
-  let recheck;
-  try {
-    const r = await fetch(`/api/patients/${encodeURIComponent(pid)}/today-visit`);
-    if (!r.ok) { window.alert("挂号状态查询失败：" + r.status); return; }
-    recheck = await r.json();
-  } catch { window.alert("挂号状态查询失败（网络异常），请重试"); return; }
+  const result = await checkInPatient({
+    patientIdentity: pid,
+    displayName: "",
+    openTriageAfter: false,
+    switchToToday: false,
+    showSuccess: false,
+  });
+  if (!result) return;
   if (pid !== workspacePatientId) return;
-  if (recheck && recheck.has_today) {
-    if (typeof orderSyncFromDom === "function") orderSyncFromDom();
-    _orderTodayVisit = recheck;
-    if (orderModel && recheck.doctor_name) orderModel.doctor_name = recheck.doctor_name;
-    renderTreatmentOrderEditor();   // 横幅消失，带入已挂号医生
-    return;
-  }
-  const start = bjNowStr().slice(0, 16);   // 北京 "YYYY-MM-DD HH:MM"
-  let res;
-  try {
-    res = await fetch("/api/appointments", {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({patient_identity: pid, start_time: start, doctor_name: doctor,
-        item_name: "挂号", status: "已到诊", force: true}),
-    });
-  } catch { window.alert("挂号失败（网络异常）"); return; }
-  if (!res.ok) { const m = await res.json().catch(() => ({})); window.alert("挂号失败：" + (m.detail || res.status)); return; }
-  if (pid !== workspacePatientId) return;
-  if (typeof orderSyncFromDom === "function") orderSyncFromDom();  // 重渲前先存已填的诊断/单价/数量,别丢
-  _orderTodayVisit = {has_today: true, doctor_name: doctor};
+  if (typeof orderSyncFromDom === "function") orderSyncFromDom();  // #174:重渲前先存已填的诊断/单价/数量,别丢
+  _orderTodayVisit = {has_today: true, ...(result.appointment || {})};
   if (orderModel) orderModel.doctor_name = doctor;
   renderTreatmentOrderEditor();   // 横幅消失，医生已默认带入
-  if (typeof evictVisitsCache === "function") evictVisitsCache();
 }
 
 Object.assign(window, {

@@ -3,7 +3,7 @@
 import os as _os
 import time as _time
 
-# 诊所业务时间一律北京时区：宿主机系统时区可能不是国内，
+# 诊所业务时间一律北京时区：宿主机系统时区可能不是国内（如 America/Los_Angeles），
 # 全项目 138+ 处 datetime.now()/date.today() 都取本地时间，在包入口统一钉死。
 _os.environ["TZ"] = "Asia/Shanghai"
 if hasattr(_time, "tzset"):

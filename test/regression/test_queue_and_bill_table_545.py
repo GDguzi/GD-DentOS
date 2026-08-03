@@ -1,7 +1,7 @@
-"""回归(剩余部分)：候诊队列操作按钮32px太窄挤字；收费表格14列在1280宽度下
+"""#545 回归(剩余部分)：候诊队列操作按钮32px太窄挤字；收费表格14列在1280宽度下
 "打印/详情"操作列默认落在屏幕外，只能横向滚到底才看得到，无任何提示/固定。
 静态检查对应 CSS/HTML 是否已按更宽按钮+粘性操作列的方式修复。
-跑：python3 -m unittest test.test_queue_and_bill_table -q
+跑：python3 -m unittest test.test_queue_and_bill_table_545 -q
 """
 import unittest
 from pathlib import Path
@@ -30,7 +30,7 @@ if __name__ == "__main__":
     unittest.main()
 
     def test_plan_row_wraps_instead_of_overflow(self):
-        # 尾巴:治疗计划行禁换行+行内滚动把备注/删除键推出可视区 → 改 wrap;
+        # #545 尾巴:治疗计划行禁换行+行内滚动把备注/删除键推出可视区 → 改 wrap;
         # 且 .plan-handle 选择器与类名 plan-handle-btn 不符,宽度约束需真实生效
         import re
         block = re.search(r"\.plan-row \{[^}]+\}", self.styles).group(0)

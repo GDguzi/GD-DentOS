@@ -1,7 +1,7 @@
-// 回归:预约新增/取消保存成功后，今日工作台没有即时刷新(需手点"刷新今日")。
+// #544 回归:预约新增/取消保存成功后，今日工作台没有即时刷新(需手点"刷新今日")。
 // 抽出 submitNewAppointment / cancelAppointment / _refreshVisitsAfterApptChange 源码，
 // stub document/fetch/window，沙箱 eval 真测保存成功后有没有调 loadTodayWork。
-// 跑：node --test test/web/test_appointment_save_refresh.mjs
+// 跑：node --test test/web/test_appointment_save_refresh_544.mjs
 import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
@@ -56,13 +56,13 @@ function makeSandbox() {
   return {sandbox, calls};
 }
 
-test("新增预约保存成功 → 应刷新今日工作台(loadTodayWork)", async () => {
+test("#544 新增预约保存成功 → 应刷新今日工作台(loadTodayWork)", async () => {
   const {sandbox, calls} = makeSandbox();
   await sandbox.__submit();
   assert.strictEqual(calls.loadTodayWork, 1, "保存成功后应调用 loadTodayWork 刷新今日工作台，不能只等用户手点刷新");
 });
 
-test("取消预约成功 → 应刷新今日工作台(loadTodayWork)", async () => {
+test("#544 取消预约成功 → 应刷新今日工作台(loadTodayWork)", async () => {
   const {sandbox, calls} = makeSandbox();
   await sandbox.__cancel("appt1");
   assert.strictEqual(calls.loadTodayWork, 1, "取消成功后应调用 loadTodayWork，不能让今日队列停在旧状态(如仍显示已到达)");

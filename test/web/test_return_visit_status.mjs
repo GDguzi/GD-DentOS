@@ -1,4 +1,4 @@
-// 回访状态码不能裸显示「0」。沙箱 eval returnVisitStatusText 验证映射。
+// 扫荡#400:回访状态码不能裸显示「0」。沙箱 eval returnVisitStatusText 验证映射。
 import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";

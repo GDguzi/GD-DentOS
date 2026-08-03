@@ -31,19 +31,19 @@ test("store_stats 打 role-perf 接口 + 8列表头 + 未归类空态", () => {
   assert.ok(storeSrc.includes("unclassified"));
 });
 
-test("收入统计/门诊日志 有清空+导出按钮", () => {
+test("收入统计/门诊日志 有清空+导出按钮(#680/#686)", () => {
   assert.ok(storeSrc.includes("data-inc-clear") && storeSrc.includes("data-inc-csv"));
   assert.ok(storeSrc.includes("/api/reports/income.csv"));
   assert.ok(storeSrc.includes("data-cl-clear"));
 });
 
 test("日期字符串不得对 bjToday() 直接 .slice(它返回 Date,不是字符串)——用 localDateValue()", () => {
-  // 根因:bjToday().slice 在浏览器抛 'slice is not a function' → 报表卡"载入中"
+  // #691 根因:bjToday().slice 在浏览器抛 'slice is not a function' → 报表卡"载入中"
   assert.ok(!/bjToday\(\)\s*\.\s*slice/.test(storeSrc),
     "bjToday() 返回 Date,不能 .slice;取北京日期字符串用 localDateValue()");
 });
 
-test("loadReportsModule 进入时重置跳转tab(billing)避免立刻跳走(顶层报表)", () => {
+test("loadReportsModule 进入时重置跳转tab(billing)避免立刻跳走(#691顶层报表)", () => {
   assert.ok(/loadReportsModule[\s\S]*?_rptTab === "billing"\s*\)\s*_rptTab = "docstat"/.test(reportsSrc),
     "进报表模块应把停在 billing 跳转tab 的状态重置为默认");
 });

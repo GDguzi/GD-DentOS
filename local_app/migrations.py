@@ -39,7 +39,7 @@ def ensure_seed_roles(db_path=DEFAULT_DB_PATH):
 
 
 def ensure_preset_roles_present(db_path=DEFAULT_DB_PATH):
-    """升级用:幂等补齐 PRESET_ROLES 里缺失的角色。已 seed 过的旧库新增的
+    """#420 升级用:幂等补齐 PRESET_ROLES 里缺失的角色。已 seed 过的旧库新增的
     主任/收银员/客服/助理2 不会被 ensure_seed_roles 补(它只在空表时整体种)。
     只插缺失角色 + 其默认权限,**不动已存在角色**(用户可能已在矩阵里改过权限)。返回新增条数。"""
     from local_app.auth import DEFAULT_ROLE_PERMS, PRESET_ROLES
@@ -65,7 +65,7 @@ def ensure_preset_roles_present(db_path=DEFAULT_DB_PATH):
 
 
 def migrate_technician_role(db_path=DEFAULT_DB_PATH):
-    """一次性升级:产品决策去掉「技师」角色,技工功能并入 助理/前台。
+    """#502 一次性升级:用户拍板去掉「技师」角色,技工功能并入 助理/前台。
     仅当旧库 roles 表还有 technician 行时才执行(天然幂等,跑过一次后不再动,
     也不会覆盖用户之后在权限矩阵里的自定义):
     ①technician 账号迁到 assistant;②员工岗位 技师→助理(role + 多岗位 roles,去重);
@@ -94,13 +94,13 @@ def migrate_technician_role(db_path=DEFAULT_DB_PATH):
     return True
 
 
-# 技工功能并入后,存量角色要补的权限(只插缺失)
+# #502/#507:技工功能并入后,存量角色要补的权限(只插缺失)
 _ABSORBED_LAB_PERMS = (("assistant", "lab_order.manage"), ("assistant", "warehouse.view"),
                        ("assistant2", "lab_order.manage"), ("assistant2", "warehouse.view"),
                        ("reception", "lab_order.manage"))
 _LAB_PERMS_MARK = "migration.502_lab_perms"
 
-# 尾巴:产品决策助理功能加大——补 患者建档/编辑
+# #502尾巴:用户拍板(2026-07-02)助理功能加大——补 患者建档/编辑
 _ASSISTANT_PATIENT_PERMS = (("assistant", "patient.create"), ("assistant", "patient.edit"),
                             ("assistant2", "patient.create"), ("assistant2", "patient.edit"))
 _ASSISTANT_PATIENT_MARK = "migration.502_assistant_patient_perms"
@@ -133,18 +133,18 @@ def _one_shot_grant(db_path, mark, grants):
 
 
 def ensure_absorbed_lab_perms(db_path=DEFAULT_DB_PATH):
-    """的存量权限补齐不能只挂在 migrate_technician_role 上——停在 前的
+    """#507:#502 的存量权限补齐不能只挂在 migrate_technician_role 上——停在 #420 前的
     旧 6 角色库(从没建过 technician)直升当前版本时,那条路径不会跑,助理/前台仍缺技工权限。
     改为独立一次性升级(见 _one_shot_grant)。"""
     return _one_shot_grant(db_path, _LAB_PERMS_MARK, _ABSORBED_LAB_PERMS)
 
 
 def ensure_assistant_patient_perms(db_path=DEFAULT_DB_PATH):
-    """尾巴:产品决策助理(含助理2)补 患者建档/编辑,存量库一次性升级。"""
+    """#502尾巴:用户拍板助理(含助理2)补 患者建档/编辑,存量库一次性升级。"""
     return _one_shot_grant(db_path, _ASSISTANT_PATIENT_MARK, _ASSISTANT_PATIENT_PERMS)
 
 
-# 客户沟通(通话录音+沟通记录)并入后,存量库已存在的电话沟通主力角色不会被 ensure_seed_roles
+# #718:客户沟通(通话录音+沟通记录)并入后,存量库已存在的电话沟通主力角色不会被 ensure_seed_roles
 # 补新权限(它只在空表整体种)。给目标角色一次性补 call/communication 权限,否则旧库升级后这些角色
 # 看到「客户沟通」入口但接口 403。
 _COMM_CALL_ROLES = ("doctor", "reception", "consultant", "director", "support")
@@ -157,7 +157,7 @@ _COMM_CALL_MARK = "migration.718_comm_call_perms"
 
 
 def ensure_comm_call_perms(db_path=DEFAULT_DB_PATH):
-    """客户沟通(通话录音+沟通记录)权限一次性补给存量库目标角色。"""
+    """#718:客户沟通(通话录音+沟通记录)权限一次性补给存量库目标角色。"""
     return _one_shot_grant(db_path, _COMM_CALL_MARK, _COMM_CALL_PERMS)
 
 
@@ -165,7 +165,7 @@ _REPORT_ADMIN_ONLY_MARK = "migration.512_report_admin_only"
 
 
 def ensure_report_perm_admin_only(db_path=DEFAULT_DB_PATH):
-    """产品决策业绩/门诊报表只有院长(admin)可查——存量库一次性
+    """#512:用户拍板(2026-07-02)业绩/门诊报表只有院长(admin)可查——存量库一次性
     回收所有角色的 report.view 勾选(admin 本就代码层全通过,不受矩阵影响)。
     带标记只跑一次:用户之后想在权限矩阵给某角色单独授回,不会被再次回收。"""
     with connect(db_path) as conn:
@@ -188,14 +188,14 @@ _REFUND_RESTORE_MARK = "migration.813_refund_restore_bill_amounts"
 
 
 def restore_refunded_bill_amounts(db_path=DEFAULT_DB_PATH):
-    """①:退款改为不冲减 bills.total_fee/paid_fee 后,把存量本地退款(payment_record_type='refund',
+    """#813①:退款改为不冲减 bills.total_fee/paid_fee 后,把存量本地退款(payment_record_type='refund',
     仅本地退费写入)已冲减的金额一次性加回：total_fee += Σ退款、paid_fee += Σ退款——两边同加,
     欠款(total−优惠−paid)差值为 0,报表欠款不跳变；历史应收/实收恢复史实,新可退公式
     (paid_fee − Σ退款流水)对老单成立。
 
     ⚠️ 本迁移天然不幂等(重跑会翻倍加)：schema_migrations 记账 + app_settings 标记双保险锁死。
 
-    ⚠️ 只回填"老口径"退款(源自旧代码,已冲减过账单)。新口径退款(①后)不冲减 total/paid,
+    ⚠️ 只回填"老口径"退款(源自旧代码,已冲减过账单)。新口径退款(#813①后)不冲减 total/paid,
     绝不能再加回。判据=退款流水 source_json 有无 refund_items 键:老口径退款没有这个键(它是新
     口径才写的),新口径退款才有。不靠"迁移先于服务"的调用顺序保证安全(改钱迁移不能依赖时序)。"""
     old_style = ("payment_record_type = 'refund' and "
@@ -216,7 +216,7 @@ def restore_refunded_bill_amounts(db_path=DEFAULT_DB_PATH):
                               and p.bill_id is not null)
             """
         )
-        # 老口径退款(无 refund_items)把项目归属回填到 refunded_fee,补齐
+        # 修(多轮):老口径退款(无 refund_items)把项目归属回填到 refunded_fee,补齐
         # Σ项目已退 = Σ退款流水(实退净额)的不变式。否则历史整单退(未落项目)之后再按项退,
         # 新退款按"项目未退"算封顶,报表里老退款按比例、新退款按精确,叠加后某类别净额为负。
         # 迁移时所有退款流水都是老口径,按各项剩余额比例分摊 Σ实退额(整数分,余数归占比最大项,
@@ -270,7 +270,7 @@ def ensure_v3_role_permission_matrix(db_path=DEFAULT_DB_PATH):
     """v3 空库首启：把「仍是旧 35 键默认集」的预置角色权限改写为 旧→新映射后的
     99 键集（含依赖闭包，复用生产迁移同款 oneoff/legacy_permission_mapping）。
 
-    根因：v3 矩阵接口只收 99 新键并强校验依赖闭包,
+    根因(2026-07-26 净版冒烟)：v3 矩阵接口只收 99 新键并强校验依赖闭包,
     而 0001 种子写的是旧 35 键——lab_order.manage 无配套 lab_order.view,
     人员权限页 normalize 整页崩。生产库经一次性迁移显式赋新键免疫,空库全中招。
 
@@ -312,14 +312,14 @@ def ensure_v3_role_permission_matrix(db_path=DEFAULT_DB_PATH):
 # ---------- 登记册（只增不改不删；id 单调递增） ----------
 MIGRATIONS = [
     ("0001_seed_roles", ensure_seed_roles),                       # 首启预置角色+默认权限
-    ("0002_preset_roles_present", ensure_preset_roles_present),   # 补齐蓝本新增角色
-    ("0003_technician_role_merge", migrate_technician_role),      # 去技师并入助理
-    ("0004_absorbed_lab_perms", ensure_absorbed_lab_perms),       # 技工权限补齐
-    ("0005_assistant_patient_perms", ensure_assistant_patient_perms),  # 尾巴
-    ("0006_report_admin_only", ensure_report_perm_admin_only),    # 报表只院长
-    ("0007_comm_call_perms", ensure_comm_call_perms),             # 沟通权限补齐
+    ("0002_preset_roles_present", ensure_preset_roles_present),   # #420 补齐蓝本新增角色
+    ("0003_technician_role_merge", migrate_technician_role),      # #502 去技师并入助理
+    ("0004_absorbed_lab_perms", ensure_absorbed_lab_perms),       # #507 技工权限补齐
+    ("0005_assistant_patient_perms", ensure_assistant_patient_perms),  # #502尾巴
+    ("0006_report_admin_only", ensure_report_perm_admin_only),    # #512 报表只院长
+    ("0007_comm_call_perms", ensure_comm_call_perms),             # #718 沟通权限补齐
     ("0008_seed_referral_sources", _seed_referral_sources),       # 患者来源树种子
-    ("0009_refund_restore_bill_amounts", restore_refunded_bill_amounts),  # ① 退款冲减史实回填
+    ("0009_refund_restore_bill_amounts", restore_refunded_bill_amounts),  # #813① 退款冲减史实回填
     ("0010_v3_role_perm_matrix", ensure_v3_role_permission_matrix),  # v3 空库角色矩阵新键化
 ]
 

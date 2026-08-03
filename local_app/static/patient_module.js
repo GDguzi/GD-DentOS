@@ -6,7 +6,7 @@ let patientCenterState = { tab: "all", group: "", expanded: "", selected: "", ta
 let patientGroupsCache = null;
 let _groupPatients = {};   // 分组key -> 患者行数组(展开时缓存)
 let _todayAppts = [];      // 今日 tab 当前预约列表(供折叠时局部重渲,不重新拉)
-let _todayKeyword = "";    // 今日 tab 当前搜索词(折叠/切视图局部重渲也要保留过滤)
+let _todayKeyword = "";    // #121/#181 今日 tab 当前搜索词(折叠/切视图局部重渲也要保留过滤)
 
 // 今日 tab 按搜索词过滤(姓名/电话)；空词返回全量。loadPatientTodayTab 和 refreshTodayLeft 共用
 function todayFilteredAppts() {
@@ -108,7 +108,7 @@ async function loadPatientTodayTab(token, keyword) {
   const allAppts = tw.appointments || [];
   _todayAppts = allAppts;
   indexPatients(allAppts);
-  // 今日 tab 搜索生效(姓名/电话);搜索词存模块态,折叠/切视图局部重渲也保留过滤
+  // #121/#181：今日 tab 搜索生效(姓名/电话);搜索词存模块态,折叠/切视图局部重渲也保留过滤
   _todayKeyword = String(keyword || "").trim().toLowerCase();
   const appts = todayFilteredAppts();
   modulePanel.innerHTML = `
@@ -209,7 +209,7 @@ function refreshTodayLeft() {   // 折叠时局部重渲左栏(不重新拉数�
   const rail = document.getElementById("pcRail");
   if (!rail) return;
   const date = patientCenterState.todayDate || (typeof localDateValue === "function" ? localDateValue() : "");
-  rail.innerHTML = renderTodayLeft(todayFilteredAppts(), date);   // 保留搜索过滤
+  rail.innerHTML = renderTodayLeft(todayFilteredAppts(), date);   // #181 保留搜索过滤
   bindPatientCenter(modulePanel);
   bindTodayLeft(modulePanel);
 }
@@ -507,7 +507,7 @@ function exportPatients() {
   if (st.tableQ) params.set("q", st.tableQ);
   const g = st.tableGroup || "";
   if (g === "最近患者") params.set("scope", "recent");
-  else if (g === "__birthday__") params.set("birthday_on", (typeof localDateValue === "function" ? localDateValue() : ""));  // 导出复用今日生日筛选
+  else if (g === "__birthday__") params.set("birthday_on", (typeof localDateValue === "function" ? localDateValue() : ""));  // #124 导出复用今日生日筛选
   else if (g) params.set("group", g);
   if (st.doctorFilter) params.set("doctor", st.doctorFilter);
   if (st.firstDoctorFilter) params.set("first_doctor", st.firstDoctorFilter);
@@ -537,11 +537,16 @@ function bindTableBody(body) {
     allChks.forEach(x => x.checked = on);
   }));
   syncAll();
-  // 挂号(预约今日) / 更多(进档案)
-  body.querySelectorAll("[data-pc-reg]").forEach(b => b.addEventListener("click", ev => {
+  // 挂号(患者已到店，进入今日队列) / 更多(进档案)
+  body.querySelectorAll("[data-pc-reg]").forEach(b => b.addEventListener("click", async ev => {
     ev.stopPropagation();
-    if (typeof openNewAppointment === "function") openNewAppointment({start: (typeof localDateValue === "function" ? localDateValue() : "") + " 09:00"});
-    if (typeof pickApptPatient === "function") pickApptPatient(b);
+    await checkInPatient({
+      patientIdentity: b.dataset.pid || "",
+      displayName: b.dataset.pname || "",
+      openTriageAfter: false,
+      switchToToday: true,
+      showSuccess: true,
+    });
   }));
   body.querySelectorAll("[data-pc-more]").forEach(b => b.addEventListener("click", ev => {
     ev.stopPropagation(); openMoreMenu(b);   // 更多→下拉菜单(打开档案/合并患者)
@@ -745,12 +750,12 @@ function bindPatientCenter(container) {
   container.querySelectorAll("[data-pc-pick]").forEach(btn => {
     if (btn.dataset.pcBound) return; btn.dataset.pcBound = "1";
     btn.addEventListener("click", () => selectPatientProfile(btn.dataset.pcPick));
-    btn.addEventListener("keydown", e => {   // 表格行是div,补键盘 Enter/Space 打开
+    btn.addEventListener("keydown", e => {   // #116 表格行是div,补键盘 Enter/Space 打开
       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectPatientProfile(btn.dataset.pcPick); }
     });
   });
   container.querySelectorAll("[data-pc-open]").forEach(btn => once(btn, () => openPatientWorkspace(btn.dataset.pcOpen)));
-  container.querySelectorAll("[data-pc-appt]").forEach(btn => once(btn, event => {   // 含表格 .pt-op,不再限 .pc-op
+  container.querySelectorAll("[data-pc-appt]").forEach(btn => once(btn, event => {   // #119 含表格 .pt-op,不再限 .pc-op
     event.stopPropagation();
     if (typeof openNewAppointment === "function") openNewAppointment({});
     if (typeof pickApptPatient === "function") pickApptPatient(btn);  // 预选该患者(读 data-pid/pname,防注入)

@@ -1,4 +1,4 @@
-"""旧 35 权限键 → 新 99 权限键一次性迁移 CLI（映射见 legacy_permission_mapping.py）。
+"""旧 35 权限键 → 新 99 权限键一次性迁移 CLI（映射真相源 = docs/权限映射_旧到新_2026-07-18.md）。
 
 用法（仓库根执行）：
   python3 -m local_app.oneoff.migrate_legacy_permissions report --db PATH
@@ -234,7 +234,7 @@ def _build_parser():
     parser = argparse.ArgumentParser(
         prog="python3 -m local_app.oneoff.migrate_legacy_permissions",
         description="旧 35 权限键 → 新 99 权限键一次性迁移"
-        "（映射见 legacy_permission_mapping.py）",
+        "（映射: docs/权限映射_旧到新_2026-07-18.md，D1-D9 拍板）",
         epilog=EXIT_CODE_LEGEND,
     )
     sub = parser.add_subparsers(dest="command", required=True)

@@ -35,7 +35,7 @@ def _sample_plan():
 
 class TreatmentPlanCreateTest(unittest.TestCase):
     def test_non_integer_quantity_rejected(self):
-        # 方案建单数量非整数也拒绝报错(与处置单同口径),整数值/大数精确接受
+        # #557:方案建单数量非整数也拒绝报错(与处置单同口径),整数值/大数精确接受
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path, client = _client(tmpdir)
 
@@ -83,7 +83,7 @@ class TreatmentPlanCreateTest(unittest.TestCase):
             self.assertEqual(client.delete(f"/api/treatment-plans/{pid}").status_code, 404)
 
     def test_deleted_plan_cannot_confirm_or_bill(self):
-        # 软删后不能再走 status/bill 出账单(否则"已删"方案仍产生收费)
+        # #173：软删后不能再走 status/bill 出账单(否则"已删"方案仍产生收费)
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path, client = _client(tmpdir)
             plan_id = client.post("/api/patients/p1/treatment-plans", json=_sample_plan()).json()["plan_id"]
@@ -157,7 +157,7 @@ class TreatmentPlanStatusTest(unittest.TestCase):
             )
 
     def test_revert_transitions(self):
-        # 撤回确认(confirmed→draft)、撤回完成(done→confirmed)
+        # 复审#9：撤回确认(confirmed→draft)、撤回完成(done→confirmed)
         with tempfile.TemporaryDirectory() as tmpdir:
             _, client = _client(tmpdir)
             pid = self._create(client)
@@ -296,7 +296,7 @@ class TreatmentPlanGroupTest(unittest.TestCase):
             self.assertEqual(alt2["selected_item_id"], implant["item_id"])
 
     def test_select_rejected_after_confirmed(self):
-        # 已确认/已划价的计划不能再改二选一(否则总价与已生成账单脱节)
+        # 审查#14：已确认/已划价的计划不能再改二选一(否则总价与已生成账单脱节)
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path, client = _client(tmpdir)
             client.post("/api/patients/p1/treatment-plans", json=_grouped_plan())
@@ -347,7 +347,7 @@ class TreatmentPlanBillingTest(unittest.TestCase):
         return plan_id
 
     def test_plan_bill_has_bill_no(self):
-        # 计划转划价生成的账单要有编号(此前写空串,收费单"没有账单编号")
+        # 审查#13：计划转划价生成的账单要有编号(此前写空串,收费单"没有账单编号")
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path, client = _client(tmpdir)
             plan_id = self._grouped_with_selection(client)
@@ -396,7 +396,7 @@ class TreatmentPlanBillingTest(unittest.TestCase):
             self.assertEqual(resp.json()["total_fee"], 3700)
 
     def test_plan_bill_rounds_to_cents_and_settles(self):
-        # (同):计划转划价的逐项/总额也须取整到分,否则带厘账单收不齐
+        # #585(同#550):计划转划价的逐项/总额也须取整到分,否则带厘账单收不齐
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path, client = _client(tmpdir)
             plan_id = self._grouped_with_selection(client)
@@ -437,7 +437,7 @@ class TreatmentPlanBillingTest(unittest.TestCase):
             self.assertEqual(resp.status_code, 400)
 
     def test_bill_zero_total_settles_paid(self):
-        # 整单抵到0元 → 直接结清(paid)，不留 pending 死单
+        # 动态扫#3：整单抵到0元 → 直接结清(paid)，不留 pending 死单
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path, client = _client(tmpdir)
             plan_id = self._grouped_with_selection(client)
@@ -501,7 +501,7 @@ class TreatmentPlanBillingTest(unittest.TestCase):
             self.assertEqual(resp.status_code, 200, resp.text)
 
     def test_negative_price_at_create_not_billed_negative(self):
-        # 计划创建带负单价 → 不存负价；确认后转划价明细/账单不为负
+        # 动态扫#110：计划创建带负单价 → 不存负价；确认后转划价明细/账单不为负
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path, client = _client(tmpdir)
             plan_id = client.post("/api/patients/p1/treatment-plans", json={
@@ -542,7 +542,7 @@ class TreatmentPlanBillingTest(unittest.TestCase):
             self.assertEqual(resp.status_code, 404)
 
     def test_bill_rejects_unconfirmed_draft_plan(self):
-        # 草稿计划不能直接转划价（必须先确认方案）
+        # #16：草稿计划不能直接转划价（必须先确认方案）
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path, client = _client(tmpdir)
             plan_id = self._grouped_with_selection(client, confirm=False)
@@ -553,7 +553,7 @@ class TreatmentPlanBillingTest(unittest.TestCase):
             self.assertEqual(cnt, 0)
 
     def test_bill_idempotent_rejects_second_call(self):
-        # 同一计划重复转划价应被拒绝，不重复落单
+        # #17：同一计划重复转划价应被拒绝，不重复落单
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path, client = _client(tmpdir)
             plan_id = self._grouped_with_selection(client)
@@ -569,7 +569,7 @@ class TreatmentPlanBillingTest(unittest.TestCase):
 
 
 class PlanRollbackBillTest(unittest.TestCase):
-    """撤回确认(confirmed→draft)已转划价的计划,要连带处理账单,不留脱节孤儿。"""
+    """审计#19：撤回确认(confirmed→draft)已转划价的计划,要连带处理账单,不留脱节孤儿。"""
 
     def _confirm_and_bill(self, client):
         plan_id = client.post("/api/patients/p1/treatment-plans", json=_sample_plan()).json()["plan_id"]
@@ -596,7 +596,7 @@ class PlanRollbackBillTest(unittest.TestCase):
             self.assertEqual(client.post(f"/api/treatment-plans/{plan_id}/bill", json={}).status_code, 200)
 
     def test_rollback_blocked_when_consent_bound(self):
-        # 账单绑了未作废的知情同意书,硬删会留悬空引用→撤回应被拦截
+        # 复审:账单绑了未作废的知情同意书,硬删会留悬空引用→撤回应被拦截
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path, client = _client(tmpdir)
             plan_id, bill_id = self._confirm_and_bill(client)

@@ -73,9 +73,9 @@ def create_reports_router(db_path):
         require_access("report.arrears.view")
         """欠费清单(全量未结单，非当日限制)：arrears=total_fee-paid_fee>0，排除 voided/refunded/已取消。
         可按 bill_time 区间、最低欠费额、患者姓名/电话/病历号筛选；按欠费额倒序。"""
-        # 用 round 比较,否则 total=100.00/paid=99.9999 浮点残差会冒"幻影欠费"
-        # 排除作废：本地 voided/refunded/已取消/3 + 导入数据的作废状态码，否则撤单单冒幽灵欠费
-        # 欠费=总价-优惠-已收：打折单不扣优惠会冒大额幽灵欠费
+        # 审查#9：用 round 比较,否则 total=100.00/paid=99.9999 浮点残差会冒"幻影欠费"
+        # 排除作废：本地 voided/refunded/已取消/3 + SaaS 撤单码(900/500/400/200)，否则撤单单冒幽灵欠费
+        # 欠费=总价-优惠(DiscountFee)-已收：SaaS 打折单不扣优惠会冒 ~60万幽灵欠费
         _void = ", ".join("'%s'" % s for s in (("refunded", "已取消", "3") + VOIDED_BILL_STATES))
         _net = bill_net_arrears_sql("b.")
         where = ["%s > 0" % _net,
@@ -112,7 +112,7 @@ def create_reports_router(db_path):
     @router.get("/api/reports/income-monthly")
     def income_monthly(date_from: str = "", date_to: str = ""):
         require_access("report.finance.view")
-        """月度汇总：按月净实收(口径同 income：排作废原单、保留退费负数冲减)+应收(开单净额)。
+        """#657 月度汇总：按月净实收(口径同 income：排作废原单、保留退费负数冲减)+应收(开单净额)。
         默认近 12 个月。"""
         today = bj_now().date()
         date_to = date_to.strip() or today.isoformat()
@@ -173,15 +173,15 @@ def create_reports_router(db_path):
         day = date.strip() or today_str()
         _valid_date(day, "date")
         with connect(db_path) as conn:
-            # 作废原单(CancelMark非空且金额≥0)不计实收，保留退费负数作冲减，口径与 income 一致
+            # #38/#1：作废原单(CancelMark非空且金额≥0)不计实收，保留退费负数作冲减，口径与 income 一致
             pay_rows = conn.execute(
                 "select amount, pay_type, source_json from payments "
                 "where substr(coalesce(pay_time,''),1,10) = ? "
                 "and (coalesce(json_extract(iif(json_valid(source_json), source_json, '{}'),'$.CancelMark'),'') = '' or coalesce(amount,0) < 0)",
                 (day,),
             ).fetchall()
-            # 待收按当天账单(bill_time)过滤;口径与工作台/收费管理未结列表统一用
-            # 净欠费>0+排除作废(导入单 state 是数字码,靠 state in ('pending','partial') 会漏)
+            # #39/#574：待收按当天账单(bill_time)过滤;口径与工作台/收费管理未结列表统一用
+            # 净欠费>0+排除作废(SaaS 同步单 state 是数字码,靠 state in ('pending','partial') 会漏)
             pend = conn.execute(
                 f"select count(*) c, coalesce(sum({bill_net_arrears_sql()}),0) s "
                 f"from bills where {active_bill_clause()} and {bill_net_arrears_sql()} > 0 "
@@ -195,7 +195,7 @@ def create_reports_router(db_path):
             amt = r["amount"] or 0
             total += amt
             count += 1
-            # 多方式收款按 PaidDetail 拆到真实方式(和工作台/收入统计一致)
+            # #559：多方式收款按 PaidDetail 拆到真实方式(和工作台/收入统计一致)
             try:
                 _detail = (_json.loads(r["source_json"] or "{}") or {}).get("PaidDetail") or ""
             except (ValueError, TypeError):
@@ -205,12 +205,12 @@ def create_reports_router(db_path):
                 for m, a in parts:
                     by_method[m] = round(by_method.get(m, 0) + a, 2)
                 continue
-            # 优先 pay_type 列(本地+同步收款的独立付款方式),回退 source_json.pay_method/refund_method
+            # #211：优先 pay_type 列(本地+同步收款的独立付款方式),回退 source_json.pay_method/refund_method
             method = (r["pay_type"] or "").strip()
             if not method:
                 try:
                     j = _json.loads(r["source_json"] or "{}") or {}
-                    method = j.get("pay_method") or j.get("refund_method") or ""   # 兼容历史退费 refund_method 键
+                    method = j.get("pay_method") or j.get("refund_method") or ""   # 审查#11/#27:兼容历史退费 refund_method 键
                 except (ValueError, TypeError):
                     method = ""
             method = method or "未填"
@@ -229,7 +229,7 @@ def create_reports_router(db_path):
     def cashier_query(date_from: str = "", date_to: str = ""):
         require_access("report.cashier.view")
         """收银查询：起止日期内的收款流水明细（含患者名）+ 按患者聚合 + 实收合计。
-        支持日期区间 + 按患者聚合。
+        复审#4：支持日期区间 + 按患者聚合。
         收银员筛选待 t_pay 操作员字段同步后再加（本地无该列）。"""
         today = today_str()
         date_from = date_from.strip() or today
@@ -265,7 +265,7 @@ def create_reports_router(db_path):
             }
             for r in rows
         ]
-        # 按患者聚合与合计剔除「作废原单」(CancelMark非空且金额≥0)，退费负数保留作冲减；明细全保留可见
+        # #1：按患者聚合与合计剔除「作废原单」(CancelMark非空且金额≥0)，退费负数保留作冲减；明细全保留可见
         def _is_void_original(r):
             return str(r.get("cancel_mark") or "") != "" and (r["amount"] or 0) >= 0
         valid = [r for r in records if not _is_void_original(r)]
@@ -287,7 +287,7 @@ def create_reports_router(db_path):
             "date_from": date_from,
             "date_to": date_to,
             "records": records,
-            # 合计/分组金额 round,避免浮点残差泄漏到接口
+            # 审查#28：合计/分组金额 round,避免浮点残差泄漏到接口
             "by_patient": sorted(
                 ({**a, "amount": round(a["amount"], 2)} for a in by_patient.values()),
                 key=lambda a: a["amount"], reverse=True
@@ -310,7 +310,7 @@ def create_reports_router(db_path):
     @router.get("/api/reports/cashier-query")
     def cashier_query_detail(date_from: str = "", date_to: str = "", doctor: str = "", source: str = "", method: str = "", operator: str = ""):
         require_access("report.cashier.view")
-        """收银查询(对标行业通用口径)：逐笔收款 + 付款方式 + 处置类别分摊，按日期/医生/来源/方式/收银员筛。"""
+        """收银查询(对标 SaaS)：逐笔收款 + 付款方式 + 处置类别分摊，按日期/医生/来源/方式/收银员筛。"""
         df, dt_ = _cashier_query_window(date_from, date_to)
         with connect(db_path) as conn:
             rows = build_cashier_rows(conn, df, dt_, doctor.strip(), source.strip(), method.strip(), operator.strip())
@@ -319,7 +319,10 @@ def create_reports_router(db_path):
             "date_from": df, "date_to": dt_, "rows": rows,
             "total_amount": round(sum(r["amount"] for r in rows), 2), "count": len(rows),
             "by_method": by_method, "by_category": by_cat,
-            "methods": CASHIER_METHODS, "categories": sorted(by_cat.keys()),
+            # 筛选下拉=固定列 + 数据里真出现过的方式：诊所自定义的方式(第三方支付/会员卡等)
+            # 不在固定列里，只给固定列会导致「报表里看得到这笔、却没法按它筛」(同 CSV 列的口径)
+            "methods": CASHIER_METHODS + [m for m in by_method if m not in CASHIER_METHODS],
+            "categories": sorted(by_cat.keys()),
         }
 
     @router.get("/api/reports/cashier-query.csv")
@@ -380,13 +383,55 @@ def create_reports_router(db_path):
         return Response(content=data, media_type="text/csv; charset=utf-8",
                         headers={"Content-Disposition": f'attachment; filename="handle-category-{df}_{dt_}.csv"'})
 
+    @router.get("/api/reports/reconcile")
+    def reconcile_report(date_from: str = "", date_to: str = ""):
+        require_access("report.operations.view")
+        """双跑九维对账：读 reconcile_log,逐天本地vs SaaS(预约/患者/账单/欠费/收款/退费/治疗项目/病历/影像)
+        差异 + 差异 id 明细,差异≠0 标红(ok 由 diff_json._flags 决定,与 run_reconcile 同口径)。"""
+        df, dt_ = _cashier_query_window(date_from, date_to)
+        with connect(db_path) as conn:
+            rows = conn.execute(
+                "select * from reconcile_log where recon_date between ? and ? order by recon_date desc",
+                (df, dt_)).fetchall()
+
+        def _count(r, k):
+            return {"local": r[f"local_{k}"], "saas": r[f"saas_{k}"], "diff": r[f"local_{k}"] - r[f"saas_{k}"]}
+
+        def _amt(r, k):
+            return {"local": round(r[f"local_{k}"], 2), "saas": round(r[f"saas_{k}"], 2),
+                    "diff": round(r[f"local_{k}"] - r[f"saas_{k}"], 2)}
+
+        out = []
+        for r in rows:
+            keys = r.keys()
+            try:
+                details = json.loads(r["diff_json"] or "{}") if "diff_json" in keys else {}
+            except (ValueError, TypeError):
+                details = {}
+            flags = details.get("_flags", [])
+            ok = not flags
+            out.append({
+                "date": r["recon_date"], "run_at": r["run_at"], "ok": ok, "flags": flags,
+                "appts": _count(r, "appts"),
+                "patients": _count(r, "patients"),
+                "income": _amt(r, "income"),
+                "bills": _count(r, "bills") if "local_bills" in keys else None,
+                "arrears": _amt(r, "arrears") if "local_arrears" in keys else None,
+                "refunds": _amt(r, "refunds") if "local_refunds" in keys else None,
+                "items": _count(r, "items") if "local_items" in keys else None,
+                "records": _count(r, "records") if "local_records" in keys else None,
+                "images": ({"local": r["local_images"], "done": r["local_images_done"],
+                            "saas": r["saas_images"]} if "local_images" in keys else None),
+                "details": {k: v for k, v in details.items() if k != "_flags"},
+            })
+        return {"date_from": df, "date_to": dt_, "rows": out, "diff_days": sum(1 for x in out if not x["ok"])}
 
     @router.get("/api/reports/staff-workload")
     def staff_workload(date_from: str = "", date_to: str = ""):
         require_access("report.performance.view")
-        """配台统计：起止日期内按配台人员(医生/护士/咨询师/助理)汇总
+        """#6 配台统计：起止日期内按配台人员(医生/护士/咨询师/助理)汇总
         配台处置单数、处置项数、金额，用于工作量/绩效/提成。
-        口径：只统计**已划价**(status='priced')的处置单——未划价单 total_fee 仅为录入原价、
+        口径(#56)：只统计**已划价**(status='priced')的处置单——未划价单 total_fee 仅为录入原价、
         会高估绩效金额，故排除；已撤销(voided)同样排除。金额取处置明细 total_fee 之和(划价后最终值)。"""
         today = today_str()
         date_from = date_from.strip() or today
@@ -405,7 +450,7 @@ def create_reports_router(db_path):
                 from treatment_orders o
                 left join treatment_items ti
                        on ti.order_id = o.order_id and coalesce(ti.is_deleted, 0) = 0
-                where o.status = 'priced'  -- 只算已划价单，未划价(recorded)金额未定不计入绩效
+                where o.status = 'priced'  -- #56：只算已划价单，未划价(recorded)金额未定不计入绩效
                   and substr(coalesce(o.order_date, o.created_at, ''), 1, 10) between ? and ?
                 group by o.order_id
                 """,

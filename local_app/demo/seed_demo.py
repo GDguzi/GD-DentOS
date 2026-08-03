@@ -1,12 +1,12 @@
-"""合成演示库播种器——从空库生成 ~100 个**纯虚构**患者及其业务数据，
-**结构上复刻真实 外部导入的产出形状**：相同的列、相同的 source_json 键（应用真正会读的那些）、
+"""合成演示库播种器（#369）——从空库生成 ~100 个**纯虚构**患者及其业务数据，
+**结构上复刻真实 SaaS 导入的产出形状**：相同的列、相同的 source_json 键（应用真正会读的那些）、
 相同的影像类型记录 + 同格式占位图。值全是程序生成的假值，绝不读真实库、不含真实 PII。
 
 「一样」的边界：应用读得到的一切（列 / source_json 键 / 影像类型 / 状态码 / 日期格式 / FDI 牙位）
-都与真库一致，每个功能读起来无差；只有 PII 值是假的、影像是同格式占位图。真实外部系统 row 里
+都与真库一致，每个功能读起来无差；只有 PII 值是假的、影像是同格式占位图。真实 SaaS row 里
 那些没有任何功能读取的内部字段不逐字段复刻（无意义）。
 
-用法（默认输出到独立子目录 data/demo/，与真库 data/clinic.sqlite3 隔离）：
+用法（默认输出到独立子目录 data/demo/，与真库 data/clinic.sqlite3 隔离，#369/#386）：
     python -m local_app.demo.seed_demo [输出库路径] [影像目录]
     DENTAL_DB=local_app/data/demo/demo_clinic.sqlite3 \\
     DENTAL_IMAGES=local_app/data/demo/images \\
@@ -36,7 +36,7 @@ GROUPS = ["普通", "VIP", "员工亲属", ""]
 ADDRESSES = ["演示市演示区示范路1号", "样板城样板镇样例街20号", "测试县测试乡测试村", ""]
 DIAGNOSES = ["慢性牙髓炎", "深龋", "根尖周炎", "智齿冠周炎", "牙周炎", "楔状缺损", "残根"]
 # 处置/收费项目基础资料(handle_items):中性通用项目,按官方费用分类 fee_type 分组。
-# 处置选择器(/api/handle-items)就读这张表,演示库必须种入,否则「选择处置」为空。
+# 处置选择器(/api/handle-items)就读这张表,演示库必须种入,否则「选择处置」为空(#370)。
 HANDLE_CATALOG = [
     # (code, name, unit, price, fee_type)
     ("CHK", "口腔检查", "次", 20.0, "检查费"),
@@ -73,7 +73,7 @@ def _ts(d, hh=9, mm=0):
 
 
 def _sj(obj):
-    """复刻导入器:source_json = 整条原始 外部系统 row 的 json(sort_keys)。"""
+    """复刻导入器:source_json = 整条原始 SaaS row 的 json(sort_keys)。"""
     return json.dumps(obj, ensure_ascii=False, sort_keys=True)
 
 
@@ -115,7 +115,7 @@ def seed(db_path, images_dir=None, n_patients=100, seed=42, v3_ready=True):
     conn = sqlite3.connect(db_path)
     cur = conn.cursor()
 
-    # ---------- 员工(staff_members):医生/护士等,active=1,否则处置医生下拉显示「已停用」 ----------
+    # ---------- 员工(staff_members):医生/护士等,active=1,否则处置医生下拉显示「已停用」(#372) ----------
     staff_seq = 0
     for name, role in ([(d, "医生") for d in DOCTORS] + [(n, "护士") for n in NURSES]
                        + [("赵咨询", "咨询师")]):
@@ -126,7 +126,7 @@ def seed(db_path, images_dir=None, n_patients=100, seed=42, v3_ready=True):
             (f"demo_staff_{staff_seq:03d}", name, role, f",{role},", _ts(today), _ts(today)),
         )
 
-    # ---------- 处置/收费项目基础资料 handle_items(处置选择器数据源) ----------
+    # ---------- 处置/收费项目基础资料 handle_items(处置选择器数据源, #370) ----------
     handle_by_code = {}
     for code, name, unit, price, fee_type in HANDLE_CATALOG:
         hid = f"demo_h_{code}"
@@ -137,7 +137,7 @@ def seed(db_path, images_dir=None, n_patients=100, seed=42, v3_ready=True):
             (hid, code, name, unit, price, fee_type, fee_type, name_pinyin(name), _ts(today), _ts(today)),
         )
 
-    # ---------- 同意书模板(演示库缺模板→选择器空;种几份中性模板) ----------
+    # ---------- 同意书模板(扫荡#395:演示库缺模板→选择器空;种几份中性模板) ----------
     for i, (name, cat) in enumerate([
         ("拔牙知情同意书", "拔牙"), ("根管治疗知情同意书", "根管"),
         ("种植牙知情同意书", "种植"), ("正畸治疗知情同意书", "正畸"), ("修复治疗知情同意书", "修复"),
@@ -150,7 +150,7 @@ def seed(db_path, images_dir=None, n_patients=100, seed=42, v3_ready=True):
              _ts(today), _ts(today)),
         )
 
-    # ---------- 患者(含真实外部系统 键的 source_json) ----------
+    # ---------- 患者(含真实 SaaS 键的 source_json) ----------
     patients = []
     for i in range(1, n_patients + 1):
         pid = f"demo_p_{i:04d}"
@@ -160,7 +160,7 @@ def seed(db_path, images_dir=None, n_patients=100, seed=42, v3_ready=True):
         bday = today.replace(year=1980 + i) if i <= 3 else dt.date(1970 + (i % 40), 1 + (i % 12), 1 + (i % 27))
         chart = f"DEMO{i:05d}"
         group = rnd.choice(GROUPS)
-        # source_json 复刻真实外部系统 患者 row 形状(应用读 patientid/groupname/origin)
+        # source_json 复刻真实 SaaS 患者 row 形状(应用读 patientid/groupname/origin)
         src = {"patientid": chart, "groupname": group, "origin": "demo_seed",
                "Name": name, "Mobile": phone, "Sex": sex, "Birthday": bday.isoformat()}
         cur.execute(
@@ -168,7 +168,7 @@ def seed(db_path, images_dir=None, n_patients=100, seed=42, v3_ready=True):
             "address, chart_no, name_pinyin, patient_group, patient_type, referral_source, responsible_doctor, "
             "updated_at, current_hash, source_json) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (pid, chart, name, phone, sex, bday.isoformat(), rnd.choice(ADDRESSES), chart,
-             # 分组真相源=patient_group 列(迁列);patient_type 是患者类型,不再误装分组
+             # #654:分组真相源=patient_group 列(#646迁列);patient_type 是患者类型,不再误装分组
              name_pinyin(name), group, rnd.choice(["普通", "会员", ""]),
              rnd.choice(["家住附近", "朋友介绍", "网络", ""]),
              rnd.choice(DOCTORS), _ts(today), _hash("patient", pid), _sj(src)),
@@ -197,7 +197,7 @@ def seed(db_path, images_dir=None, n_patients=100, seed=42, v3_ready=True):
                  _ts(visit), _ts(visit), _hash("mr", rid)),
             )
 
-    # ---------- 预约(source_json 复刻 外部排班 row) ----------
+    # ---------- 预约(source_json 复刻 SaaS 排班 row) ----------
     appt_seq = 0
 
     def _add_appt(pid, day, status):

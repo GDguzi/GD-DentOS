@@ -94,7 +94,7 @@ class StaffAdminTest(unittest.TestCase):
                              json={"username": "y", "password": "pw123456"}).status_code, 403)
 
     def test_open_account_non_admin_cannot_create_admin(self):
-        # 非 admin(仅持 staff.manage)不能借开通员工账号建 admin 账号
+        # #549: 非 admin(仅持 staff.manage)不能借开通员工账号建 admin 账号
         with tempfile.TemporaryDirectory() as tmp:
             db = _setup(tmp)
             with connect(db) as conn:
@@ -138,7 +138,7 @@ class StaffAdminTest(unittest.TestCase):
             self.assertNotIn("纯医生", assist)  # 单岗位:不串到助理
 
     def test_selection_endpoint_hides_sensitive_fields(self):
-        # 选人下拉接口 /api/staff-members 不得返回身份证/手机/证号等隐私
+        # #291：选人下拉接口 /api/staff-members 不得返回身份证/手机/证号等隐私
         with tempfile.TemporaryDirectory() as tmp:
             db = _setup(tmp)
             admin = TestClient(create_app(db, require_login=True))

@@ -37,7 +37,7 @@ class AppointmentApiTest(unittest.TestCase):
             self.assertEqual(len(lst), 1)
 
     def test_walkin_register_enters_queue_arrived(self):
-        # 到店登记=walk-in,人已在场→直接落「已到诊」+到达时刻,进候诊队列「到达」阶段
+        # #345 到店登记=walk-in,人已在场→直接落「已到诊」+到达时刻,进候诊队列「到达」阶段
         with tempfile.TemporaryDirectory() as tmp:
             db, client = self._client(tmp)
             r = client.post("/api/appointments", json={
@@ -153,7 +153,7 @@ class AppointmentApiTest(unittest.TestCase):
             aid = client.post("/api/appointments", json={
                 "patient_identity": "p1", "start_time": "2026-06-20 09:00",
                 "doctor_name": "王医生", "item_name": "种植复诊"}).json()["appointment"]["appointment_id"]
-            # 取消不带原因 → 400（中文"已取消"和数字"3"都要拦）
+            # 取消不带原因 → 400（中文"已取消"和数字"3"都要拦，#100）
             self.assertEqual(client.put(f"/api/appointments/{aid}", json={"status": "已取消"}).status_code, 400)
             self.assertEqual(client.put(f"/api/appointments/{aid}", json={"status": "3"}).status_code, 400)
             self.assertEqual(client.put(f"/api/appointments/{aid}", json={"status": "3", "cancel_reason": "号约满了"}).status_code, 200)
@@ -189,7 +189,7 @@ class AppointmentApiTest(unittest.TestCase):
             self.assertEqual(sj["patient_source"], "老带新")
 
     def test_get_single_appointment_detail(self):
-        # 双击改约：GET /api/appointments/{id} 回填用，含 source_json 内嵌字段
+        # #275 双击改约：GET /api/appointments/{id} 回填用，含 source_json 内嵌字段
         with tempfile.TemporaryDirectory() as tmp:
             _, client = self._client(tmp)
             aid = client.post("/api/appointments", json={
@@ -214,7 +214,7 @@ class AppointmentApiTest(unittest.TestCase):
             self.assertEqual(client.get("/api/appointments/nope").status_code, 404)
 
     def test_edit_appointment_roundtrip(self):
-        # PUT 既能改时段/医生/项目，也能改 source_json 内嵌字段(咨询师/来源/预约人/备注)
+        # #275：PUT 既能改时段/医生/项目，也能改 source_json 内嵌字段(咨询师/来源/预约人/备注)
         import json as _json
         with tempfile.TemporaryDirectory() as tmp:
             db, client = self._client(tmp)

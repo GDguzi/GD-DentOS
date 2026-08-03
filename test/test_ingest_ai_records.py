@@ -149,7 +149,7 @@ class IngestAiRecordsTest(unittest.TestCase):
         self.assertIn("收费明细", ai_meta["extras"])
 
     def test_current_hash_matches_canonical_snapshot_570(self):
-        # AI摄入写的 current_hash 必须跟 api.py 更新病历用的 medical_record_snapshot()
+        # #570:AI摄入写的 current_hash 必须跟 api.py 更新病历用的 medical_record_snapshot()
         # 口径一致，否则首次本地编辑会拿两套不同公式的哈希比较，恒判"有变化"，写出不可校验版本行。
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path, records_dir, mapping_path = _setup(tmpdir)
@@ -336,7 +336,7 @@ class IngestAiRecordsTest(unittest.TestCase):
         self.assertEqual(med_count, 0)
         self.assertEqual(unclaimed_count, 2)
 
-    # --- 错误留痕不得把真名文件名/异常message泄进report(CLI打印)或日志 ---
+    # --- #625: 错误留痕不得把真名文件名/异常message泄进report(CLI打印)或日志 ---
     def test_error_files_redacts_source_names(self):
         from unittest import mock
         import local_app.ingest_ai_records as mod
@@ -516,7 +516,7 @@ if __name__ == "__main__":
 
 class CliMissingDirTest(unittest.TestCase):
     def test_all_with_missing_records_dir_exits_zero_with_hint(self):
-        # 干净安装无 data/ai_records 时,--all 必须友好空态退出,不得 FileNotFoundError
+        # #670 干净安装无 data/ai_records 时,--all 必须友好空态退出,不得 FileNotFoundError
         import subprocess
         import sys
         with tempfile.TemporaryDirectory() as tmp:

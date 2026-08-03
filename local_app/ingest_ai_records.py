@@ -84,7 +84,7 @@ def _write_medical_record(conn, patient_identity, parsed, source_file, batch_id)
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     tooth_json = json.dumps(tooth, ensure_ascii=False, sort_keys=True)
     content_json = json.dumps(content, ensure_ascii=False, sort_keys=True)
-    # 哈希字段口径必须跟 snapshots.medical_record_snapshot()(api.py 更新病历时用它算
+    # #570:哈希字段口径必须跟 snapshots.medical_record_snapshot()(api.py 更新病历时用它算
     # old_hash/new_hash)完全一致——否则首次本地编辑会拿两套不同公式的哈希互相比较,恒判"有变化"，
     # 写出跟 stable_hash(旧快照) 对不上的不可校验版本行。
     current_hash = stable_hash(
@@ -214,7 +214,7 @@ def ingest_ai_records(db_path, records_dir, date, mapping_path=None, batch_id=No
             except Exception as exc:
                 # 单文件任意环节出错（解析/映射/写库）跳过不中断整批、不回滚其他已写入文件；
                 # 异常必须留痕(架构铁律#禁止兜底)——但文件名含患者真名、异常message可能带病历上下文,
-                # 一律不进report/CLI/日志(隐私铁律)：对外只给 序号+短hash+异常类型,
+                # 一律不进report/CLI/日志(隐私铁律,#625)：对外只给 序号+短hash+异常类型,
                 # 明文映射只写 db 同目录(gitignored data区)的 ingest_errors.log 供人工定位。
                 report["errors"] += 1
                 fhash = hashlib.sha1(str(source_file).encode("utf-8")).hexdigest()[:8]
@@ -243,7 +243,7 @@ def main():
     parser.add_argument(
         "--records-dir",
         # 默认中性(数据区 ai_records/,可用环境变量或参数指向自己的生成器输出);
-        # 上游调用方已显式传本参数,不吃默认值。
+        # 接入方的生成器应显式传本参数,不依赖默认值。
         default=os.environ.get("DENTAL_AI_RECORDS_DIR")
         or str(Path(DEFAULT_DB_PATH).parent / "ai_records"),
         help="AI 病历草稿目录(按日期分子目录,每份 *.md);默认 data/ai_records 或 $DENTAL_AI_RECORDS_DIR",
@@ -256,7 +256,7 @@ def main():
 
     records_dir = Path(args.records_dir)
     if args.all:
-        # 干净安装(可选 AI 草稿箱)时目录不存在是正常空态,给清晰提示按 0 文件退出,不抛栈
+        # #670 干净安装(可选 AI 草稿箱)时目录不存在是正常空态,给清晰提示按 0 文件退出,不抛栈
         if not records_dir.is_dir():
             print(f"草稿目录不存在（AI 草稿箱为可选功能，未使用则无需处理）: {records_dir}")
             return 0

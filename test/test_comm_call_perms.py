@@ -1,5 +1,5 @@
-"""修复回归：客户沟通(通话录音+沟通记录)的患者基座权限、存量库权限迁移、
-患者审计纳入 call/communication。"""
+"""#718 修复回归：客户沟通(通话录音+沟通记录)的患者基座权限(#696)、存量库权限迁移(#697)、
+患者审计纳入 call/communication(#701)。"""
 import io
 import tempfile
 import unittest
@@ -73,7 +73,7 @@ class BasePermTest(unittest.TestCase):
 
 
 class PermMigrationTest(unittest.TestCase):
-    """存量库已有角色不会被 ensure_seed_roles 补新权限；一次性迁移给目标角色补齐。"""
+    """#697：存量库已有角色不会被 ensure_seed_roles 补新权限；一次性迁移给目标角色补齐。"""
     def test_backfill_grants_target_roles(self):
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "clinic.sqlite3"
@@ -113,7 +113,7 @@ class PermMigrationTest(unittest.TestCase):
 
 
 class PatientAuditTest(unittest.TestCase):
-    """上传通话 / 新建沟通记录后，患者审计视图能查到 call / communication。"""
+    """#701：上传通话 / 新建沟通记录后，患者审计视图能查到 call / communication。"""
     def test_patient_audit_includes_call_and_communication(self):
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "clinic.sqlite3"
@@ -142,7 +142,7 @@ class PatientAuditTest(unittest.TestCase):
             self.assertIn("communication", types, "患者审计应含沟通记录操作")
 
     def test_patient_audit_traces_deleted_records(self):
-        # 删除后业务行没了，删除动作审计(json 带 patient_identity)仍须按患者可追溯
+        # #719：删除后业务行没了，删除动作审计(json 带 patient_identity)仍须按患者可追溯
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "clinic.sqlite3"
             init_db(db)
@@ -174,8 +174,8 @@ class PatientAuditTest(unittest.TestCase):
                 json={"expected_revision": 2},
             )
             actions = [row["action"] for row in client.get("/api/patients/p1/audit-logs").json()["list"]]
-            self.assertIn("delete_call", actions, "删通话后患者审计仍应追溯到删除动作")
-            self.assertIn("delete_communication", actions, "删沟通后患者审计仍应追溯到删除动作")
+            self.assertIn("delete_call", actions, "#719 删通话后患者审计仍应追溯到删除动作")
+            self.assertIn("delete_communication", actions, "#719 删沟通后患者审计仍应追溯到删除动作")
 
 
 if __name__ == "__main__":

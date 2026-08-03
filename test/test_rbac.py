@@ -56,7 +56,7 @@ class RbacTest(unittest.TestCase):
             self.assertEqual(c.get("/api/reports/handle-category.csv").status_code, 200)
 
     def test_patient_export_admin_only(self):
-        # 患者 CSV 导出含姓名/手机/病历号隐私，仅 admin
+        # #220：患者 CSV 导出含姓名/手机/病历号隐私，仅 admin
         with tempfile.TemporaryDirectory() as tmp:
             db = _setup(tmp)
             c = TestClient(create_app(db, require_login=True))

@@ -8,13 +8,13 @@ from pathlib import Path
 from local_app.timeutil import now_str
 
 
-# 统一操作审计的「请求级共享 cell」。
+# 统一操作审计的「请求级共享 cell」(#437)。
 # 中间件每个请求 set 一个 {"changed":False,"audited":False} dict;contextvar 复制到线程池端点时
 # 只复制引用，改 dict 内容跨线程可见(故同步路由也能回传)。每个请求各自一个 cell=并发不互相污染,
 # 替代原先全局 max(audit_id)/data_version 比较(并发下会被别的请求的 audit 写污染→漏审计)。
 _audit_cell = contextvars.ContextVar("audit_cell", default=None)
 
-# 只认「写入 audit_logs 表」这件结构化的事:insert/replace ... into audit_logs。
+# #438 只认「写入 audit_logs 表」这件结构化的事:insert/replace ... into audit_logs。
 # 表名/列名总在任何用户值(VALUES 之后)之前出现,且 [^(]*? 不跨过列表 '(',
 # 故业务字段里的 'audit_logs' 文本(在 VALUES 内)绝不会被误判。不能对整条展开后 SQL 做包含匹配。
 _AUDIT_WRITE_RE = re.compile(
@@ -39,8 +39,8 @@ SCHEMA_PATH = APP_DIR / "schema.sql"
 # 默认连旧库 clinic.sqlite3；设环境变量 DENTAL_DB 可指向同步库 clinic_sync.sqlite3 等核对，旧库不动
 DEFAULT_DB_PATH = Path(os.environ.get("DENTAL_DB") or (APP_DIR / "data" / "clinic.sqlite3"))
 
-# 诊所名唯一真相源：存 app_settings key='clinic'；未配置时用中性默认(不硬编码具体诊所)。
-DEFAULT_CLINIC_NAME = "GD · DentOS"
+# 诊所名唯一真相源：存 app_settings key='clinic'；未配置时用中性默认(开源壳阶段1,不硬编码具体诊所)。
+DEFAULT_CLINIC_NAME = "口腔门诊部"
 
 
 def clinic_display_name(db_path=DEFAULT_DB_PATH):
@@ -66,7 +66,7 @@ def audit_write(conn, entity_type, entity_id, action, *,
                 actor_user_id=None):
     """审计流水原始写入(数据层,仅 sqlite+timeutil,备份/恢复等独立工具可安全 import)。
     不 commit，事务边界归调用方。请求上下文里请用 auth.audit_write(自动填当前登录人)；
-    operator 必填无默认(漏传必须 TypeError,不许静默记成 local_user),
+    operator 必填无默认(#746:漏传必须 TypeError,不许静默记成 local_user),
     后台工具显式给(如 'auto-sync')。"""
     created_at = created_at or now_str()
     if actor_user_id is None:
@@ -101,8 +101,8 @@ def audit_write(conn, entity_type, entity_id, action, *,
         )
 
 
-# 撤单/作废账单状态：历史导入数据的数字状态码 + 本地 voided。
-# 这些单不计入合计/欠费/应收。退费冲减(state 300 负数)、已结小单(0)仍有效。
+# 撤单/作废账单状态：SaaS 撤单码(900收费方式错/500患者原因/400金额错/200改方案) + 本地 voided。
+# 这些单 SaaS 自身藏起来、不算钱；本地同样不计入合计/欠费/应收。退费冲减(state 300 负数)、已结小单(0)仍有效。
 VOIDED_BILL_STATES = ("900", "500", "400", "200", "voided")
 
 
@@ -113,16 +113,16 @@ def active_bill_clause(col="state"):
 
 
 def bill_discount_sql(prefix=""):
-    """账单优惠额 SQL：从导入数据的 source_json 取优惠字段；本地自建单无此字段=0(折扣已并入 total_fee)。
+    """账单优惠额 SQL：SaaS 取 source_json.DiscountFee；本地自建单无此字段=0(折扣已并入 total_fee)。
     prefix 如 'b.' 用于带表别名查询。
-    ⚠️ 该字段是字符串,大额优惠可能带千分位逗号(如 "1,400.00")。SQLite 把字符串当数值时
+    ⚠️ DiscountFee 是字符串,SaaS 大额优惠带千分位逗号(如 "1,400.00")。SQLite 把字符串当数值时
     读到逗号即停→"1,400.00" 被当成 1,导致优惠≥1000 的单凭空冒欠费。故先 replace 去逗号再参与运算。"""
     return ("coalesce(replace(json_extract(iif(json_valid(%(p)ssource_json), %(p)ssource_json, '{}'), "
             "'$.DiscountFee'), ',', ''), 0)") % {"p": prefix}
 
 
 def bill_net_arrears_sql(prefix=""):
-    """净欠费 = 总费用 - 优惠 - 已收(应收=总价-优惠)。打折单不扣优惠会冒幽灵欠费。"""
+    """净欠费 = 总费用 - 优惠 - 已收(对齐 SaaS：应收=总价-优惠)。SaaS 打折单不扣优惠会冒幽灵欠费。"""
     return "round(%(p)stotal_fee - %(d)s - %(p)spaid_fee, 2)" % {
         "p": prefix, "d": bill_discount_sql(prefix)}
 
@@ -138,7 +138,7 @@ def connect(db_path=DEFAULT_DB_PATH):
     # WAL 允许读写并发、显著降低锁冲突(库级持久属性,每连接幂等设置)。
     conn.execute("pragma busy_timeout = 5000")
     conn.execute("pragma journal_mode = wal")
-    conn.set_trace_callback(_audit_trace)   # 请求级审计标记(无请求上下文时回调即时返回,零开销)
+    conn.set_trace_callback(_audit_trace)   # #437 请求级审计标记(无请求上下文时回调即时返回,零开销)
     return conn
 
 
@@ -172,7 +172,7 @@ def _apply_schema_diff(conn):
                 "and name not like 'sqlite_%'").fetchall():
             if table not in live_tables:
                 continue  # 活库没这张表:executescript 的 create table 会整表新建(自带全列)
-            qt = table.replace('"', '""')   # 标识符内双引号转义(当前schema无,防御性)
+            qt = table.replace('"', '""')   # #789:标识符内双引号转义(当前schema无,防御性)
             live_cols = {row[1] for row in conn.execute(f'pragma table_info("{qt}")')}
             for _cid, name, ctype, notnull, dflt, _pk in ref.execute(
                     f'pragma table_info("{qt}")').fetchall():

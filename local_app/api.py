@@ -12,6 +12,7 @@ logger = logging.getLogger("local_app")
 _DB_PATH_UNSET = object()
 
 from local_app.db import APP_DIR, DEFAULT_DB_PATH
+from local_app.paid_detail import load_pay_method_aliases
 from local_app.routes.ai_drafts import create_ai_drafts_router
 from local_app.routes.master_data import create_master_data_router
 from local_app.routes.patient_assets import create_patient_assets_router
@@ -24,7 +25,7 @@ from local_app.routes.templates import create_templates_router
 from local_app.routes.treatment_plans import create_treatment_plans_router  # === 治疗计划 ===
 from local_app.routes.oral_exams import create_oral_exams_router  # === 口腔检查 ===
 from local_app.routes.consults import create_consults_router  # === 咨询沟通 ===
-from local_app.routes.calls import create_calls_router  # === 通话录音 ===
+from local_app.routes.calls import call_ai_available, create_calls_router  # === 通话录音 ===
 from local_app.routes.communications import create_communications_router  # === 沟通记录 ===
 from local_app.routes.customer_hub import create_customer_hub_router  # === 客户通今日总览 ===
 from local_app.routes.return_visit_ops import create_return_visit_ops_router  # === 回访工作流 ===
@@ -57,7 +58,7 @@ from local_app.routes.app_settings import create_app_settings_router  # === 应�
 from local_app.routes.users import create_users_router  # === 账号管理 ===
 from local_app.routes.recycle_bin import create_recycle_bin_router  # === 回收站 ===
 from local_app.routes.appointments import create_appointments_router  # === 预约CRUD ===
-# 同步中心/预约对账待核对属可选迁移扩展配套:扩展在场才 import+挂载,见 migration_available()
+# 同步中心/预约对账待核对属迁移层配套(开源壳阶段3):迁移层在场才 import+挂载,见 migration_available()
 from local_app.routes.user_settings import create_user_settings_router  # === 用户个性化 ===
 from local_app.routes.patient_groups import create_patient_groups_router  # === 患者分类 ===
 from local_app.routes.patients import create_patients_router  # === 患者列表/导出/详情/更新/备注 ===
@@ -68,7 +69,7 @@ from local_app.routes.ocr import create_ocr_router  # === 拍照建档 OCR ===
 
 
 class NoStoreHTMLStatic(StaticFiles):
-    """HTML 文档禁缓存(登出后浏览器启发式缓存回放登录期骨架);js/css 不动,仍走 ?v= 版本缓存。"""
+    """HTML 文档禁缓存(#808:登出后浏览器启发式缓存回放登录期骨架);js/css 不动,仍走 ?v= 版本缓存。"""
 
     def file_response(self, *args, **kwargs):
         resp = super().file_response(*args, **kwargs)
@@ -78,8 +79,8 @@ class NoStoreHTMLStatic(StaticFiles):
 
 
 def migration_available():
-    """可选迁移扩展(migration_layer 包)是否在场。不在场 →
-    同步中心/预约对账路由不挂载、前端对应入口不显示。
+    """迁移层扩展(migration_layer 包)是否在场。不在场 →
+    同步中心/预约对账路由不挂载、前端对应入口不显示;完整版(本店)行为不变。
     探测包本身而非子模块:父包缺席时 find_spec(子模块) 抛 ModuleNotFoundError 而非返回 None。"""
     return importlib.util.find_spec("local_app.migration_layer") is not None
 
@@ -91,6 +92,8 @@ def create_app(
     require_login=False,
     access_v3=False,
 ):
+    # 付款方式归一表配置写错就地报错：等到出报表才炸，钱已经按错的方式名分完组了
+    load_pay_method_aliases()
     explicit_db_path = db_path is not _DB_PATH_UNSET
     if not explicit_db_path:
         if access_v3:
@@ -150,6 +153,9 @@ def create_app(
     app.include_router(create_oral_exams_router(db_path))  # === 口腔检查 ===
     app.include_router(create_consults_router(db_path))  # === 咨询沟通 ===
     app.include_router(create_calls_router(db_path, images_dir))  # === 通话录音 ===
+    if call_ai_available():   # === 电话盒子入库(#856三期③;扩展不在场则整块缺席) ===
+        from local_app.routes.pbx_import import create_pbx_router
+        app.include_router(create_pbx_router(db_path, images_dir))
     app.include_router(create_communications_router(db_path, images_dir))  # === 沟通记录 ===
     app.include_router(create_customer_hub_router(db_path))  # === 客户通今日总览 ===
     app.include_router(create_return_visit_ops_router(db_path, images_dir))  # === 回访工作流 ===
@@ -191,13 +197,13 @@ def create_app(
     )
     if has_migration:
         from local_app.migration_layer.routes.appointment_reconcile import create_appointment_reconcile_router
-        app.include_router(create_appointment_reconcile_router(db_path))  # === 预约对账待核对(迁移扩展配套) ===
+        app.include_router(create_appointment_reconcile_router(db_path))  # === 预约对账待核对(迁移层配套) ===
     # 预约CRUD必须挂在reconcile之后:/api/appointments/{id}会吞掉先注册才轮不到的/api/appointments/suspect-cancelled
     app.include_router(create_appointments_router(db_path))  # === 预约CRUD ===
 
     @app.get("/api/capabilities")
     def capabilities():
-        """前端按能力显隐迁移扩展入口(同步中心/影像资料运维);扩展不在场 → false。"""
+        """前端按能力显隐迁移层入口(同步中心/影像资料运维);迁移层不在场 → false。"""
         return {"sync": has_migration}
     # === 用户个性化 ===
     app.include_router(create_user_settings_router(db_path))

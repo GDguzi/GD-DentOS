@@ -17,7 +17,7 @@ GLUED_LAYOUT = [
     B("出生", 0.09, 0.57),
     B("1990", 0.21, 0.56),
     B("年3月7日", 0.30, 0.56),
-    B("住 址江苏省南京市浈江区风采", 0.09, 0.43),
+    B("住 址江苏省南京市玄武区中山", 0.09, 0.43),
     B("路88号民主里3栋201", 0.20, 0.35),
     B("公民身份号码", 0.09, 0.15),
     B("y回THNXS", 0.68, 0.20, conf=0.3),   # 「中国CHINA」全息防伪膜识别出的乱码
@@ -76,7 +76,7 @@ class TestGluedLayout(unittest.TestCase):
 
     def test_address_excludes_hologram_garbage(self):
         # 全息防伪膜的乱码在证件右侧，绝不能拼进地址
-        self.assertEqual(self.r["fields"]["address"], "江苏省南京市浈江区风采路88号民主里3栋201")
+        self.assertEqual(self.r["fields"]["address"], "江苏省南京市玄武区中山路88号民主里3栋201")
 
     def test_derived_fields_are_confident(self):
         self.assertEqual(set(self.r["confident"]), {"id_card", "birthday", "sex"})

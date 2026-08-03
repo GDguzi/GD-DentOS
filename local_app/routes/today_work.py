@@ -9,7 +9,7 @@ from local_app.timeutil import today_str
 from local_app.db import (active_bill_clause, bill_discount_sql,
                           bill_net_arrears_sql, connect)
 from local_app.models import appt_stage
-from local_app.paid_detail import split_paid_detail  # 支付方式拆分(核心真相源,同步层同用)
+from local_app.paid_detail import split_paid_detail  # #525 支付方式拆分(核心真相源,同步层同用)
 from local_app.rv_query import DONE_COND
 from local_app.snapshots import row_to_dict as _row_to_dict, rows as _rows
 from local_app.validation import valid_date_param
@@ -29,13 +29,13 @@ def create_today_work_router(db_path):
         tomorrow = (parsed_work_date + dt.timedelta(days=1)).isoformat()
 
         with connect(db_path) as conn:
-            # 今日工作台统一隐藏取消/疑似取消的预约(KPI/候诊队列/漏斗/就诊类型桶/明日预约都排除)。
+            # #418:今日工作台统一隐藏取消/疑似取消的预约(KPI/候诊队列/漏斗/就诊类型桶/明日预约都排除)。
             # 数据本身保留,预约管理与历史查询仍可追溯。suspect_cancelled=同步对账标记的疑似取消。
             not_cancelled = ("coalesce(status, '') not in ('3', '已取消', '已爽约', '爽约') "
                              "and coalesce(suspect_cancelled, 0) = 0")
             not_cancelled_a = ("coalesce(a.status, '') not in ('3', '已取消', '已爽约', '爽约') "
                                "and coalesce(a.suspect_cancelled, 0) = 0")
-            # 今日就诊 KPI 排除已取消/已爽约,与初/复/新诊明细口径一致
+            # 审查#21：今日就诊 KPI 排除已取消/已爽约,与初/复/新诊明细口径一致
             appointments_count = conn.execute(
                 f"""
                 select count(*)
@@ -107,7 +107,7 @@ def create_today_work_router(db_path):
                 appt["treated_today"] = conn.execute(
                     "select 1 from treatment_orders where patient_identity = ? "
                     "and substr(coalesce(order_date, ''), 1, 10) = ? "
-                    "and coalesce(status, '') != 'voided' limit 1",   # 排除已撤销处置
+                    "and coalesce(status, '') != 'voided' limit 1",   # #97 排除已撤销处置
                     (pid, work_date),
                 ).fetchone() is not None
                 appt["record_today"] = conn.execute(
@@ -133,7 +133,7 @@ def create_today_work_router(db_path):
                 appt["has_image"] = conn.execute(
                     "select 1 from patient_images where patient_identity = ? limit 1", (pid,)
                 ).fetchone() is not None
-                # 约下次高亮的"未来预约"也要排取消/疑似取消/爽约,口径同 (否则取消的未来约也点亮)
+                # #423:约下次高亮的"未来预约"也要排取消/疑似取消/爽约,口径同 #418(否则取消的未来约也点亮)
                 appt["has_future_appt"] = conn.execute(
                     f"select 1 from appointments where patient_identity = ? "
                     f"and {not_cancelled} "
@@ -143,7 +143,7 @@ def create_today_work_router(db_path):
                     "select 1 from return_visits where patient_identity = ? and coalesce(is_deleted,0)=0 limit 1", (pid,)
                 ).fetchone() is not None
                 # 队列「预约」按钮高亮:用户口径=今天约了"下次就诊"才亮。即 created_at=今天(今天新建)
-                # 且 start_time 在未来(约的是下次,不是当前这条到诊预约)、且未取消/疑似取消。
+                # 且 start_time 在未来(约的是下次,不是当前这条到诊预约)、且未取消/疑似取消(#433)。
                 appt["rebooked_today"] = conn.execute(
                     f"select 1 from appointments where patient_identity = ? "
                     f"and substr(coalesce(created_at,''),1,10) = ? "
@@ -198,7 +198,7 @@ def create_today_work_router(db_path):
                 join patients p on p.patient_identity = r.patient_identity
                 where coalesce(r.is_deleted, 0) = 0
                   and coalesce(p.is_deleted, 0) = 0
-                  -- 已回访按实际回访日期(actual_date)统计；缺失则回退应回访日期(due_time)
+                  -- #54：已回访按实际回访日期(actual_date)统计；缺失则回退应回访日期(due_time)
                   and substr(coalesce(nullif(r.actual_date, ''), r.due_time, ''), 1, 10) = ?
                   and ({DONE_COND})
                 """,
@@ -297,7 +297,7 @@ def create_today_work_router(db_path):
             for r in conn.execute(
                 f"select coalesce(visit_type, '') vt, count(*) n from appointments "
                 f"where substr(coalesce(start_time, ''), 1, 10) = ? "
-                f"and {not_cancelled} "   # + 与今日预约总数口径一致(排取消/疑似取消)
+                f"and {not_cancelled} "   # 审查#21 + #418：与今日预约总数口径一致(排取消/疑似取消)
                 f"group by coalesce(visit_type, '')",
                 (work_date,),
             ).fetchall():
@@ -306,7 +306,7 @@ def create_today_work_router(db_path):
                     first_visits += r["n"]
                 elif vt == "复诊":
                     revisits += r["n"]
-                elif vt in ("新诊", "点诊"):   # 历史数据里的「点诊」等同「新诊」,并入同一桶,否则漏统计
+                elif vt in ("新诊", "点诊"):   # #452：SaaS 的「点诊」= 本地「新诊」,同步来的点诊并入新诊桶,否则漏统计
                     new_visits += r["n"]
             if see_audit:
                 recent_audits_count = conn.execute(
@@ -321,7 +321,7 @@ def create_today_work_router(db_path):
                     limit 10
                     """,
                 )
-            # 工作台左入口右侧出简表用：明日预约 / 今日结算 / 今日生日
+            # #321/#362 工作台左入口右侧出简表用：明日预约 / 今日结算 / 今日生日
             # 三个轻量列表(只取展示必需列,limit 收口),与上面对应 count 同口径。
             tomorrow_appointments = _rows(
                 conn,

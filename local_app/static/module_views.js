@@ -9,7 +9,7 @@ let appointmentStatusFilter = "";
 function appointmentDateRangeQuery() {
   const base = (workDate && workDate.value) ? workDate.value : localDateValue();
   const d = dateFromWorkValue(base);
-  const iso = x => localDateValue(x);   // 不能用 toISOString(转UTC会差一天)
+  const iso = x => localDateValue(x);   // 不能用 toISOString(转UTC会差一天,#541)
   if (appointmentView === "list") {
     // 列表：不限日期（全部），靠搜索/状态过滤收窄
     return "";
@@ -42,7 +42,7 @@ function setAppointmentStatusFilter(value) {
 
 async function loadAppointmentModule() {
   if (!modulePanel) return;
-  // 四视图均对标行业通用口径：天=泳道网格 / 周=7天网格 / 月=月历 / 列表=表格
+  // 四视图均对标 SaaS：天=泳道网格 / 周=7天网格 / 月=月历 / 列表=表格
   if (appointmentView === "day" && typeof loadAppointmentDayGrid === "function") return loadAppointmentDayGrid();
   if (appointmentView === "week" && typeof loadAppointmentWeekView === "function") return loadAppointmentWeekView();
   if (appointmentView === "month" && typeof loadAppointmentMonthView === "function") return loadAppointmentMonthView();
@@ -213,7 +213,7 @@ function renderAppointmentModuleRow(row) {
   `;
 }
 
-// ===== 客户通 V2:三视图(今日总览/回访列表/沟通记录)与回访处理弹窗
+// ===== 客户通 V2(#856):三视图(今日总览/回访列表/沟通记录)与回访处理弹窗
 // 全部在独立模块 customer_hub_v2.js;此处仅保留视图入口委托(旧 today/list/study/calendar 视图已退役)。
 async function loadReturnVisitModule() {
   const ctx = Object.create(null);

@@ -17,7 +17,7 @@ def create_follow_ups_router(db_path):
 
     @router.get("/api/today-follow-ups")
     def today_follow_ups(date: str = "", assignee: str = "", q: str = ""):
-        require_perm("patient.view")   # 含患者姓名/电话/消费分层,按 patient.view 守卫
+        require_perm("patient.view")   # #494：含患者姓名/电话/消费分层,按 patient.view 守卫
         date = (date or "").strip()
         if not date:
             return {"groups": {"high": [], "mid": [], "normal": []},
@@ -52,7 +52,7 @@ def create_follow_ups_router(db_path):
 
             ph = ",".join("?" * len(pids))
             params = tuple(pids)
-            # 累计消费口径与 today_cash_in/收银/经营概览一致:排作废原单,保留退费负数冲减
+            # 累计消费口径与 today_cash_in/收银/经营概览一致(#276):排作废原单,保留退费负数冲减
             value = {}
             for r in conn.execute(
                 f"select patient_identity, round(sum(amount), 2) as v from payments "

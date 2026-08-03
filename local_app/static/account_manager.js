@@ -2,11 +2,17 @@
 // modal 动态建到 body，避免改 index.html 结构。
 
 // 与后端预置角色(auth.PRESET_ROLES)对齐；权限由「角色权限」矩阵页配置，这里只选身份。
-// 按权限树蓝本补齐(增 主任/收银员/客服/助理2)。去「技师」,旧账号迁 assistant。
+// #425:按权限树蓝本补齐(增 主任/收银员/客服/助理2)。#502:去「技师」,旧账号迁 assistant。
 const AM_ROLES = [["admin", "管理员"], ["director", "主任"], ["doctor", "医生"], ["nurse", "护士"],
                   ["consultant", "咨询师"], ["reception", "前台"], ["cashier", "收银员"],
                   ["assistant", "助理"], ["assistant2", "助理2"], ["support", "客服"]];
 let _amVisibleUsers = [];
+
+function amCanCreateStaff() {
+  return Boolean(window.__accessV3 === true
+    && typeof hasPerm === "function"
+    && hasPerm("staff.edit"));
+}
 
 function amEnsureModal() {
   let m = document.getElementById("accountManagerModal");
@@ -19,6 +25,7 @@ function amEnsureModal() {
     <section class="appt-modal am-modal" role="dialog" aria-modal="true" aria-label="账号管理">
       <div class="modal-head"><strong>账号管理</strong>
         <span class="am-head-right">
+          ${amCanCreateStaff() ? '<button type="button" class="plain-button" onclick="amOpenNewStaff()">＋新增员工</button>' : ""}
           <button type="button" class="plain-button" onclick="amClose()">×</button>
         </span></div>
       <div class="am-body" id="amBody">加载中...</div>
@@ -30,6 +37,28 @@ function amEnsureModal() {
 function amClose() {
   const m = document.getElementById("accountManagerModal");
   if (m) m.hidden = true;
+}
+
+async function amOpenNewStaff() {
+  if (!amCanCreateStaff()) return false;
+  const bridge = window.openNewStaffFromConfig;
+  if (typeof bridge !== "function") {
+    amSetMsg("无法打开新增员工，请稍后重试");
+    return false;
+  }
+  let result;
+  try { result = await bridge(); }
+  catch {
+    amSetMsg("无法打开新增员工，请稍后重试");
+    return false;
+  }
+  if (result === true) {
+    amClose();
+    return true;
+  }
+  if (result === null) return null;
+  amSetMsg("无法打开新增员工，请稍后重试");
+  return false;
 }
 
 async function openAccountManager() {
@@ -129,7 +158,7 @@ async function amRender() {
     </div>`;
   }).join("");
   const addPanel = targetMode
-    ? `<div class="am-add"><span class="am-msg">新账号请在「诊所人员管理」中找到对应人员，再点“开通登录”。账号岗位跟随人员岗位，不在这里单独改角色。</span></div>`
+    ? `<div class="am-add"><span id="amMsg" class="am-msg">新账号请在「诊所人员管理」中找到对应人员，再点“开通登录”。账号岗位跟随人员岗位，不在这里单独改角色。</span></div>`
     : `<div class="am-add">
       <input class="cs-input" id="amNewUser" placeholder="用户名(登录用)">
       <input class="cs-input" id="amNewName" placeholder="姓名">
@@ -253,5 +282,6 @@ async function amChangeOwnPassword() {
 }
 
 window.openAccountManager = openAccountManager;
+window.amOpenNewStaff = amOpenNewStaff;
 window.amClose = amClose;
 window.accountManagerVisibleUsers = accountManagerVisibleUsers;

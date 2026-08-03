@@ -29,7 +29,7 @@ def create_backup_router(db_path, images_dir):
 
     @router.post("/api/backup")
     def create_backup(payload: dict = None):
-        require_admin()   # 备份含全量隐私，仅管理员
+        require_admin()   # #102 备份含全量隐私，仅管理员
         payload = payload or {}
         include_images = bool(payload.get("include_images"))
         backups_dir.mkdir(parents=True, exist_ok=True)
@@ -55,7 +55,7 @@ def create_backup_router(db_path, images_dir):
                         for root, _dirs, files in os.walk(images_dir):
                             for fn in files:
                                 full = Path(root) / fn
-                                # 只跳过 os.walk 枚举后被并发删影像删掉的文件(FileNotFoundError);
+                                # #568：只跳过 os.walk 枚举后被并发删影像删掉的文件(FileNotFoundError);
                                 # 磁盘满/权限/IO 等真故障(其它 OSError)照常抛出,不把失败备份伪装成成功
                                 try:
                                     zf.write(full, arcname=str(Path("images") / full.relative_to(images_dir)))

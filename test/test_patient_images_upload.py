@@ -157,7 +157,7 @@ class PatientImageUploadTest(unittest.TestCase):
                 self.assertIsNotNone(audit)             # 审计留痕
 
     def test_delete_keeps_file_when_db_commit_fails(self):
-        # 先删库提交、成功后再删文件——库提交失败时磁盘文件不得丢失,库也不留悬挂行
+        # #567:先删库提交、成功后再删文件——库提交失败时磁盘文件不得丢失,库也不留悬挂行
         from unittest import mock
         with tempfile.TemporaryDirectory() as tmp:
             db = _seed(tmp)
@@ -194,7 +194,7 @@ class PatientImageUploadTest(unittest.TestCase):
             self.assertEqual(c.delete(f"/api/patients/p1/images/{iid}").status_code, 403)
 
     def test_upload_rejects_path_traversal_image_date(self):
-        # image_date 带 ../ 时不得穿出 images_dir 写文件;非法日期回退今天
+        # #554: image_date 带 ../ 时不得穿出 images_dir 写文件;非法日期回退今天
         with tempfile.TemporaryDirectory() as tmp:
             db = _seed(tmp)
             images = Path(tmp) / "images"
@@ -331,7 +331,7 @@ if __name__ == "__main__":
 
 
 class PatientImageOrientTest(unittest.TestCase):
-    """灯箱旋转/镜像写回文件。像素级断言变换口径=前端CSS(先镜像后旋转,CSS顺时针)。"""
+    """#635:灯箱旋转/镜像写回文件。像素级断言变换口径=前端CSS(先镜像后旋转,CSS顺时针)。"""
 
     def _seed_png(self, tmp, c):
         # 2x1 PNG:左红右蓝(方向变化一目了然)
@@ -388,7 +388,7 @@ class PatientImageOrientTest(unittest.TestCase):
             self.assertEqual(audits, 1)
 
     def test_orient_db_failure_leaves_original_intact(self):
-        # 库更新/审计失败不得留下"文件已转、哈希还是旧的"的错配——
+        # 五轮P2:库更新/审计失败不得留下"文件已转、哈希还是旧的"的错配——
         # 指针切换方案下:5xx 时盘上仍是旧图、库里仍是旧路径旧哈希、新文件不残留。
         from unittest import mock
         import local_app.routes.patient_assets as pa
@@ -424,7 +424,7 @@ class PatientImageOrientTest(unittest.TestCase):
             self.assertEqual(leftovers, [], f"不得残留新文件: {leftovers}")
 
     def test_orient_after_delete_404_no_orphan(self):
-        # 旋转与「真实删除端点」并发——删除先赢时旋转必须404,
+        # 五轮P2+六轮P3:旋转与「真实删除端点」并发——删除先赢时旋转必须404,
         # 不得虚假成功;整个影像目录必须一个文件不剩(删除清了原图,旋转清了自己的新文件)
         from unittest import mock
         import local_app.routes.patient_assets as pa
@@ -459,7 +459,7 @@ class PatientImageOrientTest(unittest.TestCase):
             self.assertEqual(audits, 0, "没写成的旋转不得留审计")
 
     def test_delete_after_concurrent_rotate_cleans_current_file(self):
-        # 删除抢到锁之前旋转先提交了新路径——删除必须按「锁内读到的
+        # 六轮P2反向竞态:删除抢到锁之前旋转先提交了新路径——删除必须按「锁内读到的
         # 现路径」清文件,不得按开锁前的旧路径清,否则新旋转文件成永久孤儿
         from unittest import mock
         import local_app.routes.patient_assets as pa
@@ -493,7 +493,7 @@ class PatientImageOrientTest(unittest.TestCase):
             self.assertEqual(rows, 0)
 
     def test_orient_25_consecutive_rotations_stay_healthy(self):
-        # 新文件名若沿用旧主干追加后缀,每转一次名字长一截,第23次撞文件名上限
+        # 七轮P1:新文件名若沿用旧主干追加后缀,每转一次名字长一截,第23次撞文件名上限
         # 且被误报400"图片损坏"。定长随机名下连转25次必须全200,目录里始终只有现任1个文件。
         with tempfile.TemporaryDirectory() as tmp:
             db = _seed(tmp)
@@ -509,14 +509,14 @@ class PatientImageOrientTest(unittest.TestCase):
                 files = [f.name for f in img_dir.iterdir()]
                 self.assertEqual(len(files), 1, f"第{i + 1}次后目录只该有现任1个文件: {files}")
                 self.assertLess(len(files[0]), 60, f"第{i + 1}次后文件名长度必须有界: {files[0]}")
-                with connect(db) as conn:   # 逐次核对库指针/文件名列与盘上一致
+                with connect(db) as conn: # 逐次核对库指针/文件名列与盘上一致
                     row = conn.execute("select rel_path, file_name from patient_images where image_id=?",
                                        (iid,)).fetchone()
                 self.assertEqual(Path(row["rel_path"]).name, files[0], f"第{i + 1}次后库指针与盘上一致")
                 self.assertEqual(row["file_name"], files[0], f"第{i + 1}次后 file_name 列与盘上一致")
 
     def test_orient_concurrent_rotate_409_no_leftover(self):
-        # rel_path 被并发旋转改掉时走409分支——本次新文件必须清掉,零审计,原文件不动
+        # 六轮P3:rel_path 被并发旋转改掉时走409分支——本次新文件必须清掉,零审计,原文件不动
         from unittest import mock
         import local_app.routes.patient_assets as pa
         with tempfile.TemporaryDirectory() as tmp:
@@ -551,7 +551,7 @@ class PatientImageOrientTest(unittest.TestCase):
             self.assertEqual(audits, 0)
 
     def test_orient_409_survives_cleanup_failure(self):
-        # 409/404/库异常路径上,清理新文件的 unlink 自己报错不得顶掉原始状态码
+        # 八轮#854:409/404/库异常路径上,清理新文件的 unlink 自己报错不得顶掉原始状态码
         from unittest import mock
         import local_app.routes.patient_assets as pa
         with tempfile.TemporaryDirectory() as tmp:
@@ -575,7 +575,8 @@ class PatientImageOrientTest(unittest.TestCase):
                 return real_begin(conn)
 
             def broken_unlink(self, missing_ok=False):
-                # 只弄坏"清理本次新文件"这一下——按实际新命名 r{uuid32}{ext} 匹配(# 旧匹配 ".r" 与新命名恒不匹配,故障从未触发,测试假绿)
+                # 只弄坏"清理本次新文件"这一下——按实际新命名 r{uuid32}{ext} 匹配(九轮:
+                # 旧匹配 ".r" 与新命名恒不匹配,故障从未触发,测试假绿)
                 if re.fullmatch(r"r[0-9a-f]{32}\.[A-Za-z0-9]+", self.name):
                     state["unlink_failed"] = True
                     raise OSError(1, "Operation not permitted")
@@ -588,7 +589,7 @@ class PatientImageOrientTest(unittest.TestCase):
             self.assertTrue(state.get("unlink_failed"), "清理故障必须真的被触发过(防假绿)")
 
     def test_exif_orientation_applied_before_transform(self):
-        # 手机照片带EXIF方向标签,浏览器显示时已按标签转正;旋转保存必须先把像素
+        # #637:手机照片带EXIF方向标签,浏览器显示时已按标签转正;旋转保存必须先把像素
         # 转成"浏览器显示的样子"再做用户变换,否则存出来的方向和灯箱里看到的差90/180°。
         from PIL import Image
         with tempfile.TemporaryDirectory() as tmp:
@@ -643,7 +644,7 @@ class PatientImageOrientTest(unittest.TestCase):
                              "失败后不得残留临时文件")
 
     def test_orient_save_and_cleanup_both_fail_still_500(self):
-        # 保存失败+清理也失败的双重故障——仍必须明确500,原图不动,
+        # 九轮加硬:保存失败+清理也失败的双重故障——仍必须明确500,原图不动,
         # 清理的 OSError 不得逃逸成 400"图片损坏"或未处理异常。
         from PIL import Image
         import local_app.routes.patient_assets as pa
@@ -704,7 +705,7 @@ class PatientImageOrientTest(unittest.TestCase):
 
 
 class UploadToMergedPatientTest(unittest.TestCase):
-    """已软删/已被合并的患者不得再挂新影像(否则照片挂旧身份从相册消失)。"""
+    """#580:已软删/已被合并的患者不得再挂新影像(否则照片挂旧身份从相册消失)。"""
 
     def test_upload_to_soft_deleted_patient_404_no_orphan_file(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -721,7 +722,7 @@ class UploadToMergedPatientTest(unittest.TestCase):
 
 
 class SeedImageSetsRaceTest(unittest.TestCase):
-    """组图种子标记写入必须 insert or ignore——新库首批并发请求都过了 done 检查后,
+    """#579:组图种子标记写入必须 insert or ignore——新库首批并发请求都过了 done 检查后,
     第二个写入者不得撞 app_settings 主键 500。"""
 
     def test_seed_marker_uses_insert_or_ignore(self):
@@ -729,7 +730,7 @@ class SeedImageSetsRaceTest(unittest.TestCase):
         from local_app.routes import patient_assets
         src = inspect.getsource(patient_assets.ensure_seed_image_sets)
         self.assertIn("insert or ignore into app_settings", src,
-                      "标记写入必须 or ignore,防并发窗口撞主键")
+                      "#579:标记写入必须 or ignore,防并发窗口撞主键")
 
     def test_seed_idempotent_double_call(self):
         from local_app.routes.patient_assets import ensure_seed_image_sets
@@ -744,7 +745,7 @@ class SeedImageSetsRaceTest(unittest.TestCase):
 
 
 class UploadVsMergeRaceTest(unittest.TestCase):
-    """复核:上传与患者合并并发——begin_immediate 抢写锁后「复查身份→插入」原子,
+    """#580复核:上传与患者合并并发——begin_immediate 抢写锁后「复查身份→插入」原子,
     不变量:无论谁先拿到锁,影像绝不落在被合并的旧身份上(要么404清盘,要么落主身份/被合并迁走)。"""
 
     def test_upload_never_lands_on_merged_identity(self):

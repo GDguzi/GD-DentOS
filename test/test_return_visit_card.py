@@ -1,4 +1,4 @@
-"""客户通回访卡片：列表倒序(最近在前) + 回访详情 + 微信回访截图上传/回放/删除(防孤儿口径)。"""
+"""客户通回访卡片：列表倒序(最近在前) + 回访详情 + 微信回访截图上传/回放/删除(#712 防孤儿口径)。"""
 import io
 import tempfile
 import unittest
@@ -111,7 +111,7 @@ class ReturnVisitCardTest(unittest.TestCase):
             ).status_code, 404)
 
     def test_image_upload_db_failure_no_orphan(self):
-        # 入库失败(drop 表)时清盘,不留孤儿截图
+        # #712 入库失败(drop 表)时清盘,不留孤儿截图
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "clinic.sqlite3"
             init_db(db)
@@ -154,7 +154,7 @@ class ReturnVisitCardTest(unittest.TestCase):
             self.assertEqual(call["linked_return_visit_id"], "rv-new")
 
     def test_call_link_cross_patient_return_visit_rejected(self):
-        # 电话回访录音弱关联必须同患者:把 p2 的回访挂到 p1 的录音 → 400,且不留孤儿
+        # #723 电话回访录音弱关联必须同患者:把 p2 的回访挂到 p1 的录音 → 400,且不留孤儿
         with tempfile.TemporaryDirectory() as tmp:
             db, client = self._client(tmp)
             _WAV = b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\x00" * 28

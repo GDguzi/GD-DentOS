@@ -1,7 +1,7 @@
 // dict.js — 字典前端消费 (P0-4)
 // 把建档/病历表单里原本自由文本/硬编码的字段，接上 GET /api/dictionaries?type= 的已同步字典，
 // 用 <datalist> 给"建议值"但仍允许自由输入（字典外的值照样能填，不破坏旧行为）。
-// 断 外部系统 后仍可用本地已同步的字典数据。
+// 断 SaaS 后仍可用本地已同步的字典数据。
 
 const _dictCache = {};     // type -> [{name, value, ...}]
 const _dictPending = {};   // type -> Promise（并发去重）

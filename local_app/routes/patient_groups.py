@@ -3,7 +3,7 @@
 只读端点，只产出「分组名 + 患者计数」，绝不输出任何患者明细。分组是
 诊所自定义的标签（种植牙/正畸患者/年卡办理…），非患者隐私字段；多分组
 用逗号拼在一个字段里（如「最近患者,种植牙」），按逗号拆开逐组计数。
-真相源=patient_group 列(同步建档/回填已落列)，不再读 source_json。
+开源壳阶段2：真相源=patient_group 列(同步建档/回填已落列)，不再读 source_json。
 """
 from fastapi import APIRouter
 
@@ -20,7 +20,7 @@ def create_patient_groups_router(db_path):
 
     @router.get("/api/patient-groups")
     def patient_groups():
-        require_perm("patient.view")   # 分组名虽非明细,仍属患者域,按 patient.view 守卫
+        require_perm("patient.view")   # #482：分组名虽非明细,仍属患者域,按 patient.view 守卫
         counts = {}
         recent = 0
         with connect(db_path) as conn:

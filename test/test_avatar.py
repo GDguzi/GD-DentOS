@@ -49,7 +49,7 @@ class AvatarTest(unittest.TestCase):
             self.assertEqual(r.status_code, 400)
 
     def test_two_patients_distinct_avatars(self):
-        # 不同患者头像文件不碰撞、不串图
+        # #104 不同患者头像文件不碰撞、不串图
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "clinic.sqlite3"
             init_db(db)
@@ -72,7 +72,7 @@ class AvatarTest(unittest.TestCase):
             self.assertEqual(r.status_code, 404)
 
     def test_cleanup_failure_does_not_fail_committed_upload(self):
-        # 清理落选文件是卫生工序——第二段清理事务抢锁失败,不得把已提交
+        # 四轮P2:清理落选文件是卫生工序——第二段清理事务抢锁失败,不得把已提交
         # 生效的上传报成 500;新头像必须可读,残留文件由下次上传的清理顺路收走。
         from unittest import mock
         import local_app.routes.patient_assets as pa

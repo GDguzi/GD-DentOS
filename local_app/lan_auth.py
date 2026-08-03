@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 _LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost"}
 _OPEN_PATHS = {"/__login", "/api/login"}
 
-# 抬头显示配置的诊所名(占位符渲染时替换)
+# 抬头显示配置的诊所名(占位符渲染时替换,开源壳阶段1去硬编码)
 LOGIN_HTML_TMPL = """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>访问口令</title>
 <style>body{font-family:-apple-system,"PingFang SC",sans-serif;display:flex;align-items:center;

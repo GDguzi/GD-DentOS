@@ -26,7 +26,7 @@ def create_surgeries_router(db_path):
 
     @router.get("/api/patients/{patient_identity}/surgeries")
     def list_surgeries(patient_identity: str):
-        require_perm("surgery.manage")   # 手术记录读守卫用本模块对应权限
+        require_perm("surgery.manage")   # #482：手术记录读守卫用本模块对应权限
         with connect(db_path) as conn:
             require_patient(conn, patient_identity)
             rows = conn.execute(
@@ -61,7 +61,7 @@ def create_surgeries_router(db_path):
         if not surgery_name:
             raise HTTPException(status_code=400, detail="手术名称不能为空")
         values = {f: str(payload.get(f) or "").strip() for f in _TEXT_FIELDS}
-        values["surgery_date"] = valid_time_field(values["surgery_date"], "surgery_date")  # 日期校验
+        values["surgery_date"] = valid_time_field(values["surgery_date"], "surgery_date")  # #15 日期校验
 
         now = now_str()
         surgery_id = new_id("local-surgery")

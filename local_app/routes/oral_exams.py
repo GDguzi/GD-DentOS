@@ -19,7 +19,7 @@ def create_oral_exams_router(db_path):
 
     @router.get("/api/patients/{patient_identity}/oral-exams")
     def list_oral_exams(patient_identity: str):
-        require_perm("oral_exam.manage")   # 口腔检查记录读守卫用本模块对应权限
+        require_perm("oral_exam.manage")   # #482：口腔检查记录读守卫用本模块对应权限
         with connect(db_path) as conn:
             require_patient(conn, patient_identity)
             exam_rows = conn.execute(

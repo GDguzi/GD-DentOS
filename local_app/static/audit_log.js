@@ -17,6 +17,7 @@ const AUDIT_ACTION_LABEL = {
   create_handle_item: "新增收费项目", update_handle_item: "修改收费项目",
   stop_handle_item: "停用收费项目", restore_handle_item: "恢复收费项目",
   suspect_cancelled: "对账标记疑似取消", suspect_recleared: "对账撤销疑似取消",
+  rescheduled_by_saas: "同步改期", cancelled_by_saas: "同步取消",
 };
 
 const AUDIT_ENTITY_LABEL = {
@@ -71,7 +72,7 @@ function auditHandleItemChangeHtml(row) {
 let _auditOperators = null;   // 去重操作人缓存(进模块拉一次)
 
 async function loadAuditLogModule() {
-  // 已从顶层导航搬进配置管理"操作历史"子tab，渲染进 cfgBody(局部变量覆盖 app.js 的全局 modulePanel)。
+  // #617:已从顶层导航搬进配置管理"操作历史"子tab，渲染进 cfgBody(局部变量覆盖 app.js 的全局 modulePanel)。
   const modulePanel = document.getElementById("cfgBody");
   if (!modulePanel) return;
   ++moduleViewToken;

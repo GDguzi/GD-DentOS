@@ -9,7 +9,7 @@ from local_app.api import create_app
 from local_app.db import connect, init_db
 from local_app.versioning import stable_hash
 
-RAW_SOURCE = '{"customerid":"c1","display_name":"旧姓名","原始字段":"外部系统原样"}'
+RAW_SOURCE = '{"customerid":"c1","display_name":"旧姓名","原始字段":"SaaS原样"}'
 
 
 def _client(tmpdir):
@@ -32,7 +32,7 @@ def _client(tmpdir):
 
 
 class SourceJsonProtectionTest(unittest.TestCase):
-    """本地编辑不得污染镜像层 source_json（导入原始 payload）。"""
+    """本地编辑不得污染镜像层 source_json（SaaS 原始 payload）。"""
 
     def test_update_does_not_touch_source_json(self):
         with tempfile.TemporaryDirectory() as tmpdir:

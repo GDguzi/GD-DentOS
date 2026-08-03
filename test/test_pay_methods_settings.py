@@ -1,4 +1,4 @@
-"""付款方式自定义（收费弹窗⚙️设置）——默认8种、校验、持久化、billing.pay守卫、审计。"""
+"""#638:付款方式自定义（收费弹窗⚙️设置）——默认8种、校验、持久化、billing.pay守卫、审计。"""
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,12 +9,12 @@ from local_app import auth
 from local_app.api import create_app
 from local_app.db import connect, init_db
 
-_DEFAULT8 = ["现金", "微信", "支付宝", "银行卡", "云闪付", "社保卡", "医保", "其他"]
+_DEFAULT7 = ["现金", "微信", "支付宝", "银行卡", "社保卡", "医保", "其他"]
 
 
 class PayMethodsSettingsTest(unittest.TestCase):
     def _client(self, tmp, login="qt"):
-        # 产品决策「能收费就能改」：前台 qt(reception,有 billing.pay)当主角，护士 hs(无 billing.pay)当 403 反例
+        # 用户拍板「能收费就能改」：前台 qt(reception,有 billing.pay)当主角，护士 hs(无 billing.pay)当 403 反例
         db = Path(tmp) / "clinic.sqlite3"
         init_db(db)
         auth.ensure_seed_roles(db)
@@ -30,20 +30,20 @@ class PayMethodsSettingsTest(unittest.TestCase):
     def test_default_is_legacy_8(self):
         with tempfile.TemporaryDirectory() as tmp:
             c, _ = self._client(tmp)
-            self.assertEqual(c.get("/api/settings/pay-methods").json()["list"], _DEFAULT8)
+            self.assertEqual(c.get("/api/settings/pay-methods").json()["list"], _DEFAULT7)
 
     def test_put_persists_and_get_reads_back(self):
         with tempfile.TemporaryDirectory() as tmp:
             c, _ = self._client(tmp)
-            r = c.put("/api/settings/pay-methods", json={"list": ["现金", "云闪付"]})
+            r = c.put("/api/settings/pay-methods", json={"list": ["现金", "扫码付"]})
             self.assertEqual(r.status_code, 200, r.text)
-            self.assertEqual(c.get("/api/settings/pay-methods").json()["list"], ["现金", "云闪付"])
+            self.assertEqual(c.get("/api/settings/pay-methods").json()["list"], ["现金", "扫码付"])
 
     def test_trim_dedupe_keep_order(self):
         with tempfile.TemporaryDirectory() as tmp:
             c, _ = self._client(tmp)
-            c.put("/api/settings/pay-methods", json={"list": [" 现金 ", "云闪付", "现金", "", "  "]})
-            self.assertEqual(c.get("/api/settings/pay-methods").json()["list"], ["现金", "云闪付"])
+            c.put("/api/settings/pay-methods", json={"list": [" 现金 ", "扫码付", "现金", "", "  "]})
+            self.assertEqual(c.get("/api/settings/pay-methods").json()["list"], ["现金", "扫码付"])
 
     def test_rejects_empty_and_bad_shape_and_too_long(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -63,7 +63,7 @@ class PayMethodsSettingsTest(unittest.TestCase):
     def test_put_writes_audit(self):
         with tempfile.TemporaryDirectory() as tmp:
             c, db = self._client(tmp)
-            c.put("/api/settings/pay-methods", json={"list": ["现金", "云闪付"]})
+            c.put("/api/settings/pay-methods", json={"list": ["现金", "扫码付"]})
             with connect(db) as conn:
                 n = conn.execute(
                     "select count(*) from audit_logs where entity_type='pay_methods' "

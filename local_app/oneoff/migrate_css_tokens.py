@@ -20,7 +20,7 @@ MAPPING = {
     "#1f6e57": "var(--accent-dark)", "#2c7a5a": "var(--accent-dark)",
     "#2c6c58": "var(--accent-dark)", "#247a60": "var(--accent-dark)",
     # 成功绿 → ok
-    # 分类调色板(p-badge)豁免,勿收编: ea36b(b-first)、a8f3c(b-implant)
+    # 分类调色板(p-badge)豁免,勿收编: #2ea36b(b-first)、#5a8f3c(b-implant)
     "#1f7a3d": "var(--ok)", "#16a34a": "var(--ok)", "#166534": "var(--ok)",
     "#1a9e63": "var(--ok)", "#1f8a52": "var(--ok)",
     "#1d7a4d": "var(--ok)", "#237a35": "var(--ok)",

@@ -70,7 +70,7 @@ def create_audit_logs_router(db_path):
         pageno: int = 1,
         pagesize: int = 50,
     ):
-        require_perm("audit.view")   # 全量审计含跨患者业务记录号,隐藏菜单挡不住直接API调用,后端硬守卫
+        require_perm("audit.view")   # #464：全量审计含跨患者业务记录号,隐藏菜单挡不住直接API调用,后端硬守卫
         pageno = max(pageno, 1)
         pagesize = min(max(pagesize, 1), 200)
         offset = (pageno - 1) * pagesize
@@ -125,7 +125,7 @@ def create_audit_logs_router(db_path):
 
     @router.get("/api/patients/{patient_identity}/audit-logs")
     def patient_audit_logs(patient_identity: str, pageno: int = 1, pagesize: int = 50):
-        require_perm("patient.view")   # 患者本人操作历史(患者详情内嵌),按 patient.view 守卫(全量审计另按 audit.view,见 )
+        require_perm("patient.view")   # #482：患者本人操作历史(患者详情内嵌),按 patient.view 守卫(全量审计另按 audit.view,见 #464)
         patient_identity = patient_identity.strip()
         if not patient_identity:
             raise HTTPException(status_code=400, detail="patient_identity is required")
@@ -157,8 +157,8 @@ def create_audit_logs_router(db_path):
                 ))
             )
         """
-        # 会员储值流水(member_account,entity_id=患者)也要进患者审计视图
-        # 通话录音(call)、沟通记录(communication)按表 patient_identity 反查(记录仍在)，
+        # 审查#24：会员储值流水(member_account,entity_id=患者)也要进患者审计视图
+        # #701/#719：通话录音(call)、沟通记录(communication)按表 patient_identity 反查(记录仍在)，
         # 并叠加按审计 json 的 patient_identity 匹配(删除/删盘失败审计——业务行已删，反查会落空)
         params = (patient_identity,) * 11
 

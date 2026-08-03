@@ -46,7 +46,7 @@ async function renderWorkspaceImagesTab(panel) {
     const cr = await fetch(`/api/patients/${encodeURIComponent(identity)}/consent-documents`);
     workspaceConsentDocs = (cr.ok && identity === workspacePatientId) ? ((await cr.json()).documents || []) : [];
   } catch { workspaceConsentDocs = []; }
-  // CT/三维影像分区(可选模块 ct_studies.js,不在场→分区隐藏)
+  // CT/三维影像分区(ct_studies.js,扩展文件不在场→分区隐藏)
   if (typeof loadWorkspaceCtStudies === "function") await loadWorkspaceCtStudies(identity);
   if (identity !== workspacePatientId) return;
   renderWorkspaceImagesPanel(panel);
@@ -75,7 +75,7 @@ function renderWorkspaceImagesPanel(panel) {
     body = filtered.length ? renderWorkspaceImageGroups(filtered) : '<div class="workspace-placeholder">该分类暂无影像</div>';
   }
   const chips = hasAny ? `<div class="image-filter-chips">${renderWorkspaceImageChips()}</div>` : "";
-  // CT/三维影像分区(可选模块 ct_studies.js,不在场→分区隐藏)
+  // CT/三维影像分区(ct_studies.js,扩展文件不在场→分区隐藏)
   const ctSection = typeof renderWorkspaceCtSection === "function" ? renderWorkspaceCtSection() : "";
   panel.innerHTML = bar + ctSection + chips + body;
   const ctBtn = panel.querySelector("#wsCtRefresh");
@@ -91,7 +91,7 @@ function renderWorkspaceImagesPanel(panel) {
     upBtn.addEventListener("click", () => upInput.click());
     upInput.addEventListener("change", () => { uploadWorkspaceLocalFiles(upInput.files); upInput.value = ""; });
   }
-  // 拖拽上传:只绑一次(panel 元素跨重渲染复用,重复 addEventListener 会累积致一次 drop 触发多份→重复上传 )。
+  // 拖拽上传:只绑一次(panel 元素跨重渲染复用,重复 addEventListener 会累积致一次 drop 触发多份→重复上传 #315)。
   // handler 在 drop 时读当前 workspacePatientId,绑一次即对所有患者/分类正确。
   if (!panel.dataset.endoDropBound) {
     panel.dataset.endoDropBound = "1";

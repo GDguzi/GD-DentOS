@@ -37,7 +37,7 @@ class AuditLogFiltersTest(unittest.TestCase):
             self.assertTrue(all(r["operator"] == "收银B" for r in d["list"]))
 
     def test_operators_endpoint_distinct_sorted(self):
-        # 操作人下拉数据源——去重+排序,空操作人不出现
+        # #633:操作人下拉数据源——去重+排序,空操作人不出现
         with tempfile.TemporaryDirectory() as tmp:
             db = self._seed(tmp)
             with connect(db) as conn:

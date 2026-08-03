@@ -1,4 +1,4 @@
-"""今日工作台必须隐藏取消/疑似取消的预约(KPI/候诊队列/漏斗/就诊类型桶/明日预约都排除),
+"""#418:今日工作台必须隐藏取消/疑似取消的预约(KPI/候诊队列/漏斗/就诊类型桶/明日预约都排除),
 数据仍保留供历史/预约管理追溯。合成数据,只断言计数与可见 id,不碰真实库。"""
 import datetime as dt
 import tempfile
@@ -54,7 +54,7 @@ class TodayWorkHideCancelledTest(unittest.TestCase):
             self.assertEqual(s["first_visits_today"], 1, "初诊桶应排除取消/疑似取消")
 
     def test_future_suspect_cancelled_not_counted_as_rebooked(self):
-        # 约下次高亮的"未来预约"要排除取消/疑似取消;否则取消的未来约也点亮"预约"按钮
+        # #423:约下次高亮的"未来预约"要排除取消/疑似取消;否则取消的未来约也点亮"预约"按钮
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "clinic.sqlite3"
             init_db(db)
@@ -109,7 +109,7 @@ class TodayWorkHideCancelledTest(unittest.TestCase):
                 self.assertTrue(row2["return_visit_today"], "今天新增了回访→回访亮")
 
     def test_rebooked_today_requires_future_not_current(self):
-        # 今天新建的"当前到诊预约"(start=今天)不算"约了下次",预约不该亮
+        # #433:今天新建的"当前到诊预约"(start=今天)不算"约了下次",预约不该亮
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "clinic.sqlite3"
             init_db(db)

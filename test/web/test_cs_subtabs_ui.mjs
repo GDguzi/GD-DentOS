@@ -51,7 +51,7 @@ test("面诊子tab 派发到并入的 renderWorkspaceConsultTab;回访子tab 保
 
 // ---- 行为回归(VM 真跑,非字符串守卫)----
 
-test("(重)载客户沟通 tab 强制重置子tab 为「回访」,不跨患者残留", () => {
+test("#710 (重)载客户沟通 tab 强制重置子tab 为「回访」,不跨患者残留", () => {
   const sandbox = {
     requireWorkspaceDetail: () => true,
     renderCsSubTabs: () => {},
@@ -68,7 +68,7 @@ test("(重)载客户沟通 tab 强制重置子tab 为「回访」,不跨患者�
   assert.strictEqual(sandbox.__get(), "回访", "重载后应回到默认回访子tab");
 });
 
-test("面诊保存成功走 onSaved 回调就地刷新,不 switchWorkspaceTab(顶层已无 consult)", async () => {
+test("#708 面诊保存成功走 onSaved 回调就地刷新,不 switchWorkspaceTab(顶层已无 consult)", async () => {
   let switched = null, onSavedCalled = false;
   const form = { querySelector: () => ({ textContent: "" }), querySelectorAll: () => [] };
   const sandbox = {
@@ -88,16 +88,16 @@ test("面诊保存成功走 onSaved 回调就地刷新,不 switchWorkspaceTab(�
   assert.strictEqual(switched, null, "面诊保存不得 switchWorkspaceTab(会被静默退回基本资料)");
 });
 
-test("源码含竞态守卫与回访意图入口", () => {
+test("#709/#710 源码含竞态守卫与回访意图入口", () => {
   assert.ok(/_csSubTab = "回访";/.test(wsTabs), "renderWorkspaceReturnVisitsTab 应重置 _csSubTab");
   assert.ok(wsTabs.includes("body.dataset.csCur = _csSubTab"), "loadCsSubTab 应盖章 csCur 供过期守卫");
   assert.match(wsTabs, /panel\.dataset\.csCur[\s\S]*?!== "回访"[\s\S]*?return/, "回访子tab 应有过期渲染守卫");
   assert.ok(wsTabs.includes("function showCustomerCommReturnVisit"), "应有强制回访子tab 入口");
   assert.ok(csJs.includes("const sub0 = panel.dataset") && csJs.includes("stale()"),
-    "loadSimpleTab 应有子tab过期守卫(覆盖成功+失败态)");
+    "#715 loadSimpleTab 应有子tab过期守卫(覆盖成功+失败态)");
 });
 
-test("loadSimpleTab 失败态:await 期间切走子tab → 不写「面诊记录载入失败」覆盖回访正文", async () => {
+test("#715 loadSimpleTab 失败态:await 期间切走子tab → 不写「面诊记录载入失败」覆盖回访正文", async () => {
   const panel = { dataset: { csCur: "面诊" }, textContent: "" };
   const sandbox = {
     workspacePatientId: "p1",
@@ -125,27 +125,27 @@ test("沟通咨询子tab 接入 renderCommunicationsSub;communications.js 暴露
   assert.ok(commJs.includes('panel.dataset.csCur') && commJs.includes('!== "沟通咨询"'), "应有子tab过期渲染守卫");
 });
 
-test("录音前端:成交状态失败不静默、删除不吞错、麦克风录音锁患者", () => {
-  assert.ok(callJs.includes("_callMicPid = workspacePatientId"), "录音开始应锁定患者");
-  assert.match(callJs, /_callMicPid !== workspacePatientId[\s\S]*?return/, "停止上传前应校验患者未切换");
-  assert.match(callJs, /function setCallDeal[\s\S]*?res\.ok[\s\S]*?alert/, "setCallDeal 失败应告警");
-  assert.match(callJs, /function deleteCall[\s\S]*?res\.ok[\s\S]*?alert/, "deleteCall 失败应告警");
+test("#700/#702 录音前端:成交状态失败不静默、删除不吞错、麦克风录音锁患者", () => {
+  assert.ok(callJs.includes("_callMicPid = workspacePatientId"), "#700 录音开始应锁定患者");
+  assert.match(callJs, /_callMicPid !== workspacePatientId[\s\S]*?return/, "#700 停止上传前应校验患者未切换");
+  assert.match(callJs, /function setCallDeal[\s\S]*?res\.ok[\s\S]*?alert/, "#702 setCallDeal 失败应告警");
+  assert.match(callJs, /function deleteCall[\s\S]*?res\.ok[\s\S]*?alert/, "#702 deleteCall 失败应告警");
 });
 
-test("沟通记录前端:成交状态/删除失败不静默", () => {
+test("#702 沟通记录前端:成交状态/删除失败不静默", () => {
   const commJs = readFileSync(join(here, "..", "..", "local_app", "static", "communications.js"), "utf8");
   assert.match(commJs, /function setCommDeal[\s\S]*?res\.ok[\s\S]*?alert/, "setCommDeal 失败应告警");
   assert.match(commJs, /function deleteCommunication[\s\S]*?res\.ok[\s\S]*?alert/, "deleteCommunication 失败应告警");
 });
 
-test("沟通附件保存/删除失败不静默(逐个检查响应+解析 files_failed)", () => {
+test("#720/#721 沟通附件保存/删除失败不静默(逐个检查响应+解析 files_failed)", () => {
   const commJs = readFileSync(join(here, "..", "..", "local_app", "static", "communications.js"), "utf8");
-  assert.ok(commJs.includes("attachFail"), "saveCommunication 应逐个检查附件上传响应");
-  assert.match(commJs, /attachFail > 0[\s\S]*?alert/, "附件失败应告警,不按成功重载");
-  assert.match(commJs, /files_failed > 0[\s\S]*?alert/, "deleteCommunication 应解析删盘失败并告警");
+  assert.ok(commJs.includes("attachFail"), "#720 saveCommunication 应逐个检查附件上传响应");
+  assert.match(commJs, /attachFail > 0[\s\S]*?alert/, "#720 附件失败应告警,不按成功重载");
+  assert.match(commJs, /files_failed > 0[\s\S]*?alert/, "#721 deleteCommunication 应解析删盘失败并告警");
 });
 
-test("卡片补传入口存在:附件失败后有 补传截图/补传录音 可重试,不必重建记录", () => {
+test("#722 卡片补传入口存在:附件失败后有 补传截图/补传录音 可重试,不必重建记录", () => {
   const commJs = readFileSync(join(here, "..", "..", "local_app", "static", "communications.js"), "utf8");
   assert.ok(commJs.includes("reattachCommImages") && commJs.includes("reattachCommAudio"), "应有补传处理函数");
   assert.ok(commJs.includes("补传截图") && commJs.includes("补传录音"), "记录卡片应有补传入口");
@@ -153,7 +153,7 @@ test("卡片补传入口存在:附件失败后有 补传截图/补传录音 可�
   assert.match(commJs, /Object\.assign\(window,[\s\S]*?reattachCommImages[\s\S]*?reattachCommAudio/, "补传函数应暴露到 window");
 });
 
-test("行为回归:附件上传失败时 saveCommunication 明确告警(不静默假成功)", async () => {
+test("#720 行为回归:附件上传失败时 saveCommunication 明确告警(不静默假成功)", async () => {
   const commJs = readFileSync(join(here, "..", "..", "local_app", "static", "communications.js"), "utf8");
   let alerted = 0, reloaded = 0;
   const form = {
@@ -189,7 +189,7 @@ test("行为回归:附件上传失败时 saveCommunication 明确告警(不静�
   assert.strictEqual(alerted, 1, "截图上传 400 时必须告警,不能静默按成功");
 });
 
-test("deleteCall:解析 file_removed=false 告警,且重载 return-visits(不是不存在的 calls)", async () => {
+test("#716 deleteCall:解析 file_removed=false 告警,且重载 return-visits(不是不存在的 calls)", async () => {
   let alerted = false, switched = null;
   const sandbox = {
     confirm: () => true,

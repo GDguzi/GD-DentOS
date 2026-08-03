@@ -471,9 +471,9 @@ class PersonnelPreflightTests(unittest.TestCase):
 
 
 class PersonnelPreflightHardeningTests(unittest.TestCase):
-    """人员权限迁移回归测试。"""
+    """Regression tests for #831-#834."""
 
-    # --- percent-encoded file URIs for special-character paths ---
+    # --- #831: percent-encoded file URIs for special-character paths ---
 
     def test_special_character_filenames_are_read_correctly_and_stay_readonly(self):
         special_names = [
@@ -508,7 +508,7 @@ class PersonnelPreflightHardeningTests(unittest.TestCase):
                     for fname in after_files:
                         self.assertNotRegex(fname, r"-(wal|shm|journal)$")
 
-    # --- real empty-string staff_id linkage semantics ---
+    # --- #832: real empty-string staff_id linkage semantics ---
 
     def _build_text_staff_id_db(self, path):
         con = sqlite3.connect(path)
@@ -620,7 +620,7 @@ class PersonnelPreflightHardeningTests(unittest.TestCase):
             self.assertEqual(report["counts"]["staff_inactive"], 1)
             self.assertEqual(report["conflicts"]["active_user_inactive_staff"], 1)
 
-    # --- primary role column + token-column-agnostic session count ---
+    # --- #833: primary role column + token-column-agnostic session count ---
 
     def test_primary_role_column_is_checked_even_when_roles_column_exists(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -697,7 +697,7 @@ class PersonnelPreflightHardeningTests(unittest.TestCase):
             self.assertFalse(report["security"]["sessions_has_plaintext_token"])
             self.assertTrue(report["security"]["sessions_has_token_hash"])
 
-    # --- authorizer only allows the fixed read-only table_info pragma ---
+    # --- #834: authorizer only allows the fixed read-only table_info pragma ---
 
     def test_authorizer_denies_assignment_style_pragmas(self):
         deny_cases = [
@@ -737,7 +737,7 @@ TARGET_SCHEMA_TABLES = (
     "audit_logs",
 )
 
-# 局域网精简模式取消登录限速，这两张表不再属于目标模型，
+# 2026-07-15 用户决定：局域网精简模式取消登录限速，这两张表不再属于目标模型，
 # 只作为旧合成源可能残留、必须被清理的废表出现在测试里。
 OBSOLETE_THROTTLE_TABLES = ("login_throttle_accounts", "login_throttle_sources")
 
@@ -1893,7 +1893,7 @@ class LegacySourceSnapshotSqliteErrorTests(unittest.TestCase):
             self.assertFalse(any(n.endswith(("-wal", "-shm", "-journal")) for n in names))
 
     def test_close_failure_after_successful_read_becomes_source_schema(self):
-        """Regression for a close() failure after an otherwise
+        """Regression for #839: a close() failure after an otherwise
         successful read must not leak a native sqlite3.Error and must not
         be reported as success."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1925,7 +1925,7 @@ class LegacySourceSnapshotSqliteErrorTests(unittest.TestCase):
 
 
 class ConnectionCloseFailureTests(unittest.TestCase):
-    """Regression tests for sqlite3 connection.close() failures must
+    """Regression tests for #839: sqlite3 connection.close() failures must
     resolve to the existing stable per-phase error, never leak a native
     sqlite3.Error, and never crash on an unassigned local connection."""
 
@@ -1959,7 +1959,7 @@ class ConnectionCloseFailureTests(unittest.TestCase):
             self.assertEqual(set(os.listdir(tmpdir)), files_before)
 
     def test_open_readonly_connect_failure_raises_preflight_error_without_unbound_local(self):
-        """Regression for if sqlite3.connect itself raises, `con` is
+        """Regression for #839: if sqlite3.connect itself raises, `con` is
         never assigned; the except branch must not crash with
         UnboundLocalError while trying to close it."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -3008,7 +3008,7 @@ class GuardedBackupTests(unittest.TestCase):
             pam._remove_sqlite_artifacts(missing)
 
     def test_transient_migrating_file_unlink_retries_after_backup_failure(self):
-        """Dynamic regression for SQLite backup fails AND the first
+        """Dynamic regression for #838: SQLite backup fails AND the first
         cleanup unlink of the `.migrating-*` temp main file hits a transient
         OSError; the retry must clear it, leaving no residue behind."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -3060,7 +3060,7 @@ class GuardedBackupTests(unittest.TestCase):
             self.assertEqual(attempts["count"], 1)
 
     def test_mkstemp_failure_leaves_no_temp_file(self):
-        """Dynamic regression for tempfile.mkstemp itself failing must
+        """Dynamic regression for #838: tempfile.mkstemp itself failing must
         surface as backup_failed without creating a target or temp file."""
         with tempfile.TemporaryDirectory() as tmpdir:
             source_path = os.path.join(tmpdir, "source.sqlite3")
@@ -3083,7 +3083,7 @@ class GuardedBackupTests(unittest.TestCase):
             self.assertEqual(_file_sha256(source_path), source_hash_before)
 
     def test_dest_close_failure_after_successful_backup_raises_backup_failed(self):
-        """Regression for a close() failure on either backup
+        """Regression for #839: a close() failure on either backup
         connection must be treated as backup_failed even when the backup
         body itself succeeded, cleaning up the temp file and leaving the
         source untouched."""
@@ -3636,7 +3636,7 @@ class TransformTemporaryCopyTests(unittest.TestCase):
                 pam._remove_sqlite_artifacts(temp_path)
 
     def test_close_failure_after_successful_transform_raises_transform_failed(self):
-        """Regression for a close() failure on the transform
+        """Regression for #839: a close() failure on the transform
         connection after an otherwise fully successful transform must still
         surface as transform_failed, not be reported as success."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -4160,7 +4160,7 @@ class BuildMigratedCopyTests(unittest.TestCase):
             self.assertEqual(_file_sha256(source_path), source_hash_before)
 
     def test_external_target_created_in_publish_syscall_window_wins_race(self):
-        """Dynamic regression for an external target appears *inside* the
+        """Dynamic regression for #836: an external target appears *inside* the
         publish primitive's own call (the narrowest possible window between the
         no-target check and the act of creating it), not merely after transform
         ends. A check-then-os.replace publish would silently clobber this file;
@@ -4190,7 +4190,7 @@ class BuildMigratedCopyTests(unittest.TestCase):
             self.assertEqual(_file_sha256(source_path), source_hash_before)
 
     def test_transient_sidecar_cleanup_failure_retries_then_publishes(self):
-        """Dynamic regression for a transient OSError on the first
+        """Dynamic regression for #837: a transient OSError on the first
         pre-publish sidecar unlink attempt must be retried, not leaked as a
         raw OSError, and cleanup must finish before the target is published.
         """
@@ -4237,7 +4237,7 @@ class BuildMigratedCopyTests(unittest.TestCase):
             self.assertEqual(attempts["count"], 1)
 
     def test_persistent_sidecar_cleanup_failure_raises_cleanup_failed_without_publishing(self):
-        """Dynamic regression for an unrecoverable pre-publish sidecar
+        """Dynamic regression for #837: an unrecoverable pre-publish sidecar
         cleanup failure must raise a stable non-leaking cleanup_failed error and
         must never leave a published target behind.
         """

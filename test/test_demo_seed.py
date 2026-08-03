@@ -1,5 +1,5 @@
-"""合成演示库播种器冒烟测试：seed 到临时库,断言数据齐全且能驱动关键功能。
-纯合成数据,不碰真实库。也兼作 简表 + 支付方式分组在生成数据上的回归。"""
+"""合成演示库播种器冒烟测试(#369)：seed 到临时库,断言数据齐全且能驱动关键功能。
+纯合成数据,不碰真实库。也兼作 #321/#362 简表 + #5 支付方式分组在生成数据上的回归。"""
 import tempfile
 import unittest
 from pathlib import Path
@@ -42,7 +42,7 @@ class DemoSeedTest(unittest.TestCase):
                 self.assertGreater(self.counts[t], 0, f"{t} 应有合成数据")
 
     def test_patient_group_column_seeded(self):
-        # 分组真相源=patient_group 列(迁列),演示库必须落列,分组筛选/统计才读得到
+        # #654:分组真相源=patient_group 列(#646迁列),演示库必须落列,分组筛选/统计才读得到
         import sqlite3
         with sqlite3.connect(self.db) as conn:
             n = conn.execute("select count(*) from patients where coalesce(patient_group,'') != ''").fetchone()[0]
@@ -59,7 +59,7 @@ class DemoSeedTest(unittest.TestCase):
         self.assertTrue(all(i.startswith("demo_p_") for i in ids))
 
     def test_today_work_simple_lists_have_content(self):
-        # 六个左入口简表都应有内容,证明实机能逐个点开测
+        # #321/#362:六个左入口简表都应有内容,证明实机能逐个点开测
         d = self.client.get("/api/today-work").json()
         s = d["summary"]
         self.assertGreater(s["appointments_today"], 0)
@@ -72,7 +72,7 @@ class DemoSeedTest(unittest.TestCase):
         self.assertGreater(len(d["return_visits"]), 0)
 
     def test_finance_groups_by_pay_method(self):
-        # 今日实收按支付方式分组应出多种方式(现金/微信/支付宝/银行卡)
+        # #5:今日实收按支付方式分组应出多种方式(现金/微信/支付宝/银行卡)
         tc = self.client.get("/api/reports/today-collection").json()
         methods = {m["method"] for m in tc["by_method"]}
         self.assertTrue(methods & {"现金", "微信", "支付宝", "银行卡"},
@@ -80,7 +80,7 @@ class DemoSeedTest(unittest.TestCase):
         self.assertGreater(tc["collected"], 0)
 
     def test_medical_record_save_path(self):
-        # 新建病历保存路径可用(POST 返回新 record_id)
+        # #335:新建病历保存路径可用(POST 返回新 record_id)
         r = self.client.post("/api/medical-records", json={
             "patient_identity": "demo_p_0001", "record_type": "复诊",
             "visit_time": "2026-06-28", "content_json": {"PC": "演示"}, "tooth_json": {}})
@@ -103,7 +103,7 @@ class DemoSeedTest(unittest.TestCase):
         self.assertEqual(f.content[:3], b"\xff\xd8\xff", "应为有效 JPEG")
 
     def test_handle_items_picker_not_empty(self):
-        # 处置选择器数据源 handle_items 必须有内容,按 fee_type 分组
+        # #370:处置选择器数据源 handle_items 必须有内容,按 fee_type 分组
         self.assertGreater(self.counts["handle_items"], 0)
         d = self.client.get("/api/handle-items").json()
         self.assertGreater(len(d["groups"]), 0, "处置选择器应有分组")
@@ -111,12 +111,12 @@ class DemoSeedTest(unittest.TestCase):
         self.assertTrue(any("根管" in n for n in names), "应能搜到根管类项目")
 
     def test_staff_seeded_active(self):
-        # 演示医生须是在职 staff_members,否则处置医生下拉显示「已停用」
+        # #372:演示医生须是在职 staff_members,否则处置医生下拉显示「已停用」
         r = self.client.get("/api/staff-members?role=医生").json()
         self.assertGreater(len(r["members"]), 0, "应有在职医生")
 
-    def test_source_json_replicates_import_keys(self):
-        # 复刻真实导入:source_json 带应用真正会读的 外部字段键(否则相关功能在 demo 上读不到)
+    def test_source_json_replicates_saas_keys(self):
+        # 复刻真实导入:source_json 带应用真正会读的 SaaS 键(否则相关功能在 demo 上读不到)
         import json
         import sqlite3
         conn = sqlite3.connect(self.db)

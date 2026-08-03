@@ -1,5 +1,5 @@
 // 回收站：列出软删/作废记录(谁、何时删) + 还原。
-// 已从顶层导航搬进配置管理"回收站"子tab，渲染进 cfgBody(局部变量覆盖 app.js 的全局 modulePanel)。
+// #617:已从顶层导航搬进配置管理"回收站"子tab，渲染进 cfgBody(局部变量覆盖 app.js 的全局 modulePanel)。
 async function loadRecycleBin() {
   const modulePanel = document.getElementById("cfgBody");
   if (!modulePanel) return;

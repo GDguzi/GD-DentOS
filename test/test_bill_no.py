@@ -1,5 +1,5 @@
 """本地划价生成的账单应有账单编号(bill_no)——此前写空串，导致收费单"没有账单编号"。
-编号按 外部系统 习惯 年月日(YYMMDD)+当日4位流水。"""
+编号按 SaaS 习惯 年月日(YYMMDD)+当日4位流水。"""
 import re
 import tempfile
 import unittest
@@ -52,7 +52,7 @@ class BillNoTest(unittest.TestCase):
 
 
     def test_no_collision_with_gap(self):
-        # 当日已有非连续编号(如缺号)时，新单取 max+1 不撞号
+        # #142：当日已有非连续编号(如缺号)时，新单取 max+1 不撞号
         with tempfile.TemporaryDirectory() as tmp:
             db, c = _client(tmp)
             pid = _patient(c, "缺号测试", "13600000009")

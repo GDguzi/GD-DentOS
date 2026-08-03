@@ -72,7 +72,7 @@ class RefundTest(unittest.TestCase):
             self.assertEqual(rows[-1]["payment_record_type"], "refund")
             self.assertIn("患者取消治疗", rows[-1]["source_json"])
             self.assertEqual(net, 0)                             # 报表实收净额冲减为 0
-            # ①:退款不再冲减 total/paid(历史应收/实收不可变),只推进 state
+            # #813①:退款不再冲减 total/paid(历史应收/实收不可变),只推进 state
             self.assertEqual(b["total_fee"], 1000)
             self.assertEqual(b["paid_fee"], 1000)
             self.assertEqual(b["state"], "refunded")
@@ -105,16 +105,16 @@ class RefundTest(unittest.TestCase):
             self.assertEqual(client.post(f"/api/bills/{bill}/refund", json={"refund_reason": "x", "request_id": uuid.uuid4().hex}).status_code, 409)
 
     def test_refund_non_local_bill_rejected(self):
-        # 红线：导入单(非 local-bill- 前缀)绝不可退费
+        # 红线：SaaS 同步单(非 local-bill- 前缀)绝不可退费
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             with connect(db) as conn:
                 conn.execute(
                     "insert into bills(bill_id, patient_identity, total_fee, paid_fee, state, updated_at) "
-                    "values ('imported-bill-001', 'p1', 500, 500, 'paid', '2026-06-07 00:00:00')")
+                    "values ('saas-bill-001', 'p1', 500, 500, 'paid', '2026-06-07 00:00:00')")
                 conn.commit()
             self.assertEqual(
-                client.post("/api/bills/imported-bill-001/refund", json={"refund_reason": "x", "request_id": uuid.uuid4().hex}).status_code, 409)
+                client.post("/api/bills/saas-bill-001/refund", json={"refund_reason": "x", "request_id": uuid.uuid4().hex}).status_code, 409)
 
     def test_refund_not_found(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -159,13 +159,13 @@ class RefundTest(unittest.TestCase):
                 refunded = conn.execute("select count(*) from treatment_items where bill_id=? and is_refund=1", (bill,)).fetchone()[0]
                 part = conn.execute("select refunded_fee, is_refund from treatment_items where treatment_item_id=?", (iid,)).fetchone()
             self.assertEqual(neg, -300)
-            # 部分退(500只退300)记账不锁死——refunded_fee 累计,is_refund 仍 0,剩余 200 还能按项退
+            # #573:部分退(500只退300)记账不锁死——refunded_fee 累计,is_refund 仍 0,剩余 200 还能按项退
             self.assertEqual(refunded, 0)
             self.assertEqual(part["refunded_fee"], 300)
             self.assertEqual(part["is_refund"] or 0, 0)
 
     def test_partial_item_refund_stays_refundable_573(self):
-        # 部分退后剩余额度可继续按项退;超剩余额度拒;退满才标已退
+        # #573:部分退后剩余额度可继续按项退;超剩余额度拒;退满才标已退
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             oid = client.post("/api/patients/p1/treatment-orders", json={"items": [
@@ -198,20 +198,20 @@ class RefundTest(unittest.TestCase):
             self.assertEqual(r4.status_code, 400)
 
     def test_partial_refund_no_phantom_arrears(self):
-        # →①：部分退款不能让该单冒出"欠费"(退费≠欠费)。total/paid 均不动,欠款式恒为 0。
+        # #143→#813①：部分退款不能让该单冒出"欠费"(退费≠欠费)。total/paid 均不动,欠款式恒为 0。
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             bill = _make_paid_bill(client, 1000)
             client.post(f"/api/bills/{bill}/refund", json={"refund_reason": "部分退", "refund_amount": 300, "request_id": uuid.uuid4().hex})
             with connect(db) as conn:
                 tot, pf = conn.execute("select total_fee, paid_fee from bills where bill_id=?", (bill,)).fetchone()
-            self.assertEqual(tot, 1000)           # ①:应收史实不可变
+            self.assertEqual(tot, 1000)           # #813①:应收史实不可变
             self.assertEqual(pf, 1000)
             arr = client.get("/api/reports/arrears").json()
             self.assertFalse(any(r["bill_id"] == bill for r in arr["rows"]), "部分退款单不应出现在欠费清单")
 
     def test_item_refund_rejects_foreign_item(self):
-        # items 里混入非本单项目(即使金额0)也要拒，不能静默忽略
+        # #144：items 里混入非本单项目(即使金额0)也要拒，不能静默忽略
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             bill = _make_paid_bill(client, 500)
@@ -248,7 +248,7 @@ class RefundTest(unittest.TestCase):
             self.assertEqual(neg, -500)   # 只退了甲500,不会被退成-1000
 
     def test_item_refund_same_request_duplicate_rows_capped(self):
-        # 同一请求里同一 item 拆两行(300+300)累计600超过该项500,必须拒绝且一分不退
+        # 看板#183：同一请求里同一 item 拆两行(300+300)累计600超过该项500,必须拒绝且一分不退
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             bill, items = self._two_item_paid_bill(client)
@@ -274,7 +274,7 @@ class RefundTest(unittest.TestCase):
             self.assertEqual(r.status_code, 400)
 
     def test_refund_method_credits_real_method_not_unfilled(self):
-        # 现金退费冲减"现金"桶净额,不归入"未填"负数桶
+        # 审查#11/#27：现金退费冲减"现金"桶净额,不归入"未填"负数桶
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             bill = _make_paid_bill(client, 500, pay_method="现金")
@@ -284,7 +284,7 @@ class RefundTest(unittest.TestCase):
             self.assertEqual(bm.get("现金", 0), 0)   # 现金净额=收500-退500=0
 
     def test_arrears_no_phantom_from_float_residue(self):
-        # total=100.0 paid=99.999 浮点残差不应冒"幻影欠费"
+        # 审查#9：total=100.0 paid=99.999 浮点残差不应冒"幻影欠费"
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             with connect(db) as conn:
@@ -305,7 +305,7 @@ class RefundTest(unittest.TestCase):
 
 
 class RefundImmutableHistoryTest(unittest.TestCase):
-    """①:退款只追加负数流水,bills.total_fee/paid_fee 史实不可变。"""
+    """#813①:退款只追加负数流水,bills.total_fee/paid_fee 史实不可变。"""
 
     def test_cross_period_refund_freezes_history_report(self):
         # 跨账期全退:截止日已出的历史收入/欠款报表不得因未来退款变化(修前:应收100→0,期末欠款0→-100)
@@ -344,7 +344,7 @@ class RefundImmutableHistoryTest(unittest.TestCase):
             self.assertEqual((d["refunded_fee"], d["refundable"]), (100, 0))
 
     def test_migration_restores_old_style_refunded_bill(self):
-        # ①回填:老口径被冲减过的单一次性加回(total/paid 同加,欠款差0);标记锁死不翻倍
+        # #813①回填:老口径被冲减过的单一次性加回(total/paid 同加,欠款差0);标记锁死不翻倍
         from local_app.migrations import restore_refunded_bill_amounts
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
@@ -373,7 +373,7 @@ if __name__ == "__main__":
 
 
 class RefundItemAttributionTest(unittest.TestCase):
-    """退款在落库时确定项目归属(refund_items),分类报表精确记类别。"""
+    """#802:退款在落库时确定项目归属(refund_items),分类报表精确记类别。"""
 
     def _two_type_bill(self, client, fees=((700, "治疗费", "治疗"), (300, "检查费", "检查"))):
         oid = client.post("/api/patients/p1/treatment-orders", json={"items": [
@@ -448,7 +448,7 @@ class RefundItemAttributionTest(unittest.TestCase):
 
 
 class RefundAllocationRoundingTest(unittest.TestCase):
-    """小额整单退款分摊到多项时,Σ分摊必须精确等于退款额,每项不超剩余额。"""
+    """#802 P2:小额整单退款分摊到多项时,Σ分摊必须精确等于退款额,每项不超剩余额。"""
 
     def test_tiny_refund_across_items_sums_exact(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -476,7 +476,7 @@ class RefundAllocationRoundingTest(unittest.TestCase):
 
 
 class RefundedBillClosesAllItemsTest(unittest.TestCase):
-    """账单退到 refunded 态 ⟺ 全部项目退满(is_refund=1, refunded_fee=total)。"""
+    """#802 P1:账单退到 refunded 态 ⟺ 全部项目退满(is_refund=1, refunded_fee=total)。"""
 
     def test_multi_item_full_refund_via_amounts_closes_all(self):
         # 两项 60/40,分次整单部分退到全清 → 两项都应 is_refund=1 且 refunded_fee=total
@@ -529,7 +529,7 @@ class RefundedBillClosesAllItemsTest(unittest.TestCase):
 
 
 class DiscountedBillRefundTest(unittest.TestCase):
-    """整单折扣单全退,项目 refunded_fee 记实退净额,不虚增到折前行价。"""
+    """#802 三审 P1:整单折扣单全退,项目 refunded_fee 记实退净额,不虚增到折前行价。"""
 
     def test_full_refund_on_discounted_bill_no_inflation(self):
         # 两项各 100(行价合计 200)+整单优惠 40 → 应收/已收=160。全退返 160。
@@ -562,7 +562,7 @@ class DiscountedBillRefundTest(unittest.TestCase):
 
 
 class LegacyPartialRefundBackfillTest(unittest.TestCase):
-    """老口径整单部分退未落项目,迁移按实退额比例回填,后续按项退不再超退/负类别。"""
+    """#802 五审 P1:老口径整单部分退未落项目,迁移按实退额比例回填,后续按项退不再超退/负类别。"""
 
     def test_legacy_whole_partial_then_item_refund_stays_consistent(self):
         from local_app.migrations import restore_refunded_bill_amounts
@@ -610,7 +610,7 @@ class LegacyPartialRefundBackfillTest(unittest.TestCase):
 
 
 class MigrationSkipsNewStyleRefundTest(unittest.TestCase):
-    """① 回填迁移只加回老口径退款(已冲减账单);新口径退款(未冲减)不得再加。"""
+    """#802/#813① 六审 P1:回填迁移只加回老口径退款(已冲减账单);新口径退款(未冲减)不得再加。"""
 
     def test_new_style_refund_then_migration_keeps_totals(self):
         from local_app.migrations import restore_refunded_bill_amounts

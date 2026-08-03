@@ -178,7 +178,7 @@ function planSyncFromDom() {
 function rerenderPlanEditor() {
   const editor = workspacePageEl() && workspacePageEl().querySelector("[data-plan-editor]");
   if (editor) editor.innerHTML = renderPlanEditor();
-  if (editor && typeof bindStaffInputs === "function") bindStaffInputs(editor);   // 二批:计划医生选人
+  if (editor && typeof bindStaffInputs === "function") bindStaffInputs(editor);   // #420二批:计划医生选人
 }
 
 function planSyncAndRerender() {
@@ -415,7 +415,7 @@ async function loadTreatmentPlans(pid) {
   let data;
   try {
     const res = await fetch(`/api/patients/${encodeURIComponent(pid)}/treatment-plans`);
-    // await 期间可能切到别的患者，晚到响应不能写进当前面板/_loadedPlansById(跨患者文书错配)
+    // #154 竞态守卫：await 期间可能切到别的患者，晚到响应不能写进当前面板/_loadedPlansById(跨患者文书错配)
     if (typeof workspacePatientId !== "undefined" && pid !== workspacePatientId) return;
     if (!res.ok) { box.textContent = "载入失败"; return; }
     data = await res.json();
@@ -573,7 +573,7 @@ function printTreatmentPlan(planId) {
   if (!p) return;
   const patient = (workspaceData && workspaceData.patient) || {};
   const pname = patient.display_name || patient.name || "";
-  // 计划日期为空时用本地日期(localDateValue)，别用 UTC toISOString 否则中国时区凌晨打印偏前一天
+  // #153：计划日期为空时用本地日期(localDateValue)，别用 UTC toISOString 否则中国时区凌晨打印偏前一天
   const date = p.plan_date || (typeof localDateValue === "function" ? localDateValue() : "");
   const meta2 = [];
   if (p.category) meta2.push(`类别：${escapeHtml(p.category)}`);

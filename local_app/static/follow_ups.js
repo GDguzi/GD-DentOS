@@ -13,9 +13,9 @@ async function _fetchFollowUps(date, assignee, q) {
 }
 
 async function openTodayFollowUps(btn) {
-  document.querySelectorAll(".today-work-entry").forEach(e => e.classList.remove("active"));
+  document.querySelectorAll(".today-saas-entry").forEach(e => e.classList.remove("active"));
   if (btn) btn.classList.add("active");
-  const main = document.getElementById("todayWorkMain");
+  const main = document.getElementById("todaySaasMain");
   if (!main) return;
   main.innerHTML = `<div class="module-loading">今日待跟进载入中...</div>`;
   let data;

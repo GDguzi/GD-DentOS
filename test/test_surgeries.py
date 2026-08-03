@@ -64,7 +64,7 @@ class SurgeryTest(unittest.TestCase):
             )
 
     def test_bad_surgery_date_400(self):
-        # 非法 surgery_date 应 400
+        # 动态扫#15：非法 surgery_date 应 400
         with tempfile.TemporaryDirectory() as tmpdir:
             _, client = _client(tmpdir)
             resp = client.post(

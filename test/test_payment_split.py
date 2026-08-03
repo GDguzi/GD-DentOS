@@ -50,7 +50,7 @@ class PaymentSplitTest(unittest.TestCase):
             db, client = _client(tmp)
             b = _bill(client, 1000)
             r = client.post(f"/api/bills/{b}/pay", json={
-                "methods": [{"method": "现金", "amount": 600}, {"method": "云闪付", "amount": 400}],
+                "methods": [{"method": "现金", "amount": 600}, {"method": "扫码付", "amount": 400}],
                 "cashier": "前台B", "request_id": uuid.uuid4().hex})
             self.assertEqual(r.status_code, 200, r.text)
             self.assertEqual(r.json()["state"], "paid")
@@ -58,7 +58,7 @@ class PaymentSplitTest(unittest.TestCase):
                 rows = c.execute("select pay_type, amount, operator from payments where bill_id=? order by amount desc", (b,)).fetchall()
                 bill = c.execute("select paid_fee, state from bills where bill_id=?", (b,)).fetchone()
             self.assertEqual(len(rows), 2)                      # 每方式一行
-            self.assertEqual({r["pay_type"] for r in rows}, {"现金", "云闪付"})
+            self.assertEqual({r["pay_type"] for r in rows}, {"现金", "扫码付"})
             self.assertEqual(round(sum(r["amount"] for r in rows), 2), 1000)
             self.assertTrue(all(r["operator"] == "前台B" for r in rows))
             self.assertEqual(bill["paid_fee"], 1000)
@@ -96,7 +96,7 @@ class PaymentSplitTest(unittest.TestCase):
             self.assertEqual(n, 0)
 
     def test_subcent_amount_rejected_no_zero_row(self):
-        # 0.004 四舍五入后是0,必须拒绝且不写 0 元 payment(单方式+多方式都要挡)
+        # 改钱边界:0.004 四舍五入后是0,必须拒绝且不写 0 元 payment(单方式+多方式都要挡)
         with tempfile.TemporaryDirectory() as tmp:
             db, client = _client(tmp)
             b = _bill(client, 1000)

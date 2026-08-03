@@ -34,7 +34,7 @@ const workspaceViews = {
   history: ["历史搜索", "按姓名、电话、患者ID 或客户ID 检索全部本地患者"],
   patients: ["患者管理", "搜索患者，查看病历、预约、回访、收费和本地备注"],
   appointments: ["预约管理", "先查看患者预约，后续接入独立预约列表"],
-  // 收费管理顶层导航按钮已撤下(前台基本用不上,实收走患者详情页)，
+  // #617:收费管理顶层导航按钮已撤下(前台基本用不上,实收走患者详情页)，
   // 但今日工作台"今日结算/今日待缴费"仍靠 billingFilter 深链进这个视图，view 本身留着。
   billing: ["收费管理", "先查看患者收费单和付款记录，保持本地只读金额链路"],
   "return-visits": ["客户通", "今日回访 / 沟通 / 录音总览，管理全店客户联系"],
@@ -395,7 +395,7 @@ async function loadStats() {
       ["预约", counts.appointments],
       ["回访", counts.return_visits],
     ];
-    // 财务/审计段仅在后端按权限带出时才显示,无 billing.view/audit.view 的角色不显示占位垃圾行
+    // #496：财务/审计段仅在后端按权限带出时才显示,无 billing.view/audit.view 的角色不显示占位垃圾行
     if (counts.bills !== undefined) items.push(["收费单", counts.bills], ["付款", counts.payments]);
     if (counts.audit_logs !== undefined) items.push(["审计", counts.audit_logs]);
     if (money.bill_total_fee !== undefined) {
@@ -418,7 +418,7 @@ async function loadAuditLogs() {
   try {
     const res = await fetch("/api/audit-logs?pagesize=8");
     if (res.status === 403) {
-      // 无 audit.view 权限的角色,审计概览面板整块隐藏(而非报"载入失败")
+      // #464：无 audit.view 权限的角色,审计概览面板整块隐藏(而非报"载入失败")
       auditPanel.hidden = true;
       return;
     }
@@ -720,7 +720,7 @@ function applyPermVisibility() {
   });
 }
 
-// 关闭的弹窗只隐藏外层 backdrop,内部 section[role=dialog] 仍留在 DOM 且自身不 hidden,
+// #488:关闭的弹窗只隐藏外层 backdrop,内部 section[role=dialog] 仍留在 DOM 且自身不 hidden,
 // 读屏/自动化全局扫描会读到旧弹窗内容(选择牙位/收款/划价…)。统一镜像:外层 hidden 变化时,
 // 把 hidden/aria-hidden 同步到直接子 dialog;MutationObserver 覆盖动态建到 body 的弹窗,免改几十个 close 函数。
 function syncDialogHidden(host) {
@@ -819,13 +819,13 @@ async function initAuthUI() {
   });
   return Boolean(user);
 }
-// 后端能力:迁移扩展入口(同步中心等)按 /api/capabilities 显隐。
+// 后端能力(开源壳阶段3):迁移层入口(同步中心等)按 /api/capabilities 显隐。
 async function initCapabilities() {
   try { window.__capabilities = await (await _origFetch("/api/capabilities")).json(); }
-  catch { window.__capabilities = null; }   // 拉不到按全功能显示,后端路由仍是闸门
+  catch { window.__capabilities = null; }   // 拉不到按完整版显示,后端路由仍是闸门
 }
 
-// 诊所名：全站显示真相源(不硬编码)。启动拉一次 → window.CLINIC_NAME,
+// 诊所名：全站显示真相源(开源壳阶段1,不再硬编码)。启动拉一次 → window.CLINIC_NAME,
 // 刷新标题/PWA名；管理员首启没填过诊所名时引导填一次(取消则下次登录再提示)。
 async function initClinicIdentity() {
   let c = null;

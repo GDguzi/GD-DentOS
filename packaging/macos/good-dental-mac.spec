@@ -3,7 +3,7 @@
 #   pip install -r requirements.txt pyinstaller
 #   pyinstaller packaging/macos/good-dental-mac.spec --distpath dist --workpath build --clean --noconfirm
 # 产物 dist/good-dental-clinic 改名为 .command 后双击即在终端启动（打包脚本已代劳）。
-# CI 自动构建 + 冒烟验证见 .github/workflows/build-macos.yml
+# CI 自动构建 + 冒烟验证见 .github/workflows/build-release.yml
 import os
 
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules

@@ -1,4 +1,4 @@
-// 回归:牙位十字格须带完整 FDI 码(title/aria-label),不能只显示位号看不出象限。
+// #373 回归:牙位十字格须带完整 FDI 码(title/aria-label),不能只显示位号看不出象限。
 // 抽出 helpers.js 的 toothCrossHtml,stub escapeHtml,沙箱 eval 真测输出。
 // 跑：node --test test/web/test_tooth_fdi_label.mjs
 import { test } from "node:test";
@@ -37,18 +37,18 @@ test("空选 → title 为空,不报错", () => {
   assert.match(html, /title=""/);
 });
 
-test("单颗 16 → 格子可见文本是完整 16(不只 6),不靠格子位置隐性表达象限", () => {
+test("#546 单颗 16 → 格子可见文本是完整 16(不只 6),不靠格子位置隐性表达象限", () => {
   const html = run(["16"]);
   assert.match(html, /class="tc tc-rt">16</);
 });
 
-test("多颗 16 26 → 各象限格子可见文本都是完整 FDI 码", () => {
+test("#546 多颗 16 26 → 各象限格子可见文本都是完整 FDI 码", () => {
   const html = run(["16", "26"]);
   assert.match(html, /class="tc tc-rt">16</);
   assert.match(html, /class="tc tc-lt">26</);
 });
 
-test("乳牙码沿用字母(通用命名法本身不含 FDI 象限位,不受本次改动影响)", () => {
+test("#546 乳牙码沿用字母(通用命名法本身不含 FDI 象限位,不受本次改动影响)", () => {
   const html = run(["55"]);
   assert.match(html, /class="tc tc-rt">E</);
 });

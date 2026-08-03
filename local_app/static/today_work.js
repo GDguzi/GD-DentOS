@@ -1,18 +1,19 @@
 let queueRooms = [];   // 诊室列表(候诊队列分诊室用)
 
 async function loadTodayWork() {
-  if (!todayWorkPanel) return;
+  if (!todayWorkPanel) return false;
   todayWorkPanel.textContent = "今日工作载入中...";
   try { queueRooms = (await (await fetch("/api/settings/rooms")).json()).list || []; } catch { queueRooms = []; }
   // 工作日期可选：跟随共享 workDate（前/后箭头、点日期选日历切换），后端 /api/today-work 吃 date 参数
   const res = await fetch(`/api/today-work?date=${encodeURIComponent(workDate.value)}`);
   if (!res.ok) {
     todayWorkPanel.textContent = "今日工作载入失败";
-    return;
+    return false;
   }
   const data = await res.json();
   latestTodayWorkData = data;
   renderTodayWork(data);
+  return true;
 }
 
 function renderTodayWork(data) {
@@ -36,7 +37,7 @@ function renderTodayWork(data) {
           </div>
           <img class="today-tooth-motif" src="/tooth-motif.svg?v=2026-07-15-pearl-a1" alt="">
         </div>
-        ${todayWorkKpiStrip(summary)}
+        ${todaySaasKpiStrip(summary)}
       </section>
       ${renderUnlinkedVisitsBanner(data.unlinked_visits)}
       <section class="today-status-strip" aria-label="今日工作状态">
@@ -47,9 +48,9 @@ function renderTodayWork(data) {
         <button type="button" class="plain-button today-refresh" onclick="refreshTodayWorkbench()">刷新今日</button>
         <span id="todayRefreshStatus" class="today-refresh-status"></span>
       </section>
-      <div class="today-work-layout">
-        ${todayWorkEntryList(summary)}
-        <div class="today-work-main" id="todayWorkMain">
+      <div class="today-saas-layout">
+        ${todaySaasEntryList(summary)}
+        <div class="today-saas-main" id="todaySaasMain">
           ${renderTodayQueue(data.appointments || [])}
         </div>
       </div>
@@ -99,8 +100,8 @@ function pickWorkDate(value) {
   refreshWorkDateViews();
 }
 
-function todayWorkEntryList(summary = {}) {
-  // data-today-entry 是入口身份(决定右侧出哪张简表),data-today-view 才是
+function todaySaasEntryList(summary = {}) {
+  // #321/#362：data-today-entry 是入口身份(决定右侧出哪张简表),data-today-view 才是
   // 「管理页查看全部」要跳的模块。两者分开——避免同 view 的两个入口(今日就诊/明日预约)
   // 一起高亮(旧 bug:active 按 view 匹配)。
   const entries = [
@@ -112,14 +113,14 @@ function todayWorkEntryList(summary = {}) {
     {key: "birthday", label: "今日生日", view: "patients", count: summary.birthdays_today || 0, offset: 0, patient: "birthday_today"},
   ];
   return `
-    <aside class="today-work-entry-list" aria-label="今日事项入口">
+    <aside class="today-saas-entry-list" aria-label="今日事项入口">
       ${entries.map((e, index) => `
-        <button type="button" class="today-work-entry${index === 0 ? " active" : ""}" data-today-entry="${escapeAttr(e.key)}" data-today-view="${escapeAttr(e.view)}" data-today-date-offset="${escapeAttr(e.offset)}" data-today-patient-filter="${escapeAttr(e.patient || "")}" data-today-return-filter="${escapeAttr(e.ret || "")}" data-today-billing-filter="${escapeAttr(e.billing || "")}" onclick="openTodayWorkEntry(this)">
+        <button type="button" class="today-saas-entry${index === 0 ? " active" : ""}" data-today-entry="${escapeAttr(e.key)}" data-today-view="${escapeAttr(e.view)}" data-today-date-offset="${escapeAttr(e.offset)}" data-today-patient-filter="${escapeAttr(e.patient || "")}" data-today-return-filter="${escapeAttr(e.ret || "")}" data-today-billing-filter="${escapeAttr(e.billing || "")}" onclick="openTodaySaasEntry(this)">
           <span>${escapeHtml(e.label)}</span>
           <strong>${escapeHtml(e.display != null ? e.display : formatCount(e.count))}</strong>
         </button>
       `).join("")}
-      <button type="button" class="today-work-entry today-work-entry-followup" onclick="openTodayFollowUps(this)">
+      <button type="button" class="today-saas-entry today-saas-entry-followup" onclick="openTodayFollowUps(this)">
         <span>今日待跟进</span>
         <strong></strong>
       </button>
@@ -127,12 +128,12 @@ function todayWorkEntryList(summary = {}) {
   `;
 }
 
-// 点左侧入口 → 在右侧壳(#todayWorkMain)内出该入口的简表,不再跳管理页。
+// #321/#362：点左侧入口 → 在右侧壳(#todaySaasMain)内出该入口的简表,不再跳管理页。
 // 高亮只亮当前一个(与 openTodayFollowUps 同款:先清后加)。
-function openTodayWorkEntry(button) {
-  document.querySelectorAll(".today-work-entry").forEach(e => e.classList.remove("active"));
+function openTodaySaasEntry(button) {
+  document.querySelectorAll(".today-saas-entry").forEach(e => e.classList.remove("active"));
   button.classList.add("active");
-  const main = document.getElementById("todayWorkMain");
+  const main = document.getElementById("todaySaasMain");
   if (!main) return;
   const entry = button.dataset.todayEntry || "today-appts";
   const data = latestTodayWorkData || {};
@@ -151,7 +152,7 @@ function openTodayWorkEntry(button) {
   else if (entry === "unpaid") { rows = data.unpaid_bills || []; renderer = renderTodayBillLite; }
   else if (entry === "return-due") { rows = data.return_visits || []; renderer = renderTodayReturnVisit; }
   else if (entry === "birthday") { rows = data.birthdays || []; renderer = renderTodayBirthdayLite; }
-  // 后端简表列表有 limit(生日50/结算30),入口角标却是 summary 总数(如生日68),
+  // #487:后端简表列表有 limit(生日50/结算30),入口角标却是 summary 总数(如生日68),
   // 右侧简表角标改用总数并注明「显示前 N 条」,不再无解释地对不上。
   const summary = data.summary || {};
   const totals = {
@@ -161,7 +162,7 @@ function openTodayWorkEntry(button) {
     "return-due": summary.pending_return_visits,
     birthday: summary.birthdays_today,
   };
-  // 结算简表=表格布局:表头+合计行与数据行同网格列(对齐外部系统今日结算)。
+  // 结算简表=表格布局:表头+合计行与数据行同网格列(对齐SaaS今日结算)。
   // 总额=今日现金流入(与流水同过滤口径恒等于逐行合计);支付方式列脚给出各方式小计。
   const methodNote = (data.today_pay_methods || [])
     .map((m) => `${escapeHtml(m.pay_type)} ${formatMoney(m.amount)}`).join("<br>");
@@ -176,19 +177,19 @@ function openTodayWorkEntry(button) {
   bindPatientDetailRows(main);
 }
 
-// 简表外壳:标题+计数(有总数用总数)+「管理页查看全部 →」(保留跳转能力)+「← 返回候诊」。
+// 简表外壳:标题+计数(#487:有总数用总数)+「管理页查看全部 →」(保留跳转能力)+「← 返回候诊」。
 function renderTodaySimpleShell(button, label, rows, renderer, total, footer = "", head = "") {
   const view = button.dataset.todayView || "";
   const fullBtn = view ? `
-    <button type="button" class="plain-button today-entry-full" onclick="openTodayWorkEntryFull(this)"
+    <button type="button" class="plain-button today-entry-full" onclick="openTodaySaasEntryFull(this)"
       data-today-view="${escapeAttr(view)}"
       data-today-date-offset="${escapeAttr(button.dataset.todayDateOffset || 0)}"
       data-today-patient-filter="${escapeAttr(button.dataset.todayPatientFilter || "")}"
       data-today-return-filter="${escapeAttr(button.dataset.todayReturnFilter || "")}"
       data-today-billing-filter="${escapeAttr(button.dataset.todayBillingFilter || "")}">管理页查看全部 →</button>` : "";
-  // total===null 是后端按权限降级的信号(同左侧入口 todayCountOrMask 口径)，
+  // #532:total===null 是后端按权限降级的信号(同左侧入口 todayCountOrMask 口径)，
   // 不能落到 rows.length/"暂无数据"——那会把"没权限看"误呈现成"今天真的是0条"。
-  // 注意只认 null,不认 undefined——undefined 是"调用方压根没传总数"的既有用法,
+  // 注意只认 null,不认 undefined——undefined 是#487"调用方压根没传总数"的既有用法,
   // 那种场景下就该照旧退回 rows.length,不是权限降级信号。
   const masked = total === null;
   const truncated = !masked && Number(total) > rows.length;
@@ -216,7 +217,7 @@ function renderTodaySimpleShell(button, label, rows, renderer, total, footer = "
 }
 
 // 「管理页查看全部」:沿用原跳转语义,显式进对应管理模块。
-function openTodayWorkEntryFull(button) {
+function openTodaySaasEntryFull(button) {
   const view = button.dataset.todayView || "today";
   const dateOffset = Number(button.dataset.todayDateOffset || 0);
   const context = {};
@@ -236,8 +237,8 @@ function renderTodayApptLite(row) {
   ]);
 }
 
-// 今日结算=收款流水(对齐外部系统今日结算·营业收入):每笔收款一行,含收旧账/0元;未挂单流水无单号。
-// 表格布局同外部系统:各列对齐,金额右对齐单列;支付方式来自 paiddetail(多方式合并为"多种")。
+// 今日结算=收款流水(对齐SaaS今日结算·营业收入):每笔收款一行,含收旧账/0元;未挂单流水无单号。
+// 表格布局同SaaS:各列对齐,金额右对齐单列;支付方式来自 paiddetail(多方式合并为"多种")。
 const SETTLE_HEAD = `
   <div class="settle-row settle-head">
     <span>患者姓名</span><span>单号</span><span>医生</span><span>收费时间</span><span>支付方式</span><span class="num">本次实收</span>
@@ -272,20 +273,20 @@ function renderTodayBirthdayLite(row) {
   ]);
 }
 
-function todayWorkKpiStrip(summary = {}) {
+function todaySaasKpiStrip(summary = {}) {
   return `
-    <section class="today-kpi-strip" aria-label="外部系统 首页今日指标">
-      ${todayWorkKpiItem("今日就诊人次(初/复/新诊)", todayVisitBreakdown(summary))}
-      ${todayWorkKpiItem("今日已预约", summary.appointments_today)}
-      ${todayWorkKpiItem("今日已回访", summary.completed_return_visits || summary.return_visits_done || 0)}
-      ${todayWorkKpiItem("今日应收", todayMoneyOrMask(summary.today_receivable))}
-      ${todayWorkKpiItem("今日实收", todayMoneyOrMask(summary.today_paid))}
-      ${todayWorkKpiItem("今日现金流入", todayMoneyOrMask(summary.today_cash_in))}
+    <section class="today-kpi-strip" aria-label="SaaS 首页今日指标">
+      ${todaySaasKpiItem("今日就诊人次(初/复/新诊)", todayVisitBreakdown(summary))}
+      ${todaySaasKpiItem("今日已预约", summary.appointments_today)}
+      ${todaySaasKpiItem("今日已回访", summary.completed_return_visits || summary.return_visits_done || 0)}
+      ${todaySaasKpiItem("今日应收", todayMoneyOrMask(summary.today_receivable))}
+      ${todaySaasKpiItem("今日实收", todayMoneyOrMask(summary.today_paid))}
+      ${todaySaasKpiItem("今日现金流入", todayMoneyOrMask(summary.today_cash_in))}
     </section>
   `;
 }
 
-function todayWorkKpiItem(label, value) {
+function todaySaasKpiItem(label, value) {
   return `
     <div class="today-kpi-item">
       <span>${escapeHtml(label)}</span>
@@ -306,14 +307,14 @@ function todayMoneyOrMask(value) {
   return value === null || value === undefined || value === "" ? "******" : formatMoney(value);
 }
 
-// 无 billing.view 时后端结算计数降级为 null——入口显掩码,别把"无权限"误显成"今天 0 笔"
+// #528:无 billing.view 时后端结算计数降级为 null——入口显掩码,别把"无权限"误显成"今天 0 笔"
 function todayCountOrMask(value) {
   return value === null || value === undefined ? "******" : formatCount(value);
 }
 
 function renderTodayQueue(rows) {
   const filteredRows = filteredTodayQueueRows(rows);
-  // 搜索框/筛选条放在 list 容器外，搜索时只重渲 #todayQueueListWrap，输入框不被销毁→不失焦
+  // #11：搜索框/筛选条放在 list 容器外，搜索时只重渲 #todayQueueListWrap，输入框不被销毁→不失焦
   return `
     <section class="today-queue-panel" aria-label="今日候诊队列">
       <div class="today-card-head">
@@ -342,7 +343,7 @@ function queueListInnerHtml(filteredRows, totalCount) {
   `;
 }
 
-// 仅重渲队列列表区(不动搜索框)：保住输入框焦点，解决逐字符失焦
+// 仅重渲队列列表区(不动搜索框)：保住输入框焦点，解决逐字符失焦(#11)
 function rerenderTodayQueueList() {
   if (!latestTodayWorkData) return;
   const wrap = document.getElementById("todayQueueListWrap");
@@ -403,7 +404,7 @@ function todayQueueFilterBar(rows = []) {
   `;
 }
 
-// 筛选条按就诊状态流阶段(tqStage)分桶，兼容新中文状态(已确认/已到诊/已分诊/已完成/已离开)
+// #114：筛选条按就诊状态流阶段(tqStage)分桶，兼容新中文状态(已确认/已到诊/已分诊/已完成/已离开)
 // 桶值沿用旧 0/1/2/3：0=待到诊(阶段0-1) 1=已到诊(阶段2-3) 2=已完成(阶段4-5) 3=已取消
 function queueFilterBucket(row) {
   const stage = (typeof tqStage === "function") ? tqStage(row) : 0;
@@ -479,7 +480,7 @@ function matchesTodayQueueSearch(row) {
 function setTodayQueueSearch(value) {
   todayQueueSearch = value || "";
   todayFlowFilter = "";
-  rerenderTodayQueueList();   // 只重渲列表区,搜索框保焦
+  rerenderTodayQueueList();   // #11 只重渲列表区,搜索框保焦
 }
 
 function clearTodayQueueSearch() {
@@ -512,7 +513,7 @@ function setTodayQueueFilter(filter) {
 
 // 就诊状态流(对标官方)：预约确认→到达→分诊→完成治疗→患者离开，做完即深色，下一步高亮，
 // 点已完成阶段=回退到该阶段(后端清后续时间戳)。处置/收费/病历等放进"⋯"次级菜单。
-// 用 data-* + 事件委托，不把 ID 拼进 inline onclick。
+// #101 用 data-* + 事件委托，不把 ID 拼进 inline onclick。
 // 小图标(线性SVG,跟随 currentColor,沿用 .tq-step 绿色风格)；文字进 title 悬浮提示
 const TQ_STAGES = [
   {label: "确认", st: "已确认", stage: 1, icon: '<svg viewBox="0 0 24 24" class="tq-ic"><path d="M5 13l4 4L19 7"/></svg>'},
@@ -559,9 +560,9 @@ function tqOps(row) {
   //  回访=今天本地新增回访(return_visit_today=created_at今天) / 预约=今天本地新增预约(rebooked_today=created_at今天)。
   const done = {treat: row.treated_today, bill: !!row.paid_today, medical: row.record_today,
     visit: row.return_visit_today, rebook: row.rebooked_today};
-  // 已收费/已处置不可删,已就诊/收费/完成/离开不可取消——置灰且【真 disabled】(原来只样式没禁)
+  // #330:已收费/已处置不可删,已就诊/收费/完成/离开不可取消——置灰且【真 disabled】(原来只样式没禁)
   const lockDel = !!(row.treated_today || row.paid_today);
-  const lockCancel = !!row.paid_today;   // 修正:仅【已收费】不可取消(完成/处置仍可取消,用户口径)
+  const lockCancel = !!row.paid_today;   // #330修正:仅【已收费】不可取消(完成/处置仍可取消,用户口径)
   const more = keys => TQ_MORE.filter(a => keys.includes(a.key))
     .map(a => {
       let cls = "tq-extra" + (a.danger ? " danger" : "") + (done[a.key] ? " tq-done" : "");
@@ -579,7 +580,7 @@ function tqOps(row) {
     const label = (st === "已爽约" || st === "爽约") ? "已爽约" : "已取消";   // P1-2 区分爽约/取消
     steps = `<span class="tq-cancelled">${label}</span>`;
   } else {
-    const closed = stage === 5;   // 已离开=当天闭环,禁止再点回前面步骤(防误回退)
+    const closed = stage === 5;   // #330:已离开=当天闭环,禁止再点回前面步骤(防误回退)
     steps = TQ_STAGES.map(s => {
       const cls = stage >= s.stage ? "done" : (stage === s.stage - 1 ? "next" : "");
       return _tqBtn(cls, "stage", id, pid, s.label, s.icon, ` data-st="${escapeAttr(s.st)}"${closed ? " disabled" : ""}`);
@@ -605,7 +606,7 @@ function bindQueueOps(container) {
     } else if (d.tqop === "treat") {
       openPatientWorkspace(d.pid, "treatments");
     } else if (d.tqop === "bill") {
-      window._queueWantsPay = d.pid;   // 存患者id:进收费tab后须同患者才弹(防A点击落到B)
+      window._queueWantsPay = d.pid;   // 存患者id:进收费tab后须同患者才弹(防A点击落到B,#267)
       openPatientWorkspace(d.pid, "billing");
     } else if (d.tqop === "medical") {
       openPatientWorkspace(d.pid, "medical");
@@ -619,7 +620,7 @@ function bindQueueOps(container) {
     } else if (d.tqop === "rebook") {
       if (typeof openNewAppointment === "function") {
         const row = ((latestTodayWorkData && latestTodayWorkData.appointments) || []).find(a => a.appointment_id === d.aid) || {};
-        // 给已就诊患者约下次,带入当前患者+就诊医生,免重新搜
+        // #332:给已就诊患者约下次,带入当前患者+就诊医生,免重新搜
         openNewAppointment({
           patient: {patient_identity: d.pid, display_name: row.display_name || ""},
           doctor: row.doctor_name || "",
@@ -652,7 +653,7 @@ function openQueueMore(anchor, aid, pid) {
     {label: "收费信息", act: () => openPatientWorkspace(pid, "billing")},
     {label: "病历信息", act: () => openPatientWorkspace(pid, "medical")},
     ...((typeof tqStage === "function" && tqStage(row) >= 0 && tqStage(row) <= 1)
-      ? [{label: "标记爽约", act: () => markNoShow(aid)}] : []),   // 仅未到诊阶段可标爽约
+      ? [{label: "标记爽约", act: () => markNoShow(aid)}] : []),   // #134 仅未到诊阶段可标爽约
     {label: "取消预约", danger: true, act: () => cancelAppointment(aid)},
     {label: "再次预约", act: () => { if (typeof openNewAppointment === "function") { openNewAppointment({}); if (typeof pickApptPatient === "function") { const b = document.createElement("button"); b.dataset.pid = pid; b.dataset.pname = row.display_name || ""; pickApptPatient(b); } } }},
   ];
@@ -698,7 +699,7 @@ function bindChipSelects(container) {
 }
 
 // 分诊弹框：给患者分 医生 / 就诊类型(初/复/新诊) / 诊室。一个动作搞定(转诊=再开换医生)。
-// ④:预约上下文跟弹窗 DOM(dataset)走,不放全局变量——快速连点 A、B 时旧全局值会被覆盖,
+// #813④:预约上下文跟弹窗 DOM(dataset)走,不放全局变量——快速连点 A、B 时旧全局值会被覆盖,
 // 造成"显示 A 保存到 B"。令牌照 module_views.js moduleViewToken 范式丢弃过期渲染。
 let _triageToken = 0;
 async function openTriage(appointmentId, prefillRow) {
@@ -719,7 +720,7 @@ async function openTriage(appointmentId, prefillRow) {
   let m = document.getElementById("triageModal");
   if (!m) { m = document.createElement("div"); m.id = "triageModal"; m.className = "modal-backdrop"; document.body.appendChild(m); }
   m.dataset.apptId = appointmentId;
-  // 推进判定用打开时捕获的预约状态(含 status),别重查 latestTodayWorkData
+  // #175:推进判定用打开时捕获的预约状态(含 status),别重查 latestTodayWorkData
   m.dataset.stage = String(tqStage(row));
   const docChips = _chipField("triageDoctor", row.doctor_name, [["", "未指定"]].concat(names.map(n => [n, n])));
   const typeChips = _chipField("triageType", row.visit_type, [["", "未分"], ["初诊", "初诊"], ["复诊", "复诊"], ["新诊", "新诊"]]);
@@ -743,7 +744,7 @@ async function openTriage(appointmentId, prefillRow) {
 }
 function closeTriage() { const m = document.getElementById("triageModal"); if (m) m.hidden = true; }
 async function saveTriage() {
-  // ④:预约 ID/推进阶段从弹窗 dataset 读——用户看到谁就保存到谁
+  // #813④:预约 ID/推进阶段从弹窗 dataset 读——用户看到谁就保存到谁
   const m = document.getElementById("triageModal");
   if (!m || m.hidden || !m.dataset.apptId) return;
   const v = id => (document.getElementById(id) || {}).value || "";
@@ -775,6 +776,83 @@ const NEW_PATIENT_FIELD_MAP = {
 let _newPatientAvatarFile = null;
 let _npSexTouched = false;      // 前台是否真的点过性别（默认勾"男"，光看 :checked 分不出）
 let _npManualFields = new Set();  // 人工碰过(手输/清空/点原始行)的字段 id：重拍绝不覆盖，哪怕现在是空的
+let _newPatientSubmitting = false;
+let _newPatientRequestId = "";
+let _newPatientSaved = null;
+
+// LAN HTTP（iPad/手机）不是安全上下文，没有 crypto.randomUUID。
+// 统一用 getRandomValues 生成 RFC 4122 v4 UUID，本机与 LAN 只走这一条路径。
+function _newPatientRequestUuid() {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, value => value.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+// 建档幂等号存 localStorage：建档响应丢在路上时用户会关页面重开重填，复用同一个号才能让
+// 后端重放命中(返回首次那位患者)，否则同一个人被建两次。只存一次性 UUID，不含任何患者信息。
+const NP_REQUEST_KEY = "np_pending_request_id";
+
+// 本浏览器是否禁用了本地存储(如 iPad Safari 隐私模式)。禁用时防重复建档的保护失效，
+// 必须显式告知操作员——不静默降级顶上去(禁止兜底)。
+let _npStorageBlocked = false;
+
+function _takeNewPatientRequestId() {
+  try {
+    let id = localStorage.getItem(NP_REQUEST_KEY) || "";
+    if (!id) {
+      id = _newPatientRequestUuid();
+      localStorage.setItem(NP_REQUEST_KEY, id);
+    }
+    _npStorageBlocked = false;
+    return id;
+  } catch {
+    _npStorageBlocked = true;
+    return _newPatientRequestUuid();
+  }
+}
+
+function _rotateNewPatientRequestId() {
+  const id = _newPatientRequestUuid();
+  try { localStorage.setItem(NP_REQUEST_KEY, id); } catch { /* 同上 */ }
+  return id;
+}
+
+function _clearNewPatientRequestId() {
+  try { localStorage.removeItem(NP_REQUEST_KEY); } catch { /* 同上 */ }
+}
+
+// 后端三种 409 只有这一种代表「同号换了个人」，其余都意味着患者行已存在，不能换号重发。
+async function _isPayloadConflict(res) {
+  const body = await res.clone().json().catch(() => ({}));
+  return (body && body.detail && body.detail.code) === "request_id_payload_conflict";
+}
+
+function _errorText(body) {
+  const detail = body && body.detail;
+  if (!detail) return "";
+  return typeof detail === "string" ? detail : (detail.message || detail.code || "");
+}
+
+function _syncNewPatientActionState() {
+  const disabled = _newPatientSubmitting || _ocrBusyGen !== 0;
+  ["npSavePatientBtn", "npRegisterPatientBtn", "npRegisterTriagePatientBtn",
+    "npClosePatientBtn", "npCancelPatientBtn"].forEach(id => {
+    const button = document.getElementById(id);
+    if (button) button.disabled = disabled;
+  });
+  const ocrInput = document.getElementById("npOcrInput");
+  if (ocrInput) ocrInput.disabled = _newPatientSubmitting || _newPatientSaved !== null;
+}
+
+function _lockNewPatientFields() {
+  document.querySelectorAll(
+    "#newPatientModal .np-body input, #newPatientModal .np-body select, "
+      + "#newPatientModal .np-body textarea, #newPatientModal .np-body button",
+  ).forEach(field => { field.disabled = true; });
+}
 
 function _npInput(id, label, opts = {}) {
   const dict = opts.dict ? ` data-dict="${opts.dict}"` : "";
@@ -794,11 +872,14 @@ function openNewPatient() {
   _newPatientAvatarFile = null;
   _npSexTouched = false;
   _npManualFields = new Set();
+  _newPatientSubmitting = false;
+  _newPatientRequestId = _takeNewPatientRequestId();
+  _newPatientSaved = null;
   cancelNewPatientOcr();          // 作废并终止所有在途识别
   m.hidden = false;
   m.innerHTML = `
     <section class="appt-modal np-modal" role="dialog" aria-modal="true" aria-label="新增患者">
-      <div class="modal-head"><strong>新增患者</strong><button type="button" class="plain-button" onclick="closeNewPatient()">×</button></div>
+      <div class="modal-head"><strong>新增患者</strong><button type="button" class="plain-button" id="npClosePatientBtn" data-np-close onclick="closeNewPatient()">×</button></div>
       <div class="appt-body np-body">
         <div class="np-avatar-row">
           <div class="np-avatar-preview" id="npAvatarPreview" aria-hidden="true">头像</div>
@@ -881,11 +962,13 @@ function openNewPatient() {
       </div>
       <div class="modal-actions">
         <span id="npStatus" class="today-refresh-status"></span>
-        <button type="button" class="tooth-confirm-btn" id="npSavePatientBtn" onclick="submitNewPatient()">保存</button>
-        <button type="button" class="plain-button" onclick="closeNewPatient()">取消</button>
+        <button type="button" class="plain-button" id="npSavePatientBtn" data-np-submit onclick="submitNewPatient('save')">仅保存</button>
+        <button type="button" class="plain-button" id="npRegisterPatientBtn" data-np-submit onclick="submitNewPatient('register')">保存并挂号</button>
+        <button type="button" class="tooth-confirm-btn" id="npRegisterTriagePatientBtn" data-np-submit onclick="submitNewPatient('register-triage')">保存、挂号并分诊</button>
+        <button type="button" class="plain-button" id="npCancelPatientBtn" data-np-close onclick="closeNewPatient()">取消</button>
       </div>
     </section>`;
-  // 来源/职业/过敏史/患者类型接已同步字典，挂 datalist 建议
+  // #219：来源/职业/过敏史/患者类型接已同步字典，挂 datalist 建议
   if (typeof bindDictInputs === "function") bindDictInputs(m);
   refreshOcrEntry();
   // 前台一旦在建档字段里手动动过(改字/清空)，这个字段就归人工所有：记进 _npManualFields，
@@ -897,6 +980,14 @@ function openNewPatient() {
     _npManualFields.add(t.id);
     if (t.classList) t.classList.remove("np-ocr-filled", "np-ocr-uncertain");
   };
+  _syncNewPatientActionState();
+  if (_npStorageBlocked) {
+    const warn = document.getElementById("npStatus");
+    if (warn) {
+      warn.textContent = "注意：本浏览器禁用了本地存储，防重复建档保护不可用；"
+        + "若保存后没有反应，请先去患者列表确认，不要直接重复提交";
+    }
+  }
   const nm = document.getElementById("npName"); if (nm) nm.focus();
 }
 function closeNewPatient() {
@@ -955,8 +1046,7 @@ function setNewPatientOcrBusy(gen, busy) {
   if (busy) _ocrBusyGen = gen;
   else if (_ocrBusyGen === gen) _ocrBusyGen = 0;
   else return;                         // 旧请求 finally 不得解锁新请求
-  const save = document.getElementById("npSavePatientBtn");
-  if (save) save.disabled = _ocrBusyGen !== 0;
+  _syncNewPatientActionState();
 }
 
 function cancelNewPatientOcr() {
@@ -965,8 +1055,7 @@ function cancelNewPatientOcr() {
   _ocrAbortController = null;
   _ocrBusyGen = 0;
   if (controller) controller.abort();
-  const save = document.getElementById("npSavePatientBtn");
-  if (save) save.disabled = false;
+  _syncNewPatientActionState();
 }
 
 async function refreshOcrEntry() {
@@ -982,6 +1071,10 @@ async function refreshOcrEntry() {
 }
 
 async function onNewPatientOcrPick(input) {
+  if (_newPatientSubmitting) {
+    if (input) input.value = "";
+    return;
+  }
   const f = input && input.files && input.files[0];
   input.value = "";                       // 允许连拍同一张
   if (!f) return;
@@ -1118,43 +1211,98 @@ function onNewPatientAvatarPick(input) {
   else { prev.style.backgroundImage = ""; prev.classList.remove("has-img"); prev.textContent = "头像"; }
 }
 
-async function submitNewPatient() {
+async function submitNewPatient(mode = "save") {
   const val = id => (document.getElementById(id) || {}).value || "";
   const status = document.getElementById("npStatus");
+  const action = String(mode || "save");
+  if (!["save", "register", "register-triage"].includes(action)) {
+    if (status) status.textContent = "未知的保存动作";
+    return;
+  }
+  if (_newPatientSubmitting) return;
   if (_ocrBusyGen !== 0) {
     if (status) status.textContent = "识别中，请稍候再保存";
     return;
   }
-  const name = val("npName").trim();
-  const phone = val("npPhone").trim();
-  if (!name) { if (status) status.textContent = "请填姓名"; return; }
-  if (!phone) { if (status) status.textContent = "请填电话"; return; }
-  const sexEl = document.querySelector('input[name="npSex"]:checked');
-  const payload = {sex: sexEl ? sexEl.value : ""};
-  Object.entries(NEW_PATIENT_FIELD_MAP).forEach(([id, key]) => { payload[key] = val(id).trim(); });
-  if (status) status.textContent = "保存中...";
-  let res;
-  try { res = await fetch("/api/patients", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload)}); }
-  catch { if (status) status.textContent = "保存失败（网络异常）"; return; }
-  if (!res.ok) { const m = await res.json().catch(() => ({})); if (status) status.textContent = "保存失败：" + (m.detail || res.status); return; }
-  const body = await res.json();
-  // 头像入口：选了图就在建档后上传(失败不挡建档主流程)
-  if (_newPatientAvatarFile && body.patient_identity) {
-    try {
-      const fd = new FormData(); fd.append("file", _newPatientAvatarFile);
-      await fetch(`/api/patients/${encodeURIComponent(body.patient_identity)}/avatar`, {method: "POST", body: fd});
-    } catch { /* 头像非必须 */ }
+  const name = _newPatientSaved ? _newPatientSaved.displayName : val("npName").trim();
+  if (!_newPatientSaved) {
+    const phone = val("npPhone").trim();
+    if (!name) { if (status) status.textContent = "请填姓名"; return; }
+    if (!phone) { if (status) status.textContent = "请填电话"; return; }
   }
-  closeNewPatient();
-  // 建完即问是否挂号(对齐"先挂号后处置")
-  if (window.confirm(`已建档：${name}。现在给Ta挂号吗？`)) {
-    if (typeof openNewAppointment === "function") {
-      // 不再硬编码默认 09:00(常已被占用→诱发重叠预约),只带日期,让用户从空档里选时段
-      openNewAppointment({start: (typeof localDateValue === "function" ? localDateValue() : "")});
-      if (typeof pickApptPatient === "function") pickApptPatient({dataset: {pid: body.patient_identity, pname: name, chart: ""}});
+
+  _newPatientSubmitting = true;
+  _syncNewPatientActionState();
+  try {
+    if (!_newPatientSaved) {
+      const sexEl = document.querySelector('input[name="npSex"]:checked');
+      const payload = {request_id: _newPatientRequestId, sex: sexEl ? sexEl.value : ""};
+      Object.entries(NEW_PATIENT_FIELD_MAP).forEach(([id, key]) => { payload[key] = val(id).trim(); });
+      if (status) status.textContent = "保存中...";
+      const post = () => fetch("/api/patients", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(payload),
+      });
+      let res = await post();
+      if (res.status === 409 && await _isPayloadConflict(res)) {
+        // 只有「同号不同内容」这一种 409 才换号重来：这一单确实是另一个人。
+        // 其余 409(首次快照损坏 / 病历号冲突)时患者行已经在库里了，换号重发会建出第二份档案，
+        // 必须停下报错让人去核对——fail closed，不猜。
+        _newPatientRequestId = _rotateNewPatientRequestId();
+        payload.request_id = _newPatientRequestId;
+        res = await post();
+      }
+      if (!res.ok) {
+        const errorBody = await res.json().catch(() => ({}));
+        if (status) status.textContent = "保存失败：" + (_errorText(errorBody) || res.status);
+        return;
+      }
+      const body = await res.json();
+      if (!body.patient_identity) {
+        if (status) status.textContent = "保存失败：未返回患者标识";
+        return;
+      }
+      _newPatientSaved = {patientIdentity: body.patient_identity, displayName: name};
+      _clearNewPatientRequestId();          // 这一单已落库，号作废，下次建档取新号
+      _lockNewPatientFields();
+      // 头像入口：选了图就在建档后上传(失败不挡建档主流程)
+      if (_newPatientAvatarFile) {
+        try {
+          const fd = new FormData(); fd.append("file", _newPatientAvatarFile);
+          await fetch(`/api/patients/${encodeURIComponent(body.patient_identity)}/avatar`, {method: "POST", body: fd});
+        } catch { /* 头像非必须 */ }
+      }
     }
-  } else {
-    loadTodayWork();
+
+    if (action === "save") {
+      closeNewPatient();
+      loadTodayWork();
+      return;
+    }
+
+    if (status) status.textContent = "患者已保存，正在挂号...";
+    const result = await checkInPatient({
+      patientIdentity: _newPatientSaved.patientIdentity,
+      displayName: _newPatientSaved.displayName,
+      openTriageAfter: action === "register-triage",
+      switchToToday: true,
+      showSuccess: true,
+    });
+    if (!result) {
+      if (status) status.textContent = "患者已保存，后续操作未完成，请按提示重试";
+      return;
+    }
+    closeNewPatient();
+  } catch {
+    if (status) {
+      status.textContent = _newPatientSaved
+        ? "患者已保存，后续操作未完成，请按提示重试"
+        : "保存失败（网络异常）";
+    }
+  } finally {
+    _newPatientSubmitting = false;
+    _syncNewPatientActionState();
   }
 }
 window.openNewPatient = openNewPatient; window.closeNewPatient = closeNewPatient; window.submitNewPatient = submitNewPatient;
@@ -1169,7 +1317,7 @@ function tqRegChip(row) {
 
 // 时间列：预约时刻 + (已到诊则)到达时刻
 function tqTimeCell(row) {
-  // 约/到/离三个时间都带标签做成独立小块,不再裸拼成「18:00 到07:59 离08:16」难辨。
+  // 扫荡#397:约/到/离三个时间都带标签做成独立小块,不再裸拼成「18:00 到07:59 离08:16」难辨。
   const appt = (row.start_time || "").slice(11, 16);
   const arr = (row.arrived_at || "").slice(11, 16);
   const fin = (row.finished_at || "").slice(11, 16);
@@ -1371,7 +1519,7 @@ function renderTodayReturnVisit(row) {
   return todayPatientRow(row.patient_identity, row.display_name, [
     row.due_time,
     row.item_name,
-    returnVisitStatusText(row.status),   // 不再显示裸状态码「0」
+    returnVisitStatusText(row.status),   // 扫荡#400:不再显示裸状态码「0」
   ]);
 }
 
@@ -1410,11 +1558,11 @@ Object.assign(window, {
   setTodayQueueFilter,
   openQueueShortcut,
   appointmentStatusBadge,
-  todayWorkEntryList,
-  openTodayWorkEntry,
-  openTodayWorkEntryFull,
-  todayWorkKpiStrip,
-  todayWorkKpiItem,
+  todaySaasEntryList,
+  openTodaySaasEntry,
+  openTodaySaasEntryFull,
+  todaySaasKpiStrip,
+  todaySaasKpiItem,
   refreshTodayWorkbench,
   syncTodayActions,
 });

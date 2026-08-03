@@ -5,7 +5,7 @@
 电话咨询录音走 calls 表的 linked_communication_id 弱关联（前端按患者列 calls 后归组）。
 
 时区铁律：一律北京时间（ZoneInfo("Asia/Shanghai")），不用裸 datetime.now()。
-落盘/删除遵 入库失败清盘防孤儿，删盘失败可追踪不静默。
+落盘/删除遵 #712：入库失败清盘防孤儿，删盘失败可追踪不静默。
 """
 
 import hashlib
@@ -230,7 +230,7 @@ def create_communications_router(db_path, images_dir):
         rels = result.pop("_rel_paths")
         pid = result.pop("_patient_identity")
         removed, failed = _unlink_all(rels, communication_id, pid)
-        # 删盘失败明确返回 files_failed,前端据此告警(录音/截图属隐私,不静默当成功)
+        # #721 删盘失败明确返回 files_failed,前端据此告警(录音/截图属隐私,不静默当成功)
         return {
             **result,
             "files_removed": removed,
@@ -511,7 +511,7 @@ def create_communications_router(db_path, images_dir):
 
     def _unlink_all(rels, communication_id, patient_identity):
         """删盘：返回 (成功删除数, 失败数)；失败的落 delete_communication_file_failed 审计
-        （带 patient_identity 供患者审计追溯 ，可重试清理），不静默。"""
+        （带 patient_identity 供患者审计追溯 #719，可重试清理），不静默。"""
         images_root = images_dir.resolve()
         removed = failed = 0
         for rel in rels:

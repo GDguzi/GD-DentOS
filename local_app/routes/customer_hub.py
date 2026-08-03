@@ -22,7 +22,7 @@ def create_customer_hub_router(db_path):
     def customer_hub_today(date: str = ""):
         require_access("patient.profile.view")
         day = (date or "").strip() or today_str()
-        valid_date_param(day, "date")   # 坏日期(如 20260710/2026-99-99)→400,不静默伪装成"今日无记录"
+        valid_date_param(day, "date")   # #729 坏日期(如 20260710/2026-99-99)→400,不静默伪装成"今日无记录"
         out = {"date": day}
         can_view_return_visits = has_access("return_visit.view")
         can_view_communications = has_access("communication.view")

@@ -1,5 +1,5 @@
 // 审计R3 回归:新建病历保存必须用「打开编辑器那一刻快照的患者ID」,不读保存时的全局
-// workspacePatientId——编辑期间浏览器后退等切了患者,病历仍要落在打开时的患者档案(快照范式)。
+// workspacePatientId——编辑期间浏览器后退等切了患者,病历仍要落在打开时的患者档案(#77 快照范式)。
 // 跑：node --test test/web/test_medical_editor_patient_snapshot.mjs
 import { test } from "node:test";
 import assert from "node:assert";
@@ -24,8 +24,8 @@ function makeSandbox() {
     cssEscape: s => String(s ?? ""),
     toothCrossHtml: () => "",
     recordVersionList: () => "",
-    parseImportedSubject: () => null,
-    importedSubjectToText: () => null,
+    parseSaasSubject: () => null,
+    saasSubjectToText: () => null,
     closeMedicalEditorOverlay: () => {},
     refreshWorkspaceDetail: async () => null,
     loadAuditLogs: async () => {},

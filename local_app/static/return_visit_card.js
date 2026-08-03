@@ -3,7 +3,7 @@
 // 只在客户通模块用;数据 GET/PUT /api/return-visits/{id}、.../images、患者 calls。
 
 let _rvCardId = "", _rvCardPid = "";
-// 卡片代数：开/关/切卡片都 +1。每次开麦会话在点击瞬间记住自己那一代，
+// #734 卡片代数：开/关/切卡片都 +1。每次开麦会话在点击瞬间记住自己那一代，
 // 之后任何环节(权限框返回/onstop)发现代数变了就永久取消——代数只增不回头，
 // 杜绝"关后立刻重开同一回访,ID 又相等,旧守卫误放行"的竞态。
 let _rvCardGen = 0;
@@ -30,7 +30,7 @@ function openReturnVisitCard(rvId, patientId) {
 }
 
 function closeReturnVisitCard() {
-  _rvCardGen++;     // 关卡片:本代作废,重开同一回访也是新代,旧 onstop 必取消
+  _rvCardGen++;     // #734 关卡片:本代作废,重开同一回访也是新代,旧 onstop 必取消
   _rvCardId = "";
   // 关卡片时若在录音,必须停(释放麦克风+灭红点);否则录音器/麦克风流泄漏,后台继续录环境声
   if (_rvMicRec && _rvMicRec.state === "recording") { try { _rvMicRec.stop(); } catch { /* 忽略 */ } }
@@ -79,7 +79,7 @@ function renderReturnVisitCard(d, calls) {
   const stdVals = RV_CARD_STATUS.map(([v]) => v);
   let statusOpts = RV_CARD_STATUS.map(([v, l]) =>
     `<option value="${escapeAttr(v)}"${v === cur ? " selected" : ""}>${escapeHtml(l)}</option>`).join("");
-  // 外部导入的状态可能是 done/完成/4 等,不在标准两项里。补一个当前原值选项并选中,否则浏览器
+  // SaaS 导入的状态可能是 done/完成/4 等,不在标准两项里。补一个当前原值选项并选中,否则浏览器
   // 默认落到「待回访」→ 保存时把已办结回访静默改回待回访(数据损坏)。保留原值即不覆盖。
   if (cur && !stdVals.includes(cur)) {
     const label = (typeof returnVisitStatusText === "function") ? returnVisitStatusText(cur) : cur;
@@ -188,8 +188,8 @@ function markRvCardDone() {
 }
 
 // 快捷录音:点一下开始录本机麦克风,再点停止即上传并挂到本回访(linked_return_visit_id)。
-// 会话锁定用卡片代数:点击瞬间记 gen,开麦返回/onstop 时代数变了(关卡片/切卡片/重开)
-// 一律永久取消,不再比对可能"变回相等"的回访/患者 ID(同 口径的升级版)。
+// #734 会话锁定用卡片代数:点击瞬间记 gen,开麦返回/onstop 时代数变了(关卡片/切卡片/重开)
+// 一律永久取消,不再比对可能"变回相等"的回访/患者 ID(同 #700 口径的升级版)。
 let _rvMicRec = null, _rvMicChunks = [], _rvMicStarting = false;
 
 async function toggleRvCardMicRecord() {
@@ -201,7 +201,7 @@ async function toggleRvCardMicRecord() {
   if (!_rvCardPid) { alert("该回访没有关联患者，无法录音"); return; }
   const revision = rvCardRevision();
   if (!revision) { alert("数据版本已失效，请刷新后重试"); await loadReturnVisitCard(); return; }
-  const gen = _rvCardGen;               // 本次开麦会话绑定当前卡片代数
+  const gen = _rvCardGen;               // #734 本次开麦会话绑定当前卡片代数
   const pid = _rvCardPid, rvId = _rvCardId;   // 上传目标在点击瞬间锁定
   _rvMicStarting = true;
   if (btn) { btn.disabled = true; btn.textContent = "正在开麦…"; }
@@ -215,7 +215,7 @@ async function toggleRvCardMicRecord() {
   }
   _rvMicStarting = false;
   if (btn) btn.disabled = false;
-  if (gen !== _rvCardGen) {   // 开麦期间关了/切了卡片(含重开同一回访) → 弃流,不起录音机
+  if (gen !== _rvCardGen) {   // #734 开麦期间关了/切了卡片(含重开同一回访) → 弃流,不起录音机
     stream.getTracks().forEach(t => t.stop());
     if (btn) btn.textContent = "🎙 快捷录音";
     return;
@@ -227,7 +227,7 @@ async function toggleRvCardMicRecord() {
   _rvMicRec.onstop = async () => {
     stream.getTracks().forEach(t => t.stop());
     if (btn) btn.textContent = "🎙 快捷录音";
-    if (gen !== _rvCardGen) {   // 录音期间卡片代数变了 → 永久取消上传
+    if (gen !== _rvCardGen) {   // #734 录音期间卡片代数变了 → 永久取消上传
       if (status) status.textContent = "已切换回访，已取消上传";
       return;
     }

@@ -1,4 +1,4 @@
-// 病历编辑器。
+// 病历编辑器：对标官方"病历填写"版面（docs/官方UI截图/04/05）。
 // 左栏 = 病历模版目录树 + 科目导航；右栏 = 详细病历数据（文本科目 + 带牙位的条目科目）。
 // 检查/诊断/治疗方案/治疗 四类条目存 medical_record_items（牙位×类型×内容），
 // 文本科目仍存 content_json（保存时与原 JSON 合并，未知科目键不丢失）。
@@ -9,7 +9,7 @@ const toothGrid = document.getElementById("toothGrid");
 const toothSelectionText = document.getElementById("toothSelectionText");
 
 let activeToothRecordId = "";
-// 缓存最近聚焦的条目输入框。点快捷词条按钮时焦点已落到按钮上，
+// #41：缓存最近聚焦的条目输入框。点快捷词条按钮时焦点已落到按钮上，
 // document.activeElement 拿不到用户刚编辑的行，故用 focusin 提前记下。
 let lastFocusedItemContent = null;
 document.addEventListener("focusin", (e) => {
@@ -48,27 +48,27 @@ const TEXT_SUBJECTS_BOTTOM = [
   ["医嘱", "Plan"],
 ];
 
-// 外部系统 结构化科目预处理：条目科目(Exam/DG/TR)的 {"item":[...]} 拆成牙位条目行，
+// SaaS 结构化科目预处理：条目科目(Exam/DG/TR)的 {"item":[...]} 拆成牙位条目行，
 // 文本科目转可读文本。返回 {content: 处理后的科目文本, initialRows: {exam:[{teeth,text}],...}}
-function explodeImportedContent(rawContent) {
+function explodeSaasContent(rawContent) {
   const content = {...rawContent};
   const initialRows = {};
   for (const subject of ITEM_SUBJECTS) {
     if (!subject.textKey) continue;
-    const entries = parseImportedSubject(content[subject.textKey]);
+    const entries = parseSaasSubject(content[subject.textKey]);
     if (entries === null) continue;
     initialRows[subject.type] = entries;
     content[subject.textKey] = "";
   }
   for (const key of ["PC", "HPI", "PI", "AE", "Plan", "DA", "Nurse"]) {
-    const text = importedSubjectToText(content[key]);
+    const text = saasSubjectToText(content[key]);
     if (text !== null) content[key] = text;
   }
   return {content, initialRows};
 }
 
 function renderMedicalRecord(row) {
-  const exploded = explodeImportedContent(parseMedicalContent(row.content_json));
+  const exploded = explodeSaasContent(parseMedicalContent(row.content_json));
   const content = exploded.content;
   const initialRows = exploded.initialRows;
   const recordType = (row.record_type || "").trim();
@@ -78,7 +78,7 @@ function renderMedicalRecord(row) {
     ...ITEM_SUBJECTS.map(s => s.label),
     ...TEXT_SUBJECTS_BOTTOM.map(([label]) => label),
   ];
-  // 照 快照范式:打开编辑器那一刻把当前患者ID快照进编辑器根节点,
+  // 照 #77 快照范式:打开编辑器那一刻把当前患者ID快照进编辑器根节点,
   // 新建保存只认这个快照——编辑期间浏览器后退等切了患者,病历也不会写进别人档案。
   return `
     <div class="record-row medical-record-editor official-editor" data-record-id="${escapeAttr(row.record_id)}" data-patient-snapshot="${escapeAttr(workspacePatientId)}">
@@ -211,12 +211,12 @@ function itemSubjectBlock(subject, content, initialRows = []) {
 
 // 检查快捷词条：在检查栏加一条预填该词条的条目（牙位待选）
 function addExamQuick(btn, text) {
-  // 多词拼进"当前"条目行（空格隔开），不再每点一个新增一行。
+  // #16：多词拼进"当前"条目行（空格隔开），不再每点一个新增一行。
   // 目标行：优先用户正聚焦的条目输入框，其次最后一行；都没有才新建一行。
   const block = btn.closest(".item-subject");
   const rows = block.querySelector("[data-item-rows]");
   let target = null;
-  // 用 focusin 缓存的"最近聚焦输入框"（须仍在文档内且属于本科目块），
+  // #41：用 focusin 缓存的"最近聚焦输入框"（须仍在文档内且属于本科目块），
   // 而非 document.activeElement（点按钮后焦点已在按钮上）。
   const cached = lastFocusedItemContent;
   if (cached && cached.isConnected && block.contains(cached)) {
@@ -233,7 +233,7 @@ function addExamQuick(btn, text) {
   const cur = (target.value || "").trim();
   target.value = cur ? cur + " " + text : text;
   target.focus();
-  if (typeof markMedicalEditorDirty === "function") markMedicalEditorDirty();  // 
+  if (typeof markMedicalEditorDirty === "function") markMedicalEditorDirty();  // #335
 }
 
 // 病种→建议检查：诊断里出现某关键词，推荐对应常见检查项
@@ -279,7 +279,7 @@ function suggestExamByDiagnosis(btn) {
     return;
   }
   toAdd.forEach(e => rows.insertAdjacentHTML("beforeend", recordItemRow([], e)));
-  if (typeof markMedicalEditorDirty === "function") markMedicalEditorDirty();  // 
+  if (typeof markMedicalEditorDirty === "function") markMedicalEditorDirty();  // #335
 }
 
 function recordItemRow(teeth, content) {
@@ -360,8 +360,8 @@ function toggleTemplateFolder(el) {
 }
 
 // 套用模板：填充编辑器各文本科目（只覆盖模板里有值的科目），与官方点模板行为一致。
-// 适配：模板科目存为 外部系统 富文本——可能是 JSON 结构化({item:[]})或 XML(<?xml..><span>)，
-// 先走 importedSubjectToText(JSON)，再走 importedXmlToText(XML)，都不是才原样，避免把 XML 标签塞进文本框。
+// 适配：模板科目存为 SaaS 富文本——可能是 JSON 结构化({item:[]})或 XML(<?xml..><span>)，
+// 先走 saasSubjectToText(JSON)，再走 saasXmlToText(XML)，都不是才原样，避免把 XML 标签塞进文本框。
 function applyTemplateFromTree(link, templateId) {
   const content = (window.medicalTemplateCache || {})[templateId];
   const editor = link.closest(".medical-record-editor");
@@ -369,11 +369,11 @@ function applyTemplateFromTree(link, templateId) {
   editor.querySelectorAll("[data-medical-field]").forEach(input => {
     const raw = content[input.dataset.medicalField];
     if (raw === undefined) return;
-    let text = importedSubjectToText(raw);          // JSON 结构化科目
-    if (text === null) text = importedXmlToText(raw);  // XML 富文本科目 / 纯文本
+    let text = saasSubjectToText(raw);          // JSON 结构化科目
+    if (text === null) text = saasXmlToText(raw);  // XML 富文本科目 / 纯文本
     input.value = text;
   });
-  if (typeof markMedicalEditorDirty === "function") markMedicalEditorDirty();  // 
+  if (typeof markMedicalEditorDirty === "function") markMedicalEditorDirty();  // #335
 }
 
 async function loadEditorRecordItems(editor, recordId) {
@@ -401,14 +401,14 @@ async function loadEditorRecordItems(editor, recordId) {
     const block = editor.querySelector(`.item-subject[data-item-type="${subject.type}"] [data-item-rows]`);
     if (!block) continue;
     const rows = rowsByType[subject.type] || [];
-    // 库里没有该类条目时保留初始行（外部系统 结构化科目解析出来的，首次保存才落库）
+    // 库里没有该类条目时保留初始行（SaaS 结构化科目解析出来的，首次保存才落库）
     if (rows.length) {
       block.innerHTML = rows.map(r => recordItemRow(r.teeth, r.content)).join("");
     }
   }
 }
 
-// ---------- 牙位选择器 ----------
+// ---------- 牙位选择器（对标官方"选择牙位"弹窗，docs/官方UI截图/05） ----------
 
 function toothQuadrants() {
   return [
@@ -421,7 +421,7 @@ function toothQuadrants() {
 
 // FDI 编码转换：象限码+牙号 ↔ FDI 两位码
 // 恒牙象限 1=右上 2=左上 3=左下 4=右下；乳牙象限 5=右上 6=左上 7=左下 8=右下
-const QUAD_NAME = {RT: "右上", LT: "左上", LB: "左下", RB: "右下"};   // 牙位象限可读名
+const QUAD_NAME = {RT: "右上", LT: "左上", LB: "左下", RB: "右下"};   // #373 牙位象限可读名
 const FDI_QUADRANT = {RT: "1", LT: "2", LB: "3", RB: "4"};
 const QUADRANT_BY_FDI = {1: "RT", 2: "LT", 3: "LB", 4: "RB"};
 const FDI_DECIDUOUS_QUADRANT = {RT: "5", LT: "6", LB: "7", RB: "8"};
@@ -581,12 +581,12 @@ function insertToothAnnotation(text) {
   const input = activeToothItemRow.querySelector(".item-content");
   if (!input) return;
   input.value = input.value ? `${input.value.replace(/\s+$/, "")} ${text}` : text;
-  if (typeof markMedicalEditorDirty === "function") markMedicalEditorDirty();  // 
+  if (typeof markMedicalEditorDirty === "function") markMedicalEditorDirty();  // #335
 }
 
 function deciduousButton(quadrant, letter) {
   const selected = (activeDeciduousSelection[quadrant] || []).includes(letter);
-  const fdi = FDI_DECIDUOUS_QUADRANT[quadrant] + String(DECIDUOUS_LETTERS.indexOf(letter) + 1);   // 
+  const fdi = FDI_DECIDUOUS_QUADRANT[quadrant] + String(DECIDUOUS_LETTERS.indexOf(letter) + 1);   // #373
   return `
     <button type="button" class="tooth-button tooth-deciduous${selected ? " selected" : ""}"
       data-tooth="${fdi}" aria-label="${QUAD_NAME[quadrant] || quadrant}乳牙${letter} FDI ${fdi}" title="${QUAD_NAME[quadrant] || quadrant}乳${letter}"
@@ -596,7 +596,7 @@ function deciduousButton(quadrant, letter) {
 
 function toothIconButton(quadrant, tooth, upper) {
   const selected = (activeToothSelection[quadrant] || []).includes(String(tooth));
-  const fdi = FDI_QUADRANT[quadrant] + tooth;   // 完整 FDI 码进 data-tooth/aria-label/title
+  const fdi = FDI_QUADRANT[quadrant] + tooth;   // #373:完整 FDI 码进 data-tooth/aria-label/title
   return `
     <button type="button" class="tooth-icon-btn${selected ? " selected" : ""}"
       data-tooth="${fdi}" aria-label="${QUAD_NAME[quadrant] || quadrant}${tooth}号 FDI ${fdi}" title="${QUAD_NAME[quadrant] || quadrant} ${fdi}"
@@ -690,7 +690,7 @@ function updateToothSelectionText() {
 
 function toothButton(quadrant, tooth) {
   const selected = (activeToothSelection[quadrant] || []).includes(String(tooth));
-  const fdi = FDI_QUADRANT[quadrant] + tooth;   // 
+  const fdi = FDI_QUADRANT[quadrant] + tooth;   // #373
   return `
     <button
       type="button"
@@ -736,7 +736,7 @@ function applyToothSelection() {
     activeToothItemRow.dataset.teeth = teeth.join(",");
     const cell = activeToothItemRow.querySelector(".item-tooth-cell");
     if (cell) cell.innerHTML = toothCrossHtml(teeth);
-    if (typeof markMedicalEditorDirty === "function") markMedicalEditorDirty();  // 
+    if (typeof markMedicalEditorDirty === "function") markMedicalEditorDirty();  // #335
     closeToothSelector();
     return;
   }
@@ -751,7 +751,7 @@ function applyToothSelection() {
   container.querySelector('[data-record-field="tooth_json"]').value = toothJson;
   const summary = document.getElementById(`toothSummary-${activeToothRecordId}`);
   if (summary) summary.textContent = formatToothSummary(toothJson);
-  if (typeof markMedicalEditorDirty === "function") markMedicalEditorDirty();  // 
+  if (typeof markMedicalEditorDirty === "function") markMedicalEditorDirty();  // #335
   closeToothSelector();
 }
 
@@ -803,7 +803,7 @@ function collectEditorItems(container) {
 }
 
 async function saveMedicalRecord(recordId, opts) {
-  const keepOpen = !!(opts && opts.keepOpen);   // 暂存:保存但不关编辑层
+  const keepOpen = !!(opts && opts.keepOpen);   // #335 暂存:保存但不关编辑层
   const container = document.querySelector(`.medical-record-editor[data-record-id="${cssEscape(recordId)}"]`);
   const status = document.getElementById(`recordStatus-${recordId}`);
   const rawTooth = container.querySelector('[data-record-field="tooth_json"]').value.trim();
@@ -857,7 +857,7 @@ async function saveMedicalRecord(recordId, opts) {
   let res;
   try {
     if (isNew) {
-      // 快照范式:用打开编辑器时快照进 DOM 的患者ID,不读此刻的全局(编辑期间可能已切患者)。
+      // #77 快照范式:用打开编辑器时快照进 DOM 的患者ID,不读此刻的全局(编辑期间可能已切患者)。
       // 快照缺失不兜底回全局:留空让后端 400(patient_identity is required)明确报错。
       payload.patient_identity = container.dataset.patientSnapshot || "";
       res = await fetch("/api/medical-records", {
@@ -906,10 +906,10 @@ async function saveMedicalRecord(recordId, opts) {
     }
   }
 
-  // 保存成功→清脏标记,后续关闭/退出不再误拦
+  // 保存成功→清脏标记,后续关闭/退出不再误拦(#335)
   const overlay = document.getElementById("medicalEditorOverlay");
   if (overlay) overlay.dataset.dirty = "";
-  if (typeof evictVisitsCache === "function") evictVisitsCache();  // 病历改动影响就诊时间轴
+  if (typeof evictVisitsCache === "function") evictVisitsCache();  // #57 病历改动影响就诊时间轴
   if (keepOpen) {
     // 暂存:不关编辑层。新建首次暂存后,用真实 record_id 重开覆盖层,避免再次暂存重复 POST。
     status.textContent = "已暂存";
@@ -964,7 +964,7 @@ async function saveAsTemplate(recordId) {
 Object.assign(window, {
   renderMedicalRecord,
   parseMedicalContent,
-  explodeImportedContent,
+  explodeSaasContent,
   saveAsTemplate,
   medicalChartField,
   itemSubjectBlock,

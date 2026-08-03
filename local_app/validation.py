@@ -13,7 +13,7 @@ import re
 from fastapi import HTTPException
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-# 秒后允许小数（部分来源的时间形如 09:43:00.000000）
+# 秒后允许小数（SaaS 同步数据形如 09:43:00.000000）
 _DATETIME_PREFIX_RE = re.compile(r"^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?)?$")
 
 
@@ -50,7 +50,7 @@ def valid_time_field(value, field):
 
 
 def valid_int_qty(v, default=1):
-    """数量必须是整数：缺省用 default;传了但非整数值(如 "2.5"/2.9)→400,不静默截断/兜底。
+    """数量必须是整数：缺省用 default;传了但非整数值(如 "2.5"/2.9)→400,不静默截断/兜底(#557)。
     整数值的 "2"/"2.0"/2/2.0 都接受。"""
     if v is None or v == "":
         return default
@@ -63,7 +63,7 @@ def valid_int_qty(v, default=1):
             return int(v)
         raise HTTPException(status_code=400, detail="数量必须是整数")
     # 字符串:只认普通十进制整数(或 "2.0"/"2.00" 这类整数值小数);
-    # 走正则+int() 而非 float(),避免大数精度丢失(复核🟡)和科学计数法"1e3"被误纳
+    # 走正则+int() 而非 float(),避免大数精度丢失(#557复核🟡)和科学计数法"1e3"被误纳
     s = str(v).strip()
     if re.fullmatch(r"-?\d+", s):
         return int(s)

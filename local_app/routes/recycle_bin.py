@@ -26,7 +26,7 @@ def create_recycle_bin_router(db_path, access_v3=False):
     @router.get("/api/recycle-bin")
     def list_recycle():
         auth.require_login_user()   # 回收站敏感:即便本机免登录也要求登录(保持原契约)
-        auth.require_perm("patient.view")   # 含已删回访/同意书/账单(带患者名+金额),加 patient.view 守卫
+        auth.require_perm("patient.view")   # #494：含已删回访/同意书/账单(带患者名+金额),加 patient.view 守卫
         items = []
         with connect(db_path) as conn:
             for r in conn.execute(
@@ -63,7 +63,7 @@ def create_recycle_bin_router(db_path, access_v3=False):
                 items.append({"entity_type": "instrument", "entity_id": r["id"], "kind": "器械",
                               "title": f'{r["name"] or ""} {r["code"] or ""}'.strip(),
                               "subtitle": "", "deleted_by": op, "deleted_at": at or r["updated_at"]})
-            for r in conn.execute(  # 纳入作废账单
+            for r in conn.execute(  # #95 纳入作废账单
                 "select b.bill_id id, b.bill_no, b.total_fee, b.updated_at, p.display_name "
                 "from bills b left join patients p on p.patient_identity = b.patient_identity "
                 "where b.state = 'voided' order by b.updated_at desc limit 200"
@@ -84,7 +84,7 @@ def create_recycle_bin_router(db_path, access_v3=False):
                                "sterilize_dispatch", "restore_dispatch"),
         "instrument": ("update instrument set is_deleted = 0 where id = ? and is_deleted = 1",
                        "instrument", "restore_instrument"),
-        # 'open' 不是合法账单状态(合法:pending/paid/refunded/voided)→ 改 pending(待收费)
+        # 审查#8：'open' 不是合法账单状态(合法:pending/paid/refunded/voided)→ 改 pending(待收费)
         "bill": ("update bills set state = 'pending' where bill_id = ? and state = 'voided'",
                  "bill", "restore_bill"),
     }
@@ -99,7 +99,7 @@ def create_recycle_bin_router(db_path, access_v3=False):
             raise HTTPException(status_code=400, detail="不支持的还原类型")
         sql, atype, action = _RESTORE[et]
         with connect(db_path) as conn:
-            # 仅本人(删除者)或管理员可还原
+            # #94 仅本人(删除者)或管理员可还原
             is_admin = (
                 user.get("is_system_admin") is True
                 if access_v3
@@ -115,7 +115,7 @@ def create_recycle_bin_router(db_path, access_v3=False):
                 raise HTTPException(status_code=409, detail="编号/单号已被重新占用，无法还原")
             if cur.rowcount == 0:
                 raise HTTPException(status_code=404, detail="记录不存在或未处于已删除状态")
-            # 还原作废账单要级联还原它撤销时一起作废的处置单+明细,否则账单回来了但没明细(财务不一致)
+            # 审查#8：还原作废账单要级联还原它撤销时一起作废的处置单+明细,否则账单回来了但没明细(财务不一致)
             if et == "bill":
                 order = conn.execute(
                     "select order_id from treatment_orders where bill_id = ? and status = 'voided'", (eid,)

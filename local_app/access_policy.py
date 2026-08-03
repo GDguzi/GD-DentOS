@@ -2,11 +2,12 @@
 
 本模块把已批准的两份设计资产固化为项目内不可变数据：
 1. 99 项权限目录（`PERMISSION_CATALOG` / `ALL_PERMISSIONS`）。
-2. 目标路由全集(255 条)的边界策略（`ROUTE_POLICIES`）。
+2. 目标路由的边界策略（`ROUTE_POLICIES`）。
 
-它是目标运行时授权的唯一真相源。`access_authorization.py` 依据本表做全局
-判权；当前 `create_app` 仍保持旧运行时，须等独立原子切换步骤显式接入，
-不得把“目标授权器已完成”误报成当前 localhost 已上线。
+设计过程：逐路由取证 + 机械对账双重校核后定稿。
+
+它是授权运行时的唯一真相源。`access_authorization.py` 依据本表做全局
+判权；`run_local` 启动时以 `access_v3=True` 接入本表驱动的授权运行时。
 
 边界类型语义：
 - PERMISSION：要求一个权限键。
@@ -247,7 +248,7 @@ RoutePolicy = namedtuple(
     "method path source function policy_type permissions note",
 )
 
-# 255 条目标路由的显式策略（已批准设计数据，按 (path, method) 稳定排序）。
+# 目标路由的显式策略（已批准设计数据，按 (path, method) 稳定排序）。
 # 每行：(method, path, source, function, policy_type, permissions, note)
 _ROUTE_POLICY_ROWS = (
     ('GET', '/api/ai-drafts', 'routes/ai_drafts.py', 'list_ai_drafts', 'ALL_OF', ('medical_record.view', 'medical_record.ai.review', ), '草稿含病历正文，队列权限不能替代病历查看权限'),
@@ -301,11 +302,11 @@ _ROUTE_POLICY_ROWS = (
     ('POST', '/api/dispatch/{dispatch_id}/cancel-audit', 'routes/sterilize_dispatch.py', 'cancel_audit_dispatch', 'PERMISSION', ('sterilization_order.cancel_audit', ), None),
     ('POST', '/api/dispatch/{dispatch_id}/submit', 'routes/sterilize_dispatch.py', 'submit_dispatch', 'PERMISSION', ('sterilization_order.submit', ), None),
     ('GET', '/api/handle-items', 'routes/master_data.py', 'handle_items', 'PERMISSION', ('master_data.view', ), None),
-    ('POST', '/api/handle-items', 'routes/master_data.py', 'create_handle_item', 'SYSTEM_ADMIN', (), None),
-    ('GET', '/api/handle-items/manage', 'routes/master_data.py', 'manage_handle_items', 'SYSTEM_ADMIN', (), None),
-    ('DELETE', '/api/handle-items/{handle_id}', 'routes/master_data.py', 'delete_handle_item', 'SYSTEM_ADMIN', (), None),
-    ('PUT', '/api/handle-items/{handle_id}', 'routes/master_data.py', 'update_handle_item', 'SYSTEM_ADMIN', (), None),
-    ('POST', '/api/handle-items/{handle_id}/restore', 'routes/master_data.py', 'restore_handle_item', 'SYSTEM_ADMIN', (), None),
+    ('POST', '/api/handle-items', 'routes/master_data.py', 'create_handle_item', 'PERMISSION', ('master_data.manage', ), None),
+    ('GET', '/api/handle-items/manage', 'routes/master_data.py', 'manage_handle_items', 'PERMISSION', ('master_data.manage', ), None),
+    ('DELETE', '/api/handle-items/{handle_id}', 'routes/master_data.py', 'delete_handle_item', 'PERMISSION', ('master_data.manage', ), None),
+    ('PUT', '/api/handle-items/{handle_id}', 'routes/master_data.py', 'update_handle_item', 'PERMISSION', ('master_data.manage', ), None),
+    ('POST', '/api/handle-items/{handle_id}/restore', 'routes/master_data.py', 'restore_handle_item', 'PERMISSION', ('master_data.manage', ), None),
     ('GET', '/api/health', 'api.py', 'health', 'PUBLIC', (), None),
     ('GET', '/api/instrument-categories', 'routes/sterilization.py', 'list_categories', 'PERMISSION', ('instrument.view', ), None),
     ('POST', '/api/instrument-categories', 'routes/sterilization.py', 'create_category', 'PERMISSION', ('instrument.manage', ), None),
@@ -345,6 +346,7 @@ _ROUTE_POLICY_ROWS = (
     ('POST', '/api/patients/{patient_identity}/avatar', 'routes/patient_assets.py', 'upload_avatar', 'PERMISSION', ('patient.image.manage', ), None),
     ('GET', '/api/patients/{patient_identity}/calls', 'routes/calls.py', 'list_patient_calls', 'PERMISSION', ('call_record.view', ), None),
     ('POST', '/api/patients/{patient_identity}/calls', 'routes/calls.py', 'upload_patient_call', 'PERMISSION', ('call_record.manage', ), None),
+    ('POST', '/api/patients/{patient_identity}/check-in', 'routes/appointments.py', 'check_in_patient', 'ALL_OF', ('appointment.create', 'appointment.status', 'appointment.edit', ), '到店挂号同时涵盖新建、状态推进和预约字段修改'),
     ('GET', '/api/patients/{patient_identity}/communications', 'routes/communications.py', 'list_patient_communications', 'PERMISSION', ('communication.view', ), None),
     ('POST', '/api/patients/{patient_identity}/communications', 'routes/communications.py', 'create_communication', 'PERMISSION', ('communication.manage', ), None),
     ('GET', '/api/patients/{patient_identity}/consent-documents', 'routes/consent_forms.py', 'list_documents', 'PERMISSION', ('consent.manage', ), None),
@@ -403,6 +405,7 @@ _ROUTE_POLICY_ROWS = (
     ('GET', '/api/reports/income', 'routes/reports.py', 'income_by_day', 'PERMISSION', ('report.finance.view', ), None),
     ('GET', '/api/reports/income-monthly', 'routes/reports.py', 'income_monthly', 'PERMISSION', ('report.finance.view', ), None),
     ('GET', '/api/reports/income.csv', 'routes/reports.py', 'income_csv', 'PERMISSION', ('report.finance.export', ), None),
+    ('GET', '/api/reports/reconcile', 'routes/reports.py', 'reconcile_report', 'PERMISSION', ('report.operations.view', ), None),
     ('GET', '/api/reports/staff-workload', 'routes/reports.py', 'staff_workload', 'PERMISSION', ('report.performance.view', ), None),
     ('GET', '/api/reports/today-collection', 'routes/reports.py', 'today_collection', 'PERMISSION', ('report.cashier.view', ), None),
     ('GET', '/api/return-visits', 'routes/return_visits.py', 'return_visit_list', 'PERMISSION', ('return_visit.view', ), None),

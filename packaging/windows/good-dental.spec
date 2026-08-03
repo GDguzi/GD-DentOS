@@ -2,7 +2,7 @@
 # 本地构建（Windows 上）：
 #   pip install -r requirements.txt pyinstaller
 #   pyinstaller packaging/windows/good-dental.spec --distpath dist --workpath build --clean --noconfirm
-# CI 自动构建 + 冒烟验证见 .github/workflows/build-windows.yml
+# CI 自动构建 + 冒烟验证见 .github/workflows/build-release.yml
 import os
 
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules

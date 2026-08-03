@@ -1,7 +1,7 @@
-// ④ 回归:分诊弹窗竞态——快速连开 A、B 两个分诊,A 的医生列表慢返回时,
+// #813④ 回归:分诊弹窗竞态——快速连开 A、B 两个分诊,A 的医生列表慢返回时,
 // 旧实现全局 _triageApptId 被 B 覆盖但 A 的渲染后到,出现"显示 A 保存到 B"。
 // 修后:预约 ID 跟弹窗 dataset 走 + 令牌丢弃过期渲染;保存失败(res.ok=false)不关弹窗不刷新。
-// 跑：node --test test/web/test_triage_race.mjs
+// 跑：node --test test/web/test_triage_race_813.mjs
 import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
@@ -63,7 +63,7 @@ function makeSandbox({staffFetch, putResponse}) {
   return {sandbox, calls, modal};
 }
 
-test("④ 快速连开 A、B 且 A 响应后到 → 弹窗与保存都命中 B", async () => {
+test("#813④ 快速连开 A、B 且 A 响应后到 → 弹窗与保存都命中 B", async () => {
   let resolveA;
   const slowA = new Promise(r => { resolveA = r; });
   let first = true;
@@ -85,7 +85,7 @@ test("④ 快速连开 A、B 且 A 响应后到 → 弹窗与保存都命中 B",
   assert.ok(calls.putUrls[0].includes("/api/appointments/B"), "保存必须命中弹窗显示的 B,不能串到别的预约");
 });
 
-test("④ 保存失败(res.ok=false) → 不关弹窗不刷新,提示错误", async () => {
+test("#813④ 保存失败(res.ok=false) → 不关弹窗不刷新,提示错误", async () => {
   const {sandbox, calls} = makeSandbox({
     staffFetch: () => Promise.resolve({ok: true, json: async () => ({members: []})}),
     putResponse: () => ({ok: false, status: 500, json: async () => ({detail: "boom"})}),

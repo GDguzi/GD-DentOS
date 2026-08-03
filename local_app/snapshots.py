@@ -71,11 +71,14 @@ def appointment_snapshot(row):
         "item_name": data.get("item_name"),
         "status": data.get("status"),
         "cancel_reason": data.get("cancel_reason"),
-        # 到达/离店/诊室/就诊类型是状态机最关键字段,必须进快照(否则审计漏改动)
+        # 审查#7：到达/离店/诊室/就诊类型是状态机最关键字段,必须进快照(否则审计漏改动)
         "room": data.get("room"),
         "arrived_at": data.get("arrived_at"),
         "finished_at": data.get("finished_at"),
         "visit_type": data.get("visit_type"),
+        "register_type": data.get("register_type"),
+        "suspect_cancelled": data.get("suspect_cancelled"),
+        "suspect_reason": data.get("suspect_reason"),
         "source_json": data.get("source_json"),
         "updated_at": data.get("updated_at"),
     }

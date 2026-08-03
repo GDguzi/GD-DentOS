@@ -1,8 +1,8 @@
-"""v3 目标模式下旧栈守卫不得静默退化成"只判登录"。
+"""审计Y20:v3 目标模式下旧栈守卫不得静默退化成"只判登录"。
 
 - require_admin:患者合并/储值退现等"仅管理员"硬闸,v3 下必须仍只放行系统管理员或 admin 角色;
   普通角色即便勾了对应权限点也 403(路由策略层是第一道门,这里是第二道硬闸,双门都要过)。
-- require_perm:能映射到 v3 权限的动作必须真查权限(如 回收站的 patient.view 二次门禁);
+- require_perm:能映射到 v3 权限的动作必须真查权限(如 #494 回收站的 patient.view 二次门禁);
   无 v3 对应物的动作交路由策略层把关(放行不属兜底——策略层每路由必有一条策略,有守卫测试锁定)。
 """
 
@@ -57,8 +57,8 @@ class RequireAdminV3Test(unittest.TestCase):
     def test_admin_role_alone_does_not_pass(self):
         """v3 只认 is_system_admin：光有角色名 "admin" 不再是管理员。
 
-        空库 v3 会种出零权限的遗留 admin 角色；若继续认它，任何拿到 staff.edit
-        的账号都能给自己勾上该角色越过本守卫（提权已实测复现）。
+        空库 v3 会种出一个零权限的遗留 admin 角色；若继续认它，任何拿到 staff.edit
+        的账号都能给自己勾上该角色越过本守卫。
         """
         with target_request(principal(roles=("admin",), username="mgr")), \
              self.assertRaises(HTTPException) as caught:
@@ -71,7 +71,7 @@ class RequireAdminV3Test(unittest.TestCase):
         self.assertEqual(caught.exception.status_code, 401)
 
     def test_fake_admin_values_rejected(self):
-        # 伪值不得冒充管理员——is_system_admin 只认内建 True,角色名精确匹配 "admin"
+        # 伪值不得冒充管理员——is_system_admin 只认内建 True;角色名一律不作数(含精确 "admin")
         for actor in (
             principal(system_admin=1, username="int1"),        # int 1 ≠ True(经兼容层转 False)
             principal(system_admin="true", username="strtrue"),
@@ -87,7 +87,7 @@ class RequireAdminV3Test(unittest.TestCase):
 
 class RequirePermV3Test(unittest.TestCase):
     def test_mapped_action_missing_perm_403(self):
-        # 回收站场景:只有 recycle.view、没有 patient.profile.view 的角色,
+        # #494 回收站场景:只有 recycle.view、没有 patient.profile.view 的角色,
         # require_perm("patient.view") 必须 403,不得看到患者名+金额
         actor = principal(permissions={"recycle.view"})
         with target_request(actor), self.assertRaises(HTTPException) as caught:
@@ -109,7 +109,7 @@ class RequirePermV3Test(unittest.TestCase):
         self.assertEqual(caught.exception.status_code, 403)
 
     def test_legacy_key_coinciding_with_v3_passes_when_granted(self):
-        # 持权时同名键动作必须通过,不得误伤
+        # P3 正向用例:持权时同名键动作必须通过,不得误伤
         actor = principal(permissions={"master_data.manage"})
         with target_request(actor):
             u = auth.require_perm("master_data.manage")

@@ -105,7 +105,7 @@ class TargetLegacyHelperTests(unittest.TestCase):
         self.assertEqual(from_perm["id"], "user-target")
 
     def test_target_require_admin_hard_gate_rejects_non_admin(self):
-        # v3 下 require_admin 不再是兼容壳——患者合并/储值退现等"仅管理员"硬闸保留,
+        # 审计Y20:v3 下 require_admin 不再是兼容壳——患者合并/储值退现等"仅管理员"硬闸保留,
         # 普通角色(front/finance)即便过了路由策略也 403
         with target_context(), self.assertRaises(HTTPException) as caught:
             auth.require_admin()

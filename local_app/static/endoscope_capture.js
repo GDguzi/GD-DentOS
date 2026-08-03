@@ -2,7 +2,7 @@
 // 安全上下文(HTTPS/localhost)外不可用,降级提示去设 Chrome 标志。患者影像绝不出本机。
 // slot→category/牙位 的权威映射在后端;此处机位表(含牙位)仅用于引导示意图+主诉牙手选。
 // 硬件按键:手柄拍照键=HID键盘键,学习式映射(⚙按钮记键码,存localStorage endoShootKey,本机生效)。
-// 相机小助手模式(,诊室1):本机 EndoHelper.exe 独占相机,页面吃它的 MJPEG 流+WS按键事件,
+// 相机小助手模式(#597):本机小助手程序独占相机,页面吃它的 MJPEG 流+WS按键事件,
 // 不走 getUserMedia(也就不需要安全上下文)。手柄键只报"按了一次"→单击拍照/双击录像开停。
 
 // 顺序引导机位(拍完自动前进);teeth=该机位要拍的牙(主诉牙特写为空,拍时手选)
@@ -77,10 +77,10 @@ function endoKeyUpDecision(recording, longFired, nowMs, lastMs) {
 }
 
 // 小助手手柄键手势(纯函数,test_endo_helper_btn.mjs):still pin 只报"按了一次"(无按下/松开对)。
-// 手柄键=拍照,即按即拍;录像用屏幕按钮——真机实测两次按键最小间隔1.9秒:
+// 手柄键=拍照,即按即拍;录像用屏幕按钮——实测两次按键最小间隔约1.9秒:
 // 按键后相机拍高清still的几百毫秒里第二按被硬件吞掉,"0.6秒内双击"物理不成立,双击手势已判死。
-// 残留过滤:小助手进程刚启动会自发一次触发(实测启动后2ms,编号恒为),只有 n===1 且紧跟 hello 才丢
-// (重开模态 hello 会刷新,若不看编号会把头2秒的真按键全吞掉——真机实测踩过);v0.2 起服务端也过滤,双保险。
+// 残留过滤:小助手进程刚启动会自发一次触发(实测启动后约2ms,编号恒为#1),只有 n===1 且紧跟 hello 才丢
+// (重开模态 hello 会刷新,若不看编号会把头2秒的真按键全吞掉——实测踩过);v0.2 起服务端也过滤,双保险。
 function endoHelperBtnDecision(helloTs, nowTs, n) {
   if (n === 1 && nowTs - helloTs < 2000) return "ignore";
   return "shoot";
@@ -162,7 +162,7 @@ async function openEndoscopeCapture(patientId, panel) {
   await _endoFillDevices();
 }
 
-// ---- 相机小助手模式 ----
+// ---- 相机小助手模式(#597) ----
 
 async function _endoProbeHelper() {
   try {

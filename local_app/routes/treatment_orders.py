@@ -63,7 +63,7 @@ def _apply_pricing(conn, order_id, patient_identity, discount, adj, now):
             unit_price = it["unit_price"] or 0.0
         qty = it["quantity"] or 1
         gross = unit_price * qty
-        # 优先级 免单勾选 > 直填金额 > 不调整按原价(旧charge/discount_rate双轨已删,前端只发free/amount)
+        # #1：优先级 免单勾选 > 直填金额 > 不调整按原价(旧charge/discount_rate双轨已删,前端只发free/amount)
         if a.get("free"):
             line = 0.0
         elif a.get("amount") is not None:
@@ -74,14 +74,14 @@ def _apply_pricing(conn, order_id, patient_identity, discount, adj, now):
             line = amount
         else:
             line = gross
-        line = round(line, 2)   # 逐项取整到分，避免带小数厘的行金额累积成收不齐的账单
+        line = round(line, 2)   # #550：逐项取整到分，避免带小数厘的行金额累积成收不齐的账单
         subtotal += line
         updates.append((it["treatment_item_id"], unit_price, line))
     total_fee = round(max(subtotal - discount, 0.0), 2)
-    # 全免费/抵到0元 → 直接结清(state=paid)，不需走收款；否则待收费 pending
+    # #27：全免费/抵到0元 → 直接结清(state=paid)，不需走收款；否则待收费 pending
     bill_state = "paid" if total_fee <= 1e-6 else "pending"
     bill_id = new_id("local-bill")
-    # 账单编号：年月日(YYMMDD)+当日4位流水；此前写空串导致收费单"没有账单编号"
+    # 账单编号：年月日(YYMMDD)+当日4位流水，对齐 SaaS 习惯；此前写空串导致收费单"没有账单编号"
     yymmdd = now[2:4] + now[5:7] + now[8:10]
     # 取当日最大流水+1(非 count+1)：避免编号非连续/撤单留洞时撞号
     mx = conn.execute(
@@ -130,7 +130,7 @@ def _find_today_appointment(conn, patient_identity, today):
 
 
 def _gen_order_no(conn, now):
-    """本地处置单号 CZ+YYMMDD+当日4位流水(带 CZ 前缀,不与导入单号撞号)。须在写锁内调用防重号。"""
+    """本地处置单号 CZ+YYMMDD+当日4位流水(避开 SaaS 的 B 号,不与同步撞号)。须在写锁内调用防重号。"""
     yymmdd = now[2:4] + now[5:7] + now[8:10]
     mx = conn.execute(
         "select max(cast(substr(order_no, 9) as integer)) from treatment_orders "
@@ -153,7 +153,7 @@ def _parse_order_lines(payload):
         name = str(raw.get("item_name") or "").strip()
         if not name:
             continue
-        qty = valid_int_qty(raw.get("quantity"), 1)   # 非整数数量拒绝报错,不静默按1/截断
+        qty = valid_int_qty(raw.get("quantity"), 1)   # #557:非整数数量拒绝报错,不静默按1/截断
         unit_price = _to_real(raw.get("unit_price"), 0.0) or 0.0
         if qty <= 0:
             raise HTTPException(status_code=400, detail="数量必须大于 0")
@@ -166,7 +166,7 @@ def _parse_order_lines(payload):
             "tooth": str(raw.get("tooth") or "").strip(),
             "unit_price": unit_price,
             "quantity": qty,
-            "fee_type": str(raw.get("fee_type") or "").strip(),  # 费用分类
+            "fee_type": str(raw.get("fee_type") or "").strip(),  # #7 费用分类
         })
     if not lines:
         raise HTTPException(status_code=400, detail="处置项均为空")
@@ -180,7 +180,7 @@ def create_treatment_orders_router(db_path):
     @router.get("/api/patients/{patient_identity}/today-visit")
     def today_visit(patient_identity: str):
         """该患者今天是否已挂号(今日未取消预约)，给新增处置做"先挂号"门槛/默认医生。"""
-        require_perm("treatment.manage")   # 处置相关读守卫用本模块对应权限
+        require_perm("treatment.manage")   # #482：处置相关读守卫用本模块对应权限
         today = now_str()[:10]
         with connect(db_path) as conn:
             require_patient(conn, patient_identity)   # 审计R2:软删/已合并患者按不存在处理
@@ -208,7 +208,7 @@ def create_treatment_orders_router(db_path):
         now = now_str()
         order_id = new_id("local-ord")
         doctor = str(payload.get("doctor_name") or "").strip()
-        # 配台人员（护士/咨询师/助理）
+        # #4 配台人员（护士/咨询师/助理）
         nurse = str(payload.get("nurse_name") or "").strip()
         consultant = str(payload.get("consultant_name") or "").strip()
         assistant = str(payload.get("assistant_name") or "").strip()
@@ -237,12 +237,12 @@ def create_treatment_orders_router(db_path):
                     "values (?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (ln["treatment_item_id"], patient_identity, order_id, ln["item_name"], ln["item_code"],
                      doctor, ln["unit_price"], ln["quantity"], ln["unit_price"] * ln["quantity"],
-                     ln["fee_type"], ln["tooth"],   # 牙位写进 tooth_codes 规范列(不只 source_json)
+                     ln["fee_type"], ln["tooth"],   # 扫荡#390:牙位写进 tooth_codes 规范列(不只 source_json)
                      json.dumps({"origin": "local_order", "tooth": ln["tooth"]}, ensure_ascii=False), now),
                 )
             _audit(conn, order_id, "create_treatment_order",
                    {"patient": patient_identity, "item_count": len(lines)}, now)
-            # 开单并划价 → 建单后直接按全价生成待收费单，一步到位
+            # #3：开单并划价 → 建单后直接按全价生成待收费单，一步到位
             if payload.get("price_now"):
                 bill_id, total_fee = _apply_pricing(conn, order_id, patient_identity, 0.0, {}, now)
                 conn.commit()
@@ -315,7 +315,7 @@ def create_treatment_orders_router(db_path):
                 _appt = _find_today_appointment(conn, patient_identity, now[:10])
                 if _appt and str(_appt["status"] or "").strip() in ("已离开", "患者离开"):
                     raise HTTPException(status_code=409, detail="患者已离开，处置单已关闭，不能再编辑（如需修改请先回退就诊状态）")
-            # 已绑未作废知情同意书的处置单禁止直接改项目——签署正文会与实际处置错配。
+            # #231/#251:已绑未作废知情同意书的处置单禁止直接改项目——签署正文会与实际处置错配。
             # 文书"签了不能改,改只能作废重签",所以要先作废对应同意书才能改项目。
             if conn.execute(
                 "select 1 from consent_documents where order_id = ? and status != 'voided' limit 1",
@@ -338,7 +338,7 @@ def create_treatment_orders_router(db_path):
                     "values (?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (ln["treatment_item_id"], patient_identity, order_id, ln["item_name"], ln["item_code"],
                      doctor, ln["unit_price"], ln["quantity"], ln["unit_price"] * ln["quantity"],
-                     ln["fee_type"], ln["tooth"],   # 牙位写进 tooth_codes 规范列(不只 source_json)
+                     ln["fee_type"], ln["tooth"],   # 扫荡#390:牙位写进 tooth_codes 规范列(不只 source_json)
                      json.dumps({"origin": "local_order", "tooth": ln["tooth"]}, ensure_ascii=False), now),
                 )
             conn.execute(
@@ -356,11 +356,11 @@ def create_treatment_orders_router(db_path):
     # ---------- 处置单列表（含派生状态） ----------
     @router.get("/api/patients/{patient_identity}/treatment-orders")
     def list_orders(patient_identity: str):
-        require_perm("treatment.manage")   # 处置单读守卫用本模块对应权限
+        require_perm("treatment.manage")   # #482：处置单读守卫用本模块对应权限
         with connect(db_path) as conn:
             require_patient(conn, patient_identity)   # 审计R2:软删/已合并患者按不存在处理
             # 患者今日就诊是否"已离开"(真离店)→今日待划价单锁定不可编辑(回退状态则自动解锁)。
-            # 按 status 判而非 finished_at:已完成(未离开)仍要能编辑录治疗(,与 ensure-arrival/edit 同口径)。
+            # 按 status 判而非 finished_at:已完成(未离开)仍要能编辑录治疗(#266,与 ensure-arrival/edit 同口径)。
             today = now_str()[:10]
             today_appt = _find_today_appointment(conn, patient_identity, today)
             visit_finished = bool(today_appt and str(today_appt["status"] or "").strip() in ("已离开", "患者离开"))
@@ -402,7 +402,7 @@ def create_treatment_orders_router(db_path):
             eff = r["status"]
             if r["status"] == "priced" and r["bill_id"] in bill_states:
                 b = bill_states[r["bill_id"]]
-                # 账单已退费 → 处置单 effective_status=refunded(否则停在"待收费"还显示撤销)
+                # #379:账单已退费 → 处置单 effective_status=refunded(否则停在"待收费"还显示撤销)
                 if (b["state"] or "") == "refunded":
                     eff = "refunded"
                 else:
@@ -471,7 +471,7 @@ def create_treatment_orders_router(db_path):
             raise HTTPException(status_code=409, detail="处置单已撤销")
         if order["bill_id"]:
             bill = conn.execute("select paid_fee, state from bills where bill_id = ?", (order["bill_id"],)).fetchone()
-            # 审查修已收费(paid_fee>0)、已退费(state=refunded)、零元已结清(state=paid)都不能撤销。
+            # 审查修#2/#3/#12：已收费(paid_fee>0)、已退费(state=refunded)、零元已结清(state=paid)都不能撤销。
             # 否则退费终态被覆盖成 voided、孤儿负流水;或绕过"已收费不能撤销"红线。待收款(pending)单仍可撤。
             if bill and ((bill["paid_fee"] or 0) > 0 or (bill["state"] or "") in ("paid", "refunded")):
                 raise HTTPException(status_code=409, detail="已收费/已退费的处置单不能撤销")
@@ -494,7 +494,7 @@ def create_treatment_orders_router(db_path):
             ).fetchone()
             if not order:
                 raise HTTPException(status_code=404, detail="处置单不存在")
-            if not reason:  # 撤销必须填理由，API 也不能绕过
+            if not reason:  # #48：撤销必须填理由，API 也不能绕过
                 raise HTTPException(status_code=400, detail="撤销必须填写理由")
             _void_order_tx(conn, order, reason, now)
             conn.commit()
@@ -513,7 +513,7 @@ def create_treatment_orders_router(db_path):
             ).fetchone()
             if not order:
                 raise HTTPException(status_code=404, detail="该账单无可撤销的本地处置单")
-            if not reason:  # 撤销必须填理由
+            if not reason:  # #48：撤销必须填理由
                 raise HTTPException(status_code=400, detail="撤销必须填写理由")
             _void_order_tx(conn, order, reason, now)
             conn.commit()

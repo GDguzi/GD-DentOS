@@ -1,4 +1,4 @@
-// 快捷录音竞态动态回归(VM 全文件加载+可控异步 mock):
+// #734 快捷录音竞态动态回归(VM 全文件加载+可控异步 mock):
 //   ① 录音中关卡片后立即重开同一回访 → onstop 必须永久取消,不得 POST 录音
 //   ② getUserMedia 权限框待定时切卡片 → resolve 后不得启动 recorder,必须弃流
 // 跑：node --test test/web/test_rv_card_mic_race.mjs
@@ -59,7 +59,7 @@ function makeSandbox() {
 
 const settle = () => new Promise(r => setTimeout(r, 0));
 
-test("① 录音中关卡片→立即重开同一回访:onstop 必须取消,不得 POST 录音", async () => {
+test("#734① 录音中关卡片→立即重开同一回访:onstop 必须取消,不得 POST 录音", async () => {
   const { sandbox, fetches, recorders, resolve, node } = makeSandbox();
   sandbox.openReturnVisitCard("rv1", "p1");
   const t = sandbox.toggleRvCardMicRecord();
@@ -74,7 +74,7 @@ test("① 录音中关卡片→立即重开同一回访:onstop 必须取消,不�
   assert.match(node.textContent, /取消/, "状态栏应提示已取消");
 });
 
-test("② 开麦权限框待定时切卡片:resolve 后不得启动 recorder,必须弃流", async () => {
+test("#734② 开麦权限框待定时切卡片:resolve 后不得启动 recorder,必须弃流", async () => {
   const { sandbox, recorders, streamTracks, resolve } = makeSandbox();
   sandbox.openReturnVisitCard("rv1", "p1");
   const t = sandbox.toggleRvCardMicRecord();   // 挂在 getUserMedia 上
@@ -84,7 +84,7 @@ test("② 开麦权限框待定时切卡片:resolve 后不得启动 recorder,必
   assert.ok(streamTracks[0].stopped >= 1, "已到手的媒体流必须弃掉(stop tracks)");
 });
 
-test("③ 正常路径不回归:同一代内开录→停录,照常 POST 上传", async () => {
+test("#734③ 正常路径不回归:同一代内开录→停录,照常 POST 上传", async () => {
   const { sandbox, fetches, recorders, resolve } = makeSandbox();
   sandbox.openReturnVisitCard("rv1", "p1");
   const t = sandbox.toggleRvCardMicRecord();

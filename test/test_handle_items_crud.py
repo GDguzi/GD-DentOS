@@ -91,11 +91,11 @@ def _client(tmpdir):
     with connect(db_path) as conn:
         conn.execute(
             "insert into handle_items(handle_id, name, price, fee_type, stopped) "
-            "values ('imported-001', '同步项目', 100, '治疗费', 0)"
+            "values ('saas-001', '同步项目', 100, '治疗费', 0)"
         )
         conn.execute(
             "insert into handle_items(handle_id, name, price, fee_type, stopped, last_batch_id, source_json) "
-            "values ('local-imported-001', '撞名同步项', 100, '治疗费', 0, 'batch-1', '{\"x\":1}')"
+            "values ('local-saas-001', '撞名同步项', 100, '治疗费', 0, 'batch-1', '{\"x\":1}')"
         )
         conn.commit()
     return db_path, TestClient(create_app(db_path))
@@ -103,18 +103,12 @@ def _client(tmpdir):
 
 class HandleItemAdminCase(unittest.TestCase):
     def setUp(self):
-        system_admin_patcher = mock.patch(
-            "local_app.routes.master_data.require_system_admin",
-            return_value={"id": "synthetic-admin", "is_system_admin": True},
+        perm_patcher = mock.patch(
+            "local_app.routes.master_data.require_perm",
+            return_value={"id": "synthetic-manager"},
         )
-        legacy_admin_patcher = mock.patch(
-            "local_app.routes.master_data.require_admin",
-            return_value={"id": "synthetic-admin", "role": "admin"},
-        )
-        self.require_system_admin = system_admin_patcher.start()
-        self.require_admin = legacy_admin_patcher.start()
-        self.addCleanup(system_admin_patcher.stop)
-        self.addCleanup(legacy_admin_patcher.stop)
+        self.require_perm = perm_patcher.start()
+        self.addCleanup(perm_patcher.stop)
 
     def _create(self, client, **changes):
         payload = {**VALID_ITEM, **changes}
@@ -169,8 +163,8 @@ class HandleItemManagementTest(HandleItemAdminCase):
             self.assertEqual(items[local_id]["status"], "stopped")
             self.assertEqual(items[local_id]["restore_issue"], "")
             self.assertEqual(items[local_id]["origin"], "local")
-            self.assertEqual(items["imported-001"]["origin"], "imported")
-            self.assertEqual(items["local-imported-001"]["origin"], "imported")
+            self.assertEqual(items["saas-001"]["origin"], "imported")
+            self.assertEqual(items["local-saas-001"]["origin"], "imported")
             self.assertEqual(
                 set(items[local_id]),
                 {
@@ -213,13 +207,13 @@ class HandleItemManagementTest(HandleItemAdminCase):
                 "price": "120.00",
                 "fee_type": "治疗费",
             }
-            self.assertEqual(client.put("/api/handle-items/imported-001", json=payload).status_code, 200)
-            self.assertEqual(client.delete("/api/handle-items/imported-001").status_code, 200)
-            self.assertEqual(client.post("/api/handle-items/imported-001/restore").status_code, 200)
+            self.assertEqual(client.put("/api/handle-items/saas-001", json=payload).status_code, 200)
+            self.assertEqual(client.delete("/api/handle-items/saas-001").status_code, 200)
+            self.assertEqual(client.post("/api/handle-items/saas-001/restore").status_code, 200)
             with connect(db_path) as conn:
                 row = conn.execute(
                     "select name, code, unit, price, fee_type, handle_type, stopped "
-                    "from handle_items where handle_id='imported-001'"
+                    "from handle_items where handle_id='saas-001'"
                 ).fetchone()
             self.assertEqual(
                 tuple(row),
@@ -345,18 +339,18 @@ class HandleItemManagementTest(HandleItemAdminCase):
             self.assertEqual(json.loads(audit["new_json"])["price"], 88)
             self.assertEqual(json.loads(audit["new_json"])["stopped"], 0)
 
-    def test_legacy_admin_guard_is_used_by_manage_and_all_mutations(self):
+    def test_manage_permission_guard_is_used_by_manage_and_all_mutations(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             _, client = _client(tmpdir)
-            calls = self.require_admin.call_count
+            calls = self.require_perm.call_count
             self.assertEqual(client.get("/api/handle-items/manage").status_code, 200)
-            self.assertEqual(self.require_admin.call_count, calls + 1)
+            self.assertEqual(self.require_perm.call_count, calls + 1)
 
-            calls = self.require_admin.call_count
+            calls = self.require_perm.call_count
             handle_id = self._create(client)
-            self.assertEqual(self.require_admin.call_count, calls + 1)
+            self.assertEqual(self.require_perm.call_count, calls + 1)
 
-            calls = self.require_admin.call_count
+            calls = self.require_perm.call_count
             self.assertEqual(
                 client.put(
                     f"/api/handle-items/{handle_id}",
@@ -364,15 +358,15 @@ class HandleItemManagementTest(HandleItemAdminCase):
                 ).status_code,
                 200,
             )
-            self.assertEqual(self.require_admin.call_count, calls + 1)
+            self.assertEqual(self.require_perm.call_count, calls + 1)
 
-            calls = self.require_admin.call_count
+            calls = self.require_perm.call_count
             self.assertEqual(client.delete(f"/api/handle-items/{handle_id}").status_code, 200)
-            self.assertEqual(self.require_admin.call_count, calls + 1)
+            self.assertEqual(self.require_perm.call_count, calls + 1)
 
-            calls = self.require_admin.call_count
+            calls = self.require_perm.call_count
             self.assertEqual(client.post(f"/api/handle-items/{handle_id}/restore").status_code, 200)
-            self.assertEqual(self.require_admin.call_count, calls + 1)
+            self.assertEqual(self.require_perm.call_count, calls + 1)
 
     def test_concurrent_create_with_same_code_has_one_winner(self):
         with tempfile.TemporaryDirectory() as tmpdir:

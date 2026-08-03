@@ -1,6 +1,6 @@
 """Access V3 空库首启引导（v3_bootstrap）合同测试。
 
-背景：v3 切换靠一次性 personnel_access_migration 换库，
+背景（2026-07-26 净版冒烟发现）：v3 切换靠一次性 personnel_access_migration 换库，
 「空库首启」路径从未更新——init_db 只建 schema.sql 旧形状(users 缺 is_system_admin)，
 首启管理员按旧形状写入,登录必 500。本测试锁定首启引导的三条合同：
 
@@ -88,7 +88,7 @@ class FreshEmptyDatabaseBootTest(unittest.TestCase):
         self.assertEqual(row["is_system_admin"], 1)
         self.assertIsNone(row["staff_id"])
 
-        # v3 会话认证:用首启密码直接登录成功(此前踩过的 500 不允许再现)
+        # v3 会话认证:用首启密码直接登录成功(净版冒烟的 500 不允许再现)
         from local_app import access_session_service as session_service
 
         token, context = session_service.authenticate_and_create_session(
