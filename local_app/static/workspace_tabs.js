@@ -250,6 +250,7 @@ function renderWorkspaceMedicalCardBody(row) {
       ${nurse ? `<span class="card-head-field">护士：${escapeHtml(nurse)}</span>` : ""}
       ${row.record_type ? `<span class="record-type-stamp">${escapeHtml(row.record_type)}</span>` : ""}
       <span class="card-head-actions">
+        <button type="button" class="plain-button medical-card-print" onclick="printWorkspaceMedicalCard('${escapeAttr(row.record_id)}')">打印</button>
         <button type="button" class="plain-button medical-card-edit" onclick="editWorkspaceMedicalCard('${escapeAttr(row.record_id)}')">修改</button>
       </span>
     </div>
@@ -268,6 +269,39 @@ function findWorkspaceMedicalRecord(recordId) {
 
 function workspaceMedicalCardEl(recordId) {
   return document.querySelector(`[data-medical-card="${cssEscape(recordId)}"]`);
+}
+
+// 「打印」：开打印窗，单头(诊所名+患者+就诊信息) + 该病历卡已渲染正文(复用页面 DOM 与 styles.css)。
+function printWorkspaceMedicalCard(recordId) {
+  const row = findWorkspaceMedicalRecord(recordId);
+  const card = workspaceMedicalCardEl(recordId);
+  if (!row || !card) return;
+  const body = card.querySelector(".medical-card-body");
+  const p = (workspaceData && workspaceData.patient) || {};
+  const content = parseMedicalContent(row.content_json);
+  const nurse = sourceValueText(content.Nurse);
+  const meta = [`患者：${escapeHtml(p.display_name || "")}`];
+  if (p.patient_identity) meta.push(`病历号：${escapeHtml(p.patient_identity)}`);
+  meta.push(`就诊时间：${escapeHtml(formatVisitTimeText(row.visit_time || row.updated_at || ""))}`);
+  if (row.doctor_name) meta.push(`医生：${escapeHtml(row.doctor_name)}`);
+  if (nurse) meta.push(`护士：${escapeHtml(nurse)}`);
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>门诊病历</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+      body{background:#fff;padding:24px;font-family:-apple-system,"PingFang SC",sans-serif;color:#1b2733;}
+      h2{text-align:center;margin:0 0 2px;font-size:18px;}
+      .sub{text-align:center;color:#5b6b7b;font-size:13px;margin-bottom:12px;}
+      .meta{font-size:13px;line-height:1.8;border-bottom:1px solid #333;padding-bottom:8px;margin-bottom:10px;}
+    </style></head><body onload="window.print()">
+    <h2>${escapeHtml(window.CLINIC_NAME || "口腔门诊部")}</h2>
+    <div class="sub">门诊病历${row.record_type ? `（${escapeHtml(row.record_type)}）` : ""}</div>
+    <div class="meta">${meta.join("　")}</div>
+    ${body ? body.innerHTML : ""}
+    </body></html>`;
+  const w = window.open("", "_blank", "width=760,height=900");
+  if (!w) return;
+  w.document.write(html);
+  w.document.close();
 }
 
 // 「修改」：弹全屏「病历填写」覆盖层编辑该病历。
