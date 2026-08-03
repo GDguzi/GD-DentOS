@@ -159,11 +159,20 @@ jobs:
           pandoc README.md -o dist/使用说明.docx
           ls -lh dist
 
+      # Release 说明 = 更新日志.md 里本版小节；缺小节直接红，逼着每版都写更新内容。
+      - name: 提取本版更新说明
+        run: |
+          set -euo pipefail
+          awk -v tag="${GITHUB_REF_NAME}" '$0 ~ "^## "tag" " {f=1; next} /^## v/ {f=0} f' 更新日志.md > release_body.md
+          if [ ! -s release_body.md ]; then echo "❌ 更新日志.md 缺少 ${GITHUB_REF_NAME} 小节，先补更新内容再发版"; exit 1; fi
+          cat release_body.md
+
       # GitHub 附件名不能用中文——action 会改名成 default.docx 并报 404（v0.1.2 踩过）。
       # Word 版只挂 Gitee，GitHub 侧受众看 markdown 即可。
       - name: 挂到 GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          body_path: release_body.md
           files: |
             dist/good-dental-clinic.exe
             dist/good-dental-clinic-windows.zip
@@ -182,9 +191,12 @@ jobs:
           jget() { python3 -c "import json,sys;d=json.load(sys.stdin);print(d$1 if d else '')"; }
           id=$(curl -sf "${API}/releases/tags/${GITHUB_REF_NAME}?access_token=${GITEE_TOKEN}" | jget "['id']" || true)
           if [ -z "${id}" ]; then
+            body="$(cat release_body.md)
+
+          Windows / macOS 一键版，下载即用。安装见 docs/产品手册.md。"
             id=$(curl -sf -X POST "${API}/releases" \
               -F "access_token=${GITEE_TOKEN}" -F "tag_name=${GITHUB_REF_NAME}" \
-              -F "name=${GITHUB_REF_NAME}" -F "body=Windows / macOS 一键版，下载即用。安装见 docs/产品手册.md。" \
+              -F "name=${GITHUB_REF_NAME}" -F "body=${body}" \
               -F "target_commitish=main" \
               | jget "['id']") || { echo "Gitee 建发行版失败——先把标签推到 Gitee：git push <gitee远程> ${GITHUB_REF_NAME}"; exit 1; }
           fi
