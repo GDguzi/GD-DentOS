@@ -200,8 +200,9 @@ jobs:
           # 已存在同名附件就跳过，避免重跑挂出两份
           have=$(curl -sf "${API}/releases/${id}/attach_files?access_token=${GITEE_TOKEN}" \
                  | python3 -c "import json,sys;print(' '.join(a['name'] for a in json.load(sys.stdin)))")
-          for f in dist/good-dental-clinic.exe dist/good-dental-clinic-windows.zip dist/good-dental-clinic-mac.zip \
-                   dist/产品手册.docx dist/常见问题解答.docx dist/使用说明.docx; do
+          # 只传两个 zip：裸 exe 与 windows.zip 内容重复，docx 说明书仓库里就有；
+          # 美国 runner 直连 Gitee 很慢，砍掉重复传输量
+          for f in dist/good-dental-clinic-windows.zip dist/good-dental-clinic-mac.zip; do
             n=$(basename "$f")
             case " ${have} " in *" ${n} "*) echo "Gitee 已有 ${n}，跳过"; continue;; esac
             curl -sf -X POST "${API}/releases/${id}/attach_files" \
