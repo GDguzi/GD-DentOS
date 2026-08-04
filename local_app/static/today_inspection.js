@@ -3,20 +3,25 @@
  *   ✅ 正常  ⚠️ 警告  ❌ 缺失/错误
  * 点击条目可展开详情 */
 let latestInspectionData = null;
+let _inspToken = 0;   // 序号守卫:快速切日期时,旧请求(慢返回或失败)不得覆盖新日期的结果
 
 async function loadTodayInspection() {
   if (!todayWorkPanel) return;
+  const token = ++_inspToken;
   todayWorkPanel.textContent = "全量检查载入中...";
   try {
     const res = await fetch(`/api/today-inspection?date=${encodeURIComponent(workDate.value)}`);
+    if (token !== _inspToken) return;
     if (!res.ok) {
       todayWorkPanel.textContent = "全量检查载入失败";
       return;
     }
     const data = await res.json();
+    if (token !== _inspToken) return;
     latestInspectionData = data;
     renderInspection(data);
   } catch {
+    if (token !== _inspToken) return;
     todayWorkPanel.textContent = "全量检查载入失败";
   }
 }
@@ -30,9 +35,13 @@ function renderInspection(data) {
   const bills = hasBilling ? (data.bills || []) : [];
   const returnVisits = data.return_visits || [];
   const walkins = data.walkins || [];
+  // GD-05:后端 summary.total 是唯一汇总权威;旧 API 缺该字段时兼容计算同样覆盖回访+无预约到店
   const total = hasAudit
-    ? (Number(s.appointments) || 0) + (Number(s.orders) || 0) + (Number(s.bills) || 0)
+    ? (s.total != null ? Number(s.total) || 0
+      : (Number(s.appointments) || 0) + (Number(s.orders) || 0) + (Number(s.bills) || 0)
+        + (Number(s.return_visits_due) || 0) + (Number(s.walkins) || 0))
     : appointments.length + orders.length + bills.length + returnVisits.length + walkins.length;
+  const rvDone = returnVisits.filter(rv => rv.overall === "ok").length;
   const cleanRate = hasAudit && total > 0
     ? Math.round((Number(s.ok) || 0) / total * 100)
     : 100;
@@ -60,8 +69,8 @@ function renderInspection(data) {
         <div class="inspection-quick-stats">
           预约${s.appointments} &nbsp; 处置${s.orders}
           ${hasBilling ? ` &nbsp; 账单${s.bills}` : ''}
-          &nbsp; 回访到期${s.return_visits_due}
-          ${s.walkins > 0 ? ` &nbsp; 无预约到店${s.walkins}` : ''}
+          &nbsp; 回访到期${s.return_visits_due}${rvDone > 0 ? `(已完成${rvDone})` : ''}
+          &nbsp; 无预约到店${s.walkins}
         </div>` : `
         <div class="inspection-summary-strip">
           <div class="inspection-stat total">
@@ -72,7 +81,7 @@ function renderInspection(data) {
           预约${appointments.length} &nbsp; 处置${orders.length}
           ${hasBilling ? ` &nbsp; 账单${bills.length}` : ''}
           &nbsp; 回访到期${returnVisits.length}
-          ${walkins.length > 0 ? ` &nbsp; 无预约到店${walkins.length}` : ''}
+          &nbsp; 无预约到店${walkins.length}
         </div>`;
   const checkSuffix = hasAudit ? "检查" : "";
 
@@ -106,7 +115,7 @@ function inspectionDateLabel() {
 }
 
 function changeInspectionDate(offset) {
-  changeWorkDate(offset);
+  shiftWorkDate(offset);   // GD-04:只改共享日期,不走 refreshWorkDateViews(会被今日工作台覆盖)
   loadTodayInspection();
 }
 
@@ -208,8 +217,10 @@ function renderOrderItem(item, idx, sectionId, hasAudit) {
   const audit = inspectionAuditParts(item, hasAudit);
   const orderStatusLabel = {recorded: "待划价", priced: "待收费", paid: "已收费", voided: "已撤销"};
   const financeParts = [];
-  if (item.status != null && item.status !== "") {
-    financeParts.push(orderStatusLabel[item.status] || escapeHtml(item.status));
+  // GD-05:优先用后端按账单+实收派生的 pay_state,处置状态列可能滞后(旧 API 无该字段时回退)
+  const payState = item.pay_state != null && item.pay_state !== "" ? item.pay_state : item.status;
+  if (payState != null && payState !== "") {
+    financeParts.push(orderStatusLabel[payState] || escapeHtml(payState));
   }
   if (item.item_total != null) financeParts.push(`合计${item.item_total}元`);
   const financeHtml = financeParts.length

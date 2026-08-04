@@ -118,7 +118,7 @@ async function loadAppointmentListView() {
     ]);
     if (token !== _apptListToken) return;
     data = rA.ok ? await rA.json() : {list: [], totalcount: 0};
-    doctors = rD.ok ? (await rD.json()).list || [] : [];
+    doctors = rD.ok ? (await rD.json()).members || [] : [];   // GD-03:staff-members 契约字段是 members
     if (token !== _apptListToken) return;
   } catch {
     if (token !== _apptListToken) return;

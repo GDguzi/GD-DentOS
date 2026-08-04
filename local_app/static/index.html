@@ -12,9 +12,9 @@
   <meta name="theme-color" content="#dfeff0">
   <link rel="apple-touch-icon" href="/icon-180.png">
   <link rel="icon" href="/icon.svg?v=2026-06-26-merged" type="image/svg+xml">
-  <!-- APP_ASSET_VERSION: 2026-08-02-quick-checkin-1 -->
-  <link rel="stylesheet" href="/styles.css?v=2026-08-02-quick-checkin-1">
-  <link rel="stylesheet" href="/customer_hub_v2.css?v=2026-07-27-charge-items">
+  <!-- APP_ASSET_VERSION: 2026-08-04-r3 -->
+  <link rel="stylesheet" href="/styles.css?v=2026-08-04-r3">
+  <link rel="stylesheet" href="/customer_hub_v2.css?v=2026-08-04-r3">
   <link rel="stylesheet" href="/access_center.css?v=2026-07-19-access-tree">
 </head>
 <body class="theme-pearl">
@@ -135,6 +135,7 @@
         <span id="treatmentOrderStatus"></span>
         <button type="button" class="plain-button" onclick="saveTreatmentOrder()">保存处置（待划价）</button>
         <button type="button" class="tooth-confirm-btn" onclick="saveTreatmentOrder(true)">开单并划价</button>
+        <button type="button" class="tooth-confirm-btn" id="orderSettleBtn" hidden onclick="saveTreatmentOrder(false, true)">处置并结算</button>
         <button type="button" class="plain-button" onclick="closeTreatmentOrder()">取消</button>
       </div>
     </section>
@@ -426,55 +427,55 @@
     </figure>
   </div>
   <script src="/vendor/echarts.min.js?v=2026-06-26-merged"></script>
-  <script src="/helpers.js?v=2026-08-02-quick-checkin-1"></script>
-  <script src="/check_in.js?v=2026-08-02-quick-checkin-1"></script>
+  <script src="/helpers.js?v=2026-08-04-r3"></script>
+  <script src="/check_in.js?v=2026-08-04-r3"></script>
   <script src="/dict.js?v=2026-06-26-merged"></script>
   <script src="/referral_source.js?v=2026-07-05-appprompt548"></script>
   <script src="/follow_ups.js?v=2026-06-26-merged"></script>
-  <script src="/today_work.js?v=2026-08-02-quick-checkin-1"></script>
-  <script src="/today_inspection.js?v=2026-07-14-tokens0"></script>
+  <script src="/today_work.js?v=2026-08-04-r3"></script>
+  <script src="/today_inspection.js?v=2026-08-04-stats-p2"></script>
   <script src="/billing_module.js?v=2026-07-15-reporterr803"></script>
-  <script src="/patient_module.js?v=2026-08-02-quick-checkin-1"></script>
-  <script src="/customer_hub_v2_contract.js?v=2026-07-22-dialog-followup1"></script>
+  <script src="/patient_module.js?v=2026-08-04-r3"></script>
+  <script src="/customer_hub_v2_contract.js?v=2026-08-04-r3"></script>
   <script src="/customer_hub_v2_followup_date.js?v=2026-07-22-dialog-followup1"></script>
-  <script src="/customer_hub_v2.js?v=2026-07-22-dialog-followup1"></script>
+  <script src="/customer_hub_v2.js?v=2026-08-04-r3"></script>
   <script src="/module_views.js?v=2026-07-27-charge-items"></script>
   <script src="/return_visit_card.js?v=2026-07-20-attachment-saga1"></script>
   <script src="/audit_log.js?v=2026-07-27-charge-items"></script>
   <script src="/endoscope_capture.js?v=2026-07-04-endohelper7"></script>
   <script src="/workspace_billing.js?v=2026-07-16-accessv3"></script>
   <script src="/workspace_lightbox.js?v=2026-07-16-ctstudies"></script>
-  <script src="/workspace_tabs.js?v=2026-07-17-workspace-leave-guard"></script>
+  <script src="/workspace_tabs.js?v=2026-08-04-r3"></script>
   <script src="/image_grouping.js?v=2026-07-04-endorec"></script>
   <script src="/medical_editor.js?v=2026-07-17-r3snapshot"></script>
   <script src="/tooth_chart.js?v=2026-06-26-merged"></script>
   <script src="/treatment_plan_editor.js?v=2026-07-27-charge-items"></script>
-  <script src="/staff_manager.js?v=2026-07-19-access-tree"></script>
-  <script src="/config_center.js?v=2026-07-19-access-tree"></script>
+  <script src="/staff_manager.js?v=2026-08-04-staffdate-p1"></script>
+  <script src="/config_center.js?v=2026-08-04-r3"></script>
   <script src="/role_permissions.js?v=2026-07-19-access-tree"></script>
-  <script src="/consent_form.js?v=2026-06-29-sweep3"></script>
-  <script src="/treatment_order_editor.js?v=2026-08-02-quick-checkin-1"></script>
+  <script src="/consent_form.js?v=2026-08-04-r3"></script>
+  <script src="/treatment_order_editor.js?v=2026-08-04-r3"></script>
   <script src="/lab_order_editor.js?v=2026-07-08-bjdate541"></script>
-  <script src="/appointment_editor.js?v=2026-08-02-quick-checkin-1"></script>
-  <script src="/appointment_grid.js?v=2026-08-02-quick-checkin-1"></script>
-  <script src="/appointment_views.js?v=2026-07-08-bjdate541"></script>
+  <script src="/appointment_editor.js?v=2026-08-04-r3"></script>
+  <script src="/appointment_grid.js?v=2026-08-04-r3"></script>
+  <script src="/appointment_views.js?v=2026-08-04-staffdate-p1"></script>
   <script src="/sterilization.js?v=2026-07-05-appprompt548"></script>
-  <script src="/warehouse.js?v=2026-07-08-staffpick420"></script>
+  <script src="/warehouse.js?v=2026-08-04-fix-p4"></script>
   <script src="/date_range_picker.js?v=2026-07-10-rvcard1"></script>
-  <script src="/store_stats.js?v=2026-07-14-tokens0"></script>
+  <script src="/store_stats.js?v=2026-08-04-stats-p2"></script>
   <script src="/reports.js?v=2026-07-14-tokens0"></script>
   <script src="/charge_items.js?v=2026-07-27-charge-items"></script>
   <script src="/sterilize_dispatch.js?v=2026-07-05-appprompt548"></script>
   <script src="/consult_surgery.js?v=2026-07-09-cs-fix2"></script>
-  <script src="/call_recordings.js?v=2026-07-20-attachment-saga1"></script>
+  <script src="/call_recordings.js?v=2026-08-04-r3"></script>
   <script src="/communications.js?v=2026-07-20-attachment-saga1"></script>
   <script src="/oral_exam_tab.js?v=2026-07-08-staffpick420"></script>
   <script src="/member_account.js?v=2026-07-17-r4reqid"></script>
   <script src="/patient_tags.js?v=2026-06-26-merged"></script>
-  <script src="/patient_workspace.js?v=2026-08-02-quick-checkin-1"></script>
+  <script src="/patient_workspace.js?v=2026-08-04-r3"></script>
   <script src="/ai_drafts.js?v=2026-06-26-merged"></script>
   <script src="/account_manager.js?v=2026-07-19-access-tree"></script>
   <script src="/recycle_bin.js?v=2026-07-05-nav617"></script>
-  <script src="/app.js?v=2026-08-02-quick-checkin-1"></script>
+  <script src="/app.js?v=2026-08-04-r3"></script>
 </body>
 </html>

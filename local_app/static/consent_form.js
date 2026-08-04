@@ -305,17 +305,55 @@ async function loadSignedConsents() {
   box.innerHTML = `<div class="cs-signed-head">已签同意书 ${docs.length} 份</div>` +
     docs.map(d => {
       const voided = d.status === "voided";
+      const paper = d.sign_method === "paper";
       return `<div class="cs-signed-row${voided ? ' cs-voided' : ''}">
-      <span class="cs-signed-name">${escapeHtml(d.template_name || "—")}${voided ? ' <span class="cs-void-tag">已作废</span>' : ''}</span>
+      <span class="cs-signed-name">${escapeHtml(d.template_name || "—")}
+        <span class="cs-method-tag ${paper ? 'cs-mt-paper' : 'cs-mt-elec'}">${paper ? "纸质签" : "电子签"}</span>${voided ? ' <span class="cs-void-tag">已作废</span>' : ''}</span>
       <span class="cs-signed-time">${escapeHtml(d.signed_at || "")}</span>
       ${d.has_tsa ? '<span class="cs-tsa">已存证</span>' : ''}
       <span class="cs-signed-ops">
+        <button type="button" class="plain-button" onclick="viewConsentDocument('${escapeAttr(d.document_id)}')">查看</button>
         <button type="button" class="plain-button" onclick="reprintConsent('${escapeAttr(d.document_id)}')">重打印</button>
         ${voided ? '' : `<button type="button" class="plain-button cs-void-btn" onclick="voidConsent('${escapeAttr(d.document_id)}')">作废</button>`}
       </span>
     </div>`;
     }).join("");
 }
+
+// 页内预览一份已签同意书:正文快照+双方签名图(纸质签提示签名在纸面)+哈希校验,不走打印
+async function viewConsentDocument(documentId) {
+  let d;
+  try { d = await (await fetch(`/api/consent-documents/${encodeURIComponent(documentId)}`)).json(); }
+  catch { window.alert("载入失败（网络异常）"); return; }
+  if (!d || !d.document_id) { window.alert("签署件不存在"); return; }
+  let m = document.getElementById("consentViewModal");
+  if (!m) { m = document.createElement("div"); m.id = "consentViewModal"; m.className = "modal-backdrop"; document.body.appendChild(m); }
+  const paper = (d.content_json && d.content_json.sign_method) === "paper";
+  const warn = d.hash_valid ? "" : `<div class="cv-warn">⚠ 内容哈希校验不一致，该签署件疑似被篡改</div>`;
+  const signBox = (label, img) => `
+    <div class="cv-sign"><div class="cv-sign-label">${label}</div>
+      ${paper ? '<div class="cv-sign-paper">纸质签署，签名在打印件上</div>'
+        : (safeSign(img) ? `<img src="${safeSign(img)}" alt="${label}">` : '<div class="cv-sign-paper">未签</div>')}
+    </div>`;
+  m.innerHTML = `
+    <section class="appt-modal cv-modal" role="dialog" aria-modal="true" aria-label="签署件预览">
+      <div class="modal-head"><strong>${escapeHtml(d.template_name || "知情同意书")}
+        <span class="cs-method-tag ${paper ? 'cs-mt-paper' : 'cs-mt-elec'}">${paper ? "纸质签" : "电子签"}</span></strong>
+        <button type="button" class="plain-button" onclick="closeConsentView()">×</button></div>
+      <div class="appt-body">
+        ${warn}
+        <pre class="cv-content">${escapeHtml(d.content_text || "")}</pre>
+        <div class="cv-signs">${signBox("患者签名", d.patient_sign)}${signBox("医生签名", d.doctor_sign)}</div>
+        <div class="cv-meta">签署时间 ${escapeHtml(d.signed_at || "")} · 内容指纹 ${escapeHtml(String(d.content_hash || "").slice(0, 16))}…${d.hash_valid ? " ✓未被改动" : ""}</div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="plain-button" onclick="reprintConsent('${escapeAttr(d.document_id)}')">🖨 重打印</button>
+        <button type="button" class="plain-button" onclick="closeConsentView()">关闭</button>
+      </div>
+    </section>`;
+  m.hidden = false;
+}
+function closeConsentView() { const m = document.getElementById("consentViewModal"); if (m) m.hidden = true; }
 
 // 重打印/复看一份已签同意书(用存档的正文+签名图)，并提示哈希校验结果
 async function reprintConsent(documentId) {
@@ -366,10 +404,18 @@ function openConsentPicker() {
   const picker = document.getElementById("consentPicker");
   if (!picker || !consentCtx) return;
   if (!picker.hidden) { picker.hidden = true; return; }   // 再点收起
+  renderConsentPickerList();
+  picker.hidden = false;
+}
+
+function renderConsentPickerList() {
+  const picker = document.getElementById("consentPicker");
+  if (!picker || !consentCtx) return;
   const tpls = consentCtx.templates || [];
+  // 模板维护就在本弹窗:随时可新建,不用去别处找配置页
+  const newBtn = '<div class="cp-group"><button type="button" class="cp-item cp-new" onclick="showConsentTemplateForm()">＋ 新建模板</button></div>';
   if (!tpls.length) {   // 扫荡#395:无模板时给空态,别弹个空选择器让人以为坏了
-    picker.innerHTML = '<div class="cp-empty">暂无同意书模板，请先到「配置管理 / 同意书模板」维护后再选</div>';
-    picker.hidden = false;
+    picker.innerHTML = '<div class="cp-empty">暂无同意书模板，点下面「＋ 新建模板」现场创建一份</div>' + newBtn;
     return;
   }
   const cats = {};
@@ -377,8 +423,48 @@ function openConsentPicker() {
   picker.innerHTML = Object.keys(cats).map(cat => `
     <div class="cp-group"><div class="cp-cat">${escapeHtml(cat)}</div>
     ${cats[cat].map(t => `<button type="button" class="cp-item${t.template_id === consentCtx.currentTemplateId ? " cp-on" : ""}" data-tid="${escapeAttr(t.template_id)}" data-name="${escapeAttr(t.name)}" onclick="pickConsentTemplate(this)">${escapeHtml(t.name)}</button>`).join("")}
-    </div>`).join("");
-  picker.hidden = false;
+    </div>`).join("") + newBtn;
+}
+
+// 弹窗内直接新建模板:名称/类别/正文 → 保存即入库并自动选中开签
+function showConsentTemplateForm() {
+  const picker = document.getElementById("consentPicker");
+  if (!picker || !consentCtx) return;
+  const cats = [...new Set((consentCtx.templates || []).map(t => t.category).filter(Boolean))];
+  picker.innerHTML = `
+    <div class="cp-newform">
+      <input id="ctNewName" class="ord-input" placeholder="模板名称（如 拔牙知情同意书）">
+      <input id="ctNewCat" class="ord-input" list="ctCatList" placeholder="类别（如 外科 / 修复 / 种植）">
+      <datalist id="ctCatList">${cats.map(c => `<option value="${escapeAttr(c)}"></option>`).join("")}</datalist>
+      <textarea id="ctNewBody" class="ord-input" rows="10" placeholder="同意书正文。签署时会自动带上患者信息、日期和双方签名区"></textarea>
+      <div class="cp-newform-actions">
+        <button type="button" class="tooth-confirm-btn" onclick="submitConsentTemplate()">保存模板</button>
+        <button type="button" class="plain-button" onclick="renderConsentPickerList()">返回</button>
+        <span id="ctNewStatus" class="record-save-status"></span>
+      </div>
+    </div>`;
+}
+
+async function submitConsentTemplate() {
+  const val = id => ((document.getElementById(id) || {}).value || "").trim();
+  const st = document.getElementById("ctNewStatus");
+  const payload = {name: val("ctNewName"), category: val("ctNewCat"), body: val("ctNewBody")};
+  if (!payload.name || !payload.category || !payload.body) {
+    if (st) st.textContent = "名称、类别、正文都要填";
+    return;
+  }
+  if (st) st.textContent = "保存中...";
+  let res;
+  try {
+    res = await fetch("/api/consent-templates", {method: "POST",
+      headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload)});
+  } catch { if (st) st.textContent = "保存失败（网络异常）"; return; }
+  if (!res.ok) { const m = await res.json().catch(() => ({})); if (st) st.textContent = "保存失败：" + (m.detail || res.status); return; }
+  const t = await res.json();
+  consentCtx.templates = (consentCtx.templates || []).concat([
+    {template_id: t.template_id, name: t.name, category: t.category},
+  ]);
+  pickConsentTemplate({dataset: {tid: t.template_id, name: t.name}});   // 存完直接选中开签
 }
 
 // #71：数据走 data-*，不把名字/ID 拼进内联JS(防引号断字/注入)。#72：选择序号防乱序覆盖。

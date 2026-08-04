@@ -9,6 +9,7 @@ from local_app.access_authorization import has_access, require_access
 from local_app.timeutil import today_str
 from local_app.db import (active_bill_clause, bill_discount_sql,
                           bill_net_arrears_sql, connect)
+from local_app.rv_query import DONE_COND
 from local_app.snapshots import row_to_dict, rows as _rows
 from local_app.validation import valid_date_param
 
@@ -145,12 +146,15 @@ def create_today_inspection_router(db_path):
             """, (work_date,))
 
             # ─── 6) 今日回访(到期) ───
-            return_visits_due = _rows(conn, """
+            # 完成态复用全站唯一口径 DONE_COND(含旧导入数据以 item_name/note "已回访"前缀表完成),
+            # 只看显式状态会把这些老记录误标 warn 拉低健康度
+            return_visits_due = _rows(conn, f"""
                 select
                     r.return_visit_id, r.patient_identity,
                     p.display_name, p.phone,
                     r.due_time, r.item_name, r.status, r.note,
-                    r.actual_date
+                    r.actual_date,
+                    case when ({DONE_COND}) then 1 else 0 end as is_done
                 from return_visits r
                 left join patients p on p.patient_identity = r.patient_identity
                 where coalesce(r.is_deleted, 0) = 0
@@ -199,6 +203,7 @@ def create_today_inspection_router(db_path):
                 order_by_pid[pid] = []
             order_by_pid[pid].append(o)
 
+        bill_unpaid = {}
         for b in bills:
             pid = b["patient_identity"]
             billed_pids.add(pid)
@@ -207,6 +212,7 @@ def create_today_inspection_router(db_path):
             bill_by_pid[pid].append(b)
             # #688:金额一致性用净应收(总费用−优惠 DiscountFee),否则打折已结清单被误报金额异常/待收款
             bill_amount[b["bill_id"]] = b["net_receivable"] or 0
+            bill_unpaid[b["bill_id"]] = b["unpaid_fee"] or 0
 
         for pay in payments:
             pid = pay["patient_identity"]
@@ -334,10 +340,22 @@ def create_today_inspection_router(db_path):
                 item_total = round(
                     sum(ti["total_fee"] or 0 for ti in items_data), 2
                 )
+                # GD-05:收费展示用账单+实收派生,不信可能滞后的处置状态列。
+                # 无账单→待划价/待收费;有账单未结清→待收费;已结清→已收费;已撤销照旧。
+                status = str(o["status"] or "")
+                if status == "voided":
+                    pay_state = "voided"
+                elif not bid:
+                    pay_state = "recorded" if status == "recorded" else "priced"
+                elif bid in bill_unpaid:
+                    pay_state = "paid" if bill_unpaid[bid] <= 0.005 else "priced"
+                else:
+                    pay_state = status   # 账单不在今日列表(跨日结算等),回退原状态
                 item.update({
                     "status": o["status"],
                     "bill_id": bid,
                     "item_total": item_total,
+                    "pay_state": pay_state,
                 })
 
             if see_audit:
@@ -427,9 +445,7 @@ def create_today_inspection_router(db_path):
                 "actual_date": rv.get("actual_date", ""),
             }
             if see_audit:
-                st = str(rv.get("status", "") or "")
-                is_done = st in ("done", "已回访", "完成", "4")
-                item["overall"] = "ok" if is_done else "warn"
+                item["overall"] = "ok" if rv.get("is_done") else "warn"
             rv_items.append(item)
 
         response = {
@@ -445,7 +461,10 @@ def create_today_inspection_router(db_path):
                 "payments": [row_to_dict(p) for p in payments],
             })
         if see_audit:
-            all_items = appointment_items + order_items_list
+            # GD-05:无预约到店=需要核对的 warn,进状态汇总;分母覆盖全部可见条目
+            for w in walkins:
+                w["overall"] = "warn"
+            all_items = appointment_items + order_items_list + rv_items + walkins
             if see_billing:
                 all_items += bill_items_list
             summary = {
@@ -453,6 +472,7 @@ def create_today_inspection_router(db_path):
                 "orders": len(order_items_list),
                 "return_visits_due": len(rv_items),
                 "walkins": len(walkins),
+                "total": len(all_items),
                 "ok": sum(1 for item in all_items if item["overall"] == "ok"),
                 "warn": sum(1 for item in all_items if item["overall"] == "warn"),
                 "missing": sum(

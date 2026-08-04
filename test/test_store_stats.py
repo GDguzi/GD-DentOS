@@ -268,3 +268,97 @@ class DoctorPerfTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _appt(c, aid, pid, doctor, day, status="1", hhmm="09:00:00"):
+    c.execute("insert into appointments(appointment_id, patient_identity, start_time, "
+              "doctor_name, item_name, status, updated_at) values (?,?,?,?,?,?,?)",
+              (aid, pid, day + " " + hhmm, doctor, "项目", status, day))
+
+
+def _order(c, oid, pid, doctor, day, bill_id="", status="paid"):
+    c.execute("insert into treatment_orders(order_id, order_no, patient_identity, order_date, "
+              "doctor_name, status, bill_id, updated_at) values (?,?,?,?,?,?,?,?)",
+              (oid, "CZ" + oid, pid, day + " 09:10:00", doctor, status, bill_id, day))
+
+
+class DoctorAttributionFallbackTest(unittest.TestCase):
+    """GD-07:病历医生为空时按解析链归类(study处置医生→同日唯一预约→同日唯一处置);
+    同级多候选进未归类,不得随便挂人;病历自身医生始终优先。"""
+
+    def _q(self, client, **kw):
+        p = {"role": "doctor", "start": "2026-07-01", "end": "2026-07-31", **kw}
+        return client.get("/api/store-stats/role-perf?" + urlencode(p)).json()
+
+    def _row(self, d, name):
+        rows = [r for r in d["rows"] if r["name"] == name]
+        return rows[0] if rows else None
+
+    def test_empty_record_doctor_resolved_by_unique_study_order_doctor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db, client = _client(tmp)
+            with connect(db) as c:
+                _visit(c, "r1", "p1", "", "初诊", "2026-07-10", study="S1")
+                _order(c, "o1", "p1", "医生A", "2026-07-10", bill_id="b1")
+                _bill(c, "b1", "p1", "2026-07-10", 100, study="S1")
+                _pay(c, "pay1", "p1", "b1", "2026-07-10", 100)
+                c.commit()
+            d = self._q(client)
+            row = self._row(d, "医生A")
+            self.assertIsNotNone(row, d["rows"])
+            self.assertEqual(row["first"]["visit"], 1)
+            self.assertEqual(row["first"]["paid"], 100)
+
+    def test_empty_record_doctor_falls_back_to_unique_appointment(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db, client = _client(tmp)
+            with connect(db) as c:
+                _visit(c, "r1", "p1", "", "复诊", "2026-07-11")
+                _appt(c, "a1", "p1", "医生B", "2026-07-11")
+                _appt(c, "a2", "p1", "医生X", "2026-07-11", status="3")   # 已取消不算候选
+                c.commit()
+            d = self._q(client)
+            row = self._row(d, "医生B")
+            self.assertIsNotNone(row, d["rows"])
+            self.assertEqual(row["revisit"]["visit"], 1)
+
+    def test_empty_record_doctor_falls_back_to_unique_same_day_order(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db, client = _client(tmp)
+            with connect(db) as c:
+                _visit(c, "r1", "p1", "", "初诊", "2026-07-12")
+                _order(c, "o1", "p1", "医生H", "2026-07-12")
+                c.commit()
+            d = self._q(client)
+            row = self._row(d, "医生H")
+            self.assertIsNotNone(row, d["rows"])
+            self.assertEqual(row["first"]["visit"], 1)
+
+    def test_record_own_doctor_always_wins(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db, client = _client(tmp)
+            with connect(db) as c:
+                _visit(c, "r1", "p1", "医生C", "初诊", "2026-07-13", study="S2")
+                _order(c, "o1", "p1", "医生D", "2026-07-13", bill_id="b1")
+                _bill(c, "b1", "p1", "2026-07-13", 80, study="S2")
+                c.commit()
+            d = self._q(client)
+            self.assertIsNotNone(self._row(d, "医生C"))
+            self.assertIsNone(self._row(d, "医生D"))
+
+    def test_ambiguous_candidates_go_unclassified_without_double_count(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db, client = _client(tmp)
+            with connect(db) as c:
+                _visit(c, "r1", "p1", "", "初诊", "2026-07-14")
+                _appt(c, "a1", "p1", "医生E", "2026-07-14")
+                _appt(c, "a2", "p1", "医生F", "2026-07-14", hhmm="10:00:00")
+                _bill(c, "b1", "p1", "2026-07-14", 100)
+                _pay(c, "pay1", "p1", "b1", "2026-07-14", 100)
+                c.commit()
+            d = self._q(client)
+            self.assertIsNone(self._row(d, "医生E"))
+            self.assertIsNone(self._row(d, "医生F"))
+            self.assertEqual(d["unclassified"]["first"]["visit"], 1)
+            self.assertEqual(d["unclassified"]["first"]["paid"], 100)
+            self.assertEqual(d["total"]["first"]["paid"], 0)

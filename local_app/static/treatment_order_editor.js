@@ -74,6 +74,18 @@ async function openTreatmentOrder(editOrder) {
     }
   }
   renderTreatmentOrderEditor();
+  // 简易收费模式(配置管理开关):开了才露「处置并结算」;开关取不到按关处理,不影响主流程。
+  // 无划价权限的人不露(该按钮=开单+划价一步,服务端同口径拦)。
+  try {
+    const feats = await (await fetch("/api/settings/features")).json();
+    if (pid !== workspacePatientId) return;   // 开关请求期间切了患者:丢弃本次打开,防旧患者单壳留在新档案
+    const settleBtn = document.getElementById("orderSettleBtn");
+    // 划价权限双口径:v3 查精确键;旧权限模式没有 v3 键,沿用 /price 的旧门槛 treatment.manage
+    const priceKey = window.__accessV3 === true ? "treatment_order.price" : "treatment.manage";
+    if (settleBtn) settleBtn.hidden = !feats.simple_billing_enabled
+      || !(typeof hasPerm === "function" && hasPerm(priceKey));
+  } catch { /* 保持隐藏 */ }
+  if (pid !== workspacePatientId) return;
   m.hidden = false;
 }
 
@@ -193,7 +205,7 @@ function suggestOrderDiagnosis() {
   renderTreatmentOrderEditor();
 }
 
-async function saveTreatmentOrder(priceNow = false) {
+async function saveTreatmentOrder(priceNow = false, settleNow = false) {
   orderSyncFromDom();
   const pid = workspacePatientId;   // #77 快照本次开单的患者，跨 await 不再读全局，防开单期间切患者把本单弹到别人档案
   const status = document.getElementById("treatmentOrderStatus");
@@ -202,7 +214,7 @@ async function saveTreatmentOrder(priceNow = false) {
     unit_price: r.unit_price === "" ? 0 : parseFloat(r.unit_price), quantity: parseInt(r.quantity, 10) || 1,
   }));
   if (!items.length) { if (status) status.textContent = "至少选一个处置"; return; }
-  if (status) status.textContent = priceNow ? "开单划价中..." : "保存中...";
+  if (status) status.textContent = settleNow ? "结算中..." : (priceNow ? "开单划价中..." : "保存中...");
   // #4：配台人员落库 + 记住上次选择
   const team = {
     doctor_name: orderModel.doctor_name || "", nurse_name: orderModel.nurse_name || "",
@@ -210,7 +222,8 @@ async function saveTreatmentOrder(priceNow = false) {
   };
   if (typeof rememberTeam === "function") rememberTeam(team);
   const editId = orderModel._editId;   // 有=编辑既有待划价单(PUT原地改),无=新建(POST)
-  const body = JSON.stringify({...team, diagnosis: orderModel.diagnosis, items});
+  // 简易模式「处置并结算」:新单让后端 price_now 一个事务里按原价出待收费单
+  const body = JSON.stringify({...team, diagnosis: orderModel.diagnosis, items, price_now: settleNow && !editId});
   let res;
   try {
     res = editId
@@ -221,9 +234,26 @@ async function saveTreatmentOrder(priceNow = false) {
   } catch { if (status) status.textContent = "保存失败（网络异常）"; return; }
   if (!res.ok) { const m = await res.json().catch(() => ({})); if (status) status.textContent = "保存失败：" + (m.detail || res.status); return; }
   const resp = await res.json().catch(() => ({}));
+  // 简易模式:编辑既有待划价单(如到店自动空号单)结算=保存后补一步原价划价
+  if (settleNow && editId) {
+    let pres;
+    try {
+      pres = await fetch(`/api/treatment-orders/${encodeURIComponent(editId)}/price`,
+        {method: "POST", headers: {"Content-Type": "application/json"}, body: "{}"});
+    } catch { if (status) status.textContent = "已保存,但结算失败（网络异常）,请到处置卡点「划价」"; return; }
+    if (!pres.ok) { const m = await pres.json().catch(() => ({})); if (status) status.textContent = "已保存,但结算失败：" + (m.detail || pres.status); return; }
+  }
   closeTreatmentOrder();
   // #77：开单期间已切到别的患者 → 丢弃后续刷新/弹同意书，避免把本单弹到当前别人的档案
   if (pid !== workspacePatientId) return;
+  if (settleNow) {
+    // 处置并结算:待收费单已生成,直接跳收费 tab 收钱
+    if (typeof workspaceLoadedTabs !== "undefined") { workspaceLoadedTabs.delete("treatments"); workspaceLoadedTabs.delete("billing"); }
+    if (typeof evictVisitsCache === "function") evictVisitsCache();
+    if (typeof switchWorkspaceTab === "function") switchWorkspaceTab("billing");
+    if (typeof loadAuditLogs === "function") loadAuditLogs();
+    return;
+  }
   refreshTreatmentsTab();
   // 「开单并划价」：处置存为"待划价"后**自动进入划价界面**(选价/打折/免单)→确认才生成待收费单。
   // 此前是后端按原价直接出单、不弹划价；用户反馈"不会自动进入划价界面"。
@@ -260,10 +290,13 @@ async function loadLocalOrders() {
   } catch { return; }
   if (pid !== workspacePatientId) return;
   let orders = data.orders || [];
-  // 到达就生成:已到达且今日还没有任何未撤销单 → 自动建一张空号待划价单(后端幂等;今日已有则不重建)。
+  // 到达就生成:已到达且**今日**还没有未撤销单 → 自动建一张空号待划价单(后端幂等;今日已有则不重建)。
   // (修bug:旧逻辑只看"待划价",划价后单子变"待收费"会被误判为没单,又自动冒一张空单。)
-  const hasActiveOrder = orders.some(o => o.status !== "voided");
-  if (visit && visit.arrived && !hasActiveOrder) {
+  // (修bug2:再旧的口径扫的是全部历史单——复诊老患者昨天有单,今天到达就永远不出空单;按后端口径限定今天。)
+  const today = localDateValue();
+  const hasTodayActiveOrder = orders.some(o =>
+    String(o.order_date || "").slice(0, 10) === today && o.status !== "voided");
+  if (visit && visit.arrived && !hasTodayActiveOrder) {
     try { await fetch(`/api/patients/${encodeURIComponent(pid)}/treatment-orders/ensure-arrival`, {method: "POST"}); } catch { /* ignore */ }
     if (pid !== workspacePatientId) return;
     try { const re = await fetch(`/api/patients/${encodeURIComponent(pid)}/treatment-orders`); if (re.ok) orders = (await re.json()).orders || orders; } catch { /* ignore */ }

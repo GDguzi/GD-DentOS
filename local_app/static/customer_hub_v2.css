@@ -167,3 +167,8 @@ body.theme-pearl .chv-summary .chv-sum-line b { color: var(--chv-muted); margin-
 @media (prefers-reduced-motion: reduce) {
   body.theme-pearl .chv-tab, body.theme-pearl .chv-tab:hover { transform: none; transition: none; }
 }
+
+/* 表单控件统一高度:datetime-local 在 WebKit 下天生更高,和文本框肩并肩时高低不齐 */
+body.theme-pearl .chv-form2 input, body.theme-pearl .chv-form2 select { height: 38px; }
+body.theme-pearl .chv-plan-row { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--chv-line); font-size: 13px; }
+body.theme-pearl .chv-plan-row .chv-note { flex: 1; }

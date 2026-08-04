@@ -418,6 +418,12 @@ def require_perm(action):
     raise HTTPException(status_code=403, detail="当前角色无权执行此操作")
 
 
+def in_target_mode():
+    """当前请求是否运行在 v3 目标权限模式(判据与 require_perm 分支一致)。
+    供路由内做"v3 查精确权限键/旧模式沿用旧门槛"的双口径分支。"""
+    return _target_user_context()[0]
+
+
 def has_perm(action):
     """非抛版权限判断,返回 True/False。口径与 require_perm 一致：未登录(本机免登录)视作可信全权→True；
     登录后 admin('*') 或含该权限点→True,否则 False。用于"有权才带某段数据、无权则省略"的软控制(如今日工作台审计摘要),
@@ -492,8 +498,10 @@ def ensure_seed_admin(db_path=DEFAULT_DB_PATH):
         if conn.execute("select count(*) from users").fetchone()[0]:
             return None
         # DENTAL_ADMIN_PASSWORD 可显式预设首启密码(演示与运维自动化);
-        # 未设则生成 128bit 随机口令(#583),打印到终端并存 .admin_initial_password。
-        pw = os.environ.get("DENTAL_ADMIN_PASSWORD", "").strip() or secrets.token_hex(16)
+        # 未设则出厂默认 admin(用户 2026-08-03 拍板,取代 #583 的随机口令:开箱即用优先)。
+        # 弱口令缓解:登录页对 admin 密码弹改密提醒;一键版默认只听本机;
+        # 源码方式默认开局域网,run_local 启动横幅对"默认密码+局域网"组合醒目告警。
+        pw = os.environ.get("DENTAL_ADMIN_PASSWORD", "").strip() or "admin"
         user_cols = {row[1] for row in conn.execute("pragma table_info(users)")}
         if "is_system_admin" in user_cols:
             # v3 混合形态(空库首启经 v3_bootstrap 建成/生产已迁移库):
@@ -513,6 +521,14 @@ def ensure_seed_admin(db_path=DEFAULT_DB_PATH):
     p = Path(db_path).parent / ".admin_initial_password"
     p.write_text(f"admin / {pw}\n", encoding="utf-8")
     return ("admin", pw)
+
+
+def admin_password_is_default(db_path=DEFAULT_DB_PATH):
+    """admin 账号仍是出厂默认口令 admin 时返回 True（启动横幅告警用，每次启动实测哈希）。"""
+    with connect(db_path) as conn:
+        row = conn.execute(
+            "select password_hash from users where username = 'admin'").fetchone()
+    return bool(row) and verify_password("admin", row[0])
 
 
 # ---------- ASGI 中间件(设当前用户 + 可选门禁) ----------

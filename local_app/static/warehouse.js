@@ -266,12 +266,14 @@ async function renderWhReceipts(body) {
     <div class="wh-toolbar">
       <button type="button" class="wh-add-btn" data-wh-new-in>+ 新建入库单</button>
       <button type="button" class="wh-add-btn" data-wh-new-out>+ 新建出库单</button>
+      <button type="button" class="wh-add-btn" data-wh-new-take>+ 新建盘点单</button>
     </div>
     <h4 class="wh-sec">入库单</h4>${whTable(prep(ins.stock_in || []), mkCols("in"))}
     <h4 class="wh-sec">出库单</h4>${whTable(prep(outs.stock_out || []), mkCols("out"))}
     <h4 class="wh-sec">盘点单</h4>${whTable(prep(takes.stock_take || []), mkCols("take"))}`;
   body.querySelector("[data-wh-new-in]").addEventListener("click", () => whReceiptForm("in"));
   body.querySelector("[data-wh-new-out]").addEventListener("click", () => whReceiptForm("out"));
+  body.querySelector("[data-wh-new-take]").addEventListener("click", () => whStockTakeForm());
   body.querySelectorAll("[data-wh-confirm]").forEach(a => a.addEventListener("click", () => {
     const [kind, id] = a.dataset.whConfirm.split(":");
     whConfirmReceipt(kind, id);
@@ -341,6 +343,74 @@ async function whReceiptForm(kind) {
                 <input data-rf="batch_no" placeholder="批号" class="wh-batch">
                 <input data-rf="expire_date" type="date" class="wh-exp">` : ""}
       <button type="button" class="wh-del-row" data-wh-del-row>×</button>`;
+    div.querySelector("[data-wh-del-row]").addEventListener("click", () => div.remove());
+    itemsBox.appendChild(div);
+  };
+  wrap.querySelector("[data-wh-add-row]").addEventListener("click", addRow);
+  addRow();
+}
+
+// GD-08 新建盘点单:物品+账面数取自 /api/stock-balance(账面只读),实盘可编辑,
+// 差异=实盘−账面 实时算;保存只交 stock_item_id+actual_qty,账面/差异后端重算为准。
+async function whStockTakeForm() {
+  const balD = await fetch("/api/stock-balance").then(r => r.json()).catch(() => ({items: []}));
+  const stockItems = balD.items || [];
+  const bookQty = {};
+  stockItems.forEach(i => { bookQty[i.stock_item_id] = Number(i.qty) || 0; });
+  const inner = `
+    <div class="wh-form-grid">
+      <label>经手人<input data-f="operator" data-staff-role="*"></label>
+    </div>
+    <div class="wh-items-head"><span>明细(实盘数量按现场清点填)</span><button type="button" class="wh-add-row" data-wh-add-row>+ 加一行</button></div>
+    <div class="wh-items" data-wh-items></div>`;
+  const wrap = whOpenModal("新建盘点单", inner, async (w, status) => {
+    const rows = Array.from(w.querySelectorAll("[data-take-row]"));
+    const its = rows
+      .map(r => ({stock_item_id: r.querySelector('[data-tf="stock_item_id"]').value,
+                  actual_qty: r.querySelector('[data-tf="actual_qty"]').value.trim()}))
+      .filter(o => o.stock_item_id && o.actual_qty !== "" && Number(o.actual_qty) >= 0);
+    if (!its.length) { status.textContent = "至少录一条有效明细(选物品+实盘数≥0)"; return false; }
+    const payload = {operator: whVal(w, "operator"), items: its};
+    try { await whPost("/api/stock-take", payload); return true; }
+    catch (e) { status.textContent = String(e.message || "保存失败"); return false; }
+  });
+  const itemsBox = wrap.querySelector("[data-wh-items]");
+  const pickedIds = () => Array.from(wrap.querySelectorAll('[data-tf="stock_item_id"]')).map(s => s.value).filter(Boolean);
+  const addRow = () => {
+    _whRowSeq += 1;
+    const opts = `<option value="">选择物品</option>` + stockItems.map(i =>
+      `<option value="${escapeAttr(i.stock_item_id)}">${escapeHtml(i.code + " " + i.name)}</option>`).join("");
+    const div = document.createElement("div");
+    div.className = "wh-item-row";
+    div.setAttribute("data-take-row", String(_whRowSeq));
+    div.innerHTML = `
+      <select data-tf="stock_item_id">${opts}</select>
+      <span class="wh-take-book" data-take-book>账面 —</span>
+      <input data-tf="actual_qty" type="number" step="0.01" min="0" placeholder="实盘数量" class="wh-qty">
+      <span class="wh-take-diff" data-take-diff></span>
+      <button type="button" class="wh-del-row" data-wh-del-row>×</button>`;
+    const sel = div.querySelector('[data-tf="stock_item_id"]');
+    const act = div.querySelector('[data-tf="actual_qty"]');
+    const bookEl = div.querySelector("[data-take-book]");
+    const diffEl = div.querySelector("[data-take-diff]");
+    const renderDiff = () => {
+      const id = sel.value;
+      const book = id ? bookQty[id] || 0 : null;
+      bookEl.textContent = id ? `账面 ${book}` : "账面 —";
+      if (id && act.value.trim() !== "") {
+        const diff = Number(act.value) - book;
+        diffEl.textContent = `差异 ${diff > 0 ? "+" : ""}${Math.round(diff * 100) / 100}`;
+      } else diffEl.textContent = "";
+    };
+    sel.addEventListener("change", () => {
+      // 同一物品禁止重复添加(一张盘点单一个物品只该有一行)
+      if (sel.value && pickedIds().filter(v => v === sel.value).length > 1) {
+        window.alert("该物品已添加过,请直接改那一行的实盘数");
+        sel.value = "";
+      }
+      renderDiff();
+    });
+    act.addEventListener("input", renderDiff);
     div.querySelector("[data-wh-del-row]").addEventListener("click", () => div.remove());
     itemsBox.appendChild(div);
   };

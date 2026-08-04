@@ -17,6 +17,7 @@ datas = [
     (os.path.join(ROOT, "local_app", "static"), "local_app/static"),
     (os.path.join(ROOT, "local_app", "schema.sql"), "local_app"),
     (os.path.join(ROOT, "local_app", "personnel_access_schema.sql"), "local_app"),
+    (os.path.join(ROOT, "local_app", "consent_templates_seed.json"), "local_app"),
 ]
 
 # Windows 无系统时区库:随包携带 tzdata 的 IANA 数据,否则 ZoneInfo("Asia/Shanghai") 启动即崩

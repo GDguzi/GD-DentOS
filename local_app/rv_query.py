@@ -13,6 +13,20 @@ DONE_STATUSES = ("done", "已回访", "完成", "4")
 PENDING_STATUSES = ("待回访", "待跟进", "做计划")
 LOW_SATISFACTION = frozenset(("不满意", "非常不满意", "差", "很差"))
 
+# GD-06:回访方式唯一规范化表达式(筛选与汇总必须共用,避免列表命中但汇总记 unknown)。
+# 口径:显式 channel 优先并归桶;旧数据回退中文 return_type——含"电话"→phone,含"微信"→wechat,
+# 其余非空→other,空→''(unknown)。与 return_visit_transactions.normalized_rv_channel 同口径。
+RV_CHANNEL_SQL = (
+    "case"
+    " when coalesce(r.channel, '') = 'phone' then 'phone'"
+    " when coalesce(r.channel, '') = 'wechat' then 'wechat'"
+    " when coalesce(r.channel, '') != '' then 'other'"
+    " when coalesce(r.return_type, '') = '' then ''"
+    " when r.return_type like '%电话%' then 'phone'"
+    " when r.return_type like '%微信%' then 'wechat'"
+    " else 'other' end"
+)
+
 
 def _sql_literals(values):
     return "(" + ", ".join("'%s'" % value.replace("'", "''") for value in values) + ")"
@@ -104,8 +118,8 @@ def build_rv_filter(
     rtype = rtype.strip()
     att = att.strip()
     if channel:
-        parts.append("coalesce(r.channel, '') = ?")
-        params.append(channel)
+        parts.append(f"{RV_CHANNEL_SQL} = ?")
+        params.append("" if channel == "unknown" else channel)
     if rtype:
         parts.append("coalesce(r.return_type, '') = ?")
         params.append(rtype)
@@ -174,8 +188,8 @@ def _month_cte(month, *, q="", status="", doctor="", visitor="", channel="", tod
     channel = channel.strip()
     status = status.strip()
     if channel:
-        parts.append("coalesce(r.channel, '') = ?")
-        params.append(channel)
+        parts.append(f"{RV_CHANNEL_SQL} = ?")
+        params.append("" if channel == "unknown" else channel)
     if status == "已逾期":
         parts.extend((f"not ({DONE_COND})", "substr(coalesce(r.due_time, ''), 1, 10) < ?"))
         params.append(today)
@@ -185,7 +199,7 @@ def _month_cte(month, *, q="", status="", doctor="", visitor="", channel="", tod
     base_where = " and ".join(parts)
     sql = f"""
         with base as (
-            select r.return_visit_id, r.channel, r.return_result, r.satisfaction,
+            select r.return_visit_id, {RV_CHANNEL_SQL} as channel, r.return_result, r.satisfaction,
                    r.due_time, r.actual_date,
                    case when ({DONE_COND}) then 1 else 0 end as is_done
             from return_visits r

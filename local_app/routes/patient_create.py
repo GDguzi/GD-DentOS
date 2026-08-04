@@ -4,11 +4,12 @@ import sqlite3
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from local_app.timeutil import now_str
-from local_app.auth import audit_write, require_perm
+from local_app.auth import audit_write, require_admin, require_perm
 from local_app.db import begin_immediate, connect, new_id
+from local_app.patient_import import auto_map_header, normalize_value, parse_table
 from local_app.pinyin_util import name_pinyin
 from local_app.versioning import stable_hash, stable_json
 
@@ -43,6 +44,79 @@ def _gen_chart_no(conn, now, bump=0):
     ).fetchone()
     seq = (row[0] or 0) + 1 + bump
     return f"{prefix}{seq:03d}"   # %03d：≥3 位；本店日量约 20，不会到 999 溢出
+
+
+def _insert_patient_row(conn, patient_identity, values, now):
+    """建档核心插入:生成病历号(唯一索引撞号递增重试)+拼音+审计。
+    单个建档与批量导入共用。返回 chart_no;连续撞号抛 409。"""
+    snapshot = None
+    chart_no = ""
+    # 唯一索引 ux_patients_chart_no 挡重号；并发/回填占号时撞了就递增流水重试
+    for _bump in range(8):
+        chart_no = _gen_chart_no(conn, now, bump=_bump)
+        snapshot = {"patient_identity": patient_identity, "chart_no": chart_no, **values}
+        current_hash = stable_hash(snapshot)
+        try:
+            conn.execute(
+                """
+                insert into patients(
+                    patient_identity, display_name, phone, sex, birthday, address,
+                    allergy_history, medication_history,
+                    id_card, wechat, email, occupation, work_unit, patient_type,
+                    responsible_doctor, consultant,
+                    referral_source, referral_source2, referral_source3, referral_source4,
+                    introducer_type, introducer_name, phone_vestee, remark, chart_no,
+                    name_pinyin, current_hash, created_at, updated_at, local_updated_at
+                )
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    patient_identity,
+                    values["display_name"],
+                    values["phone"],
+                    values["sex"],
+                    values["birthday"],
+                    values["address"],
+                    values["allergy_history"],
+                    values["medication_history"],
+                    values["id_card"],
+                    values["wechat"],
+                    values["email"],
+                    values["occupation"],
+                    values["work_unit"],
+                    values["patient_type"],
+                    values["responsible_doctor"],
+                    values["consultant"],
+                    values["referral_source"],
+                    values["referral_source2"],
+                    values["referral_source3"],
+                    values["referral_source4"],
+                    values["introducer_type"],
+                    values["introducer_name"],
+                    values["phone_vestee"],
+                    values["remark"],
+                    chart_no,
+                    name_pinyin(values["display_name"]),
+                    current_hash,
+                    now,
+                    now,
+                    now,
+                ),
+            )
+            break
+        except sqlite3.IntegrityError:
+            if _bump >= 7:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "chart_no_conflict",
+                        "message": "病历号生成冲突，请重试",
+                    },
+                )
+            continue
+    audit_write(conn, "patient", patient_identity, "create_patient",
+                new_json=stable_json(snapshot), created_at=now)
+    return chart_no
 
 
 def create_patient_create_router(db_path):
@@ -123,77 +197,103 @@ def create_patient_create_router(db_path):
                         )
                     return {"patient_identity": patient_identity, "replayed": True}
 
-            snapshot = None
-            # 唯一索引 ux_patients_chart_no 挡重号；并发/回填占号时撞了就递增流水重试
-            for _bump in range(8):
-                chart_no = _gen_chart_no(conn, now, bump=_bump)
-                snapshot = {"patient_identity": patient_identity, "chart_no": chart_no, **values}
-                current_hash = stable_hash(snapshot)
-                try:
-                    conn.execute(
-                        """
-                        insert into patients(
-                            patient_identity, display_name, phone, sex, birthday, address,
-                            allergy_history, medication_history,
-                            id_card, wechat, email, occupation, work_unit, patient_type,
-                            responsible_doctor, consultant,
-                            referral_source, referral_source2, referral_source3, referral_source4,
-                            introducer_type, introducer_name, phone_vestee, remark, chart_no,
-                            name_pinyin, current_hash, created_at, updated_at, local_updated_at
-                        )
-                        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        (
-                            patient_identity,
-                            values["display_name"],
-                            values["phone"],
-                            values["sex"],
-                            values["birthday"],
-                            values["address"],
-                            values["allergy_history"],
-                            values["medication_history"],
-                            values["id_card"],
-                            values["wechat"],
-                            values["email"],
-                            values["occupation"],
-                            values["work_unit"],
-                            values["patient_type"],
-                            values["responsible_doctor"],
-                            values["consultant"],
-                            values["referral_source"],
-                            values["referral_source2"],
-                            values["referral_source3"],
-                            values["referral_source4"],
-                            values["introducer_type"],
-                            values["introducer_name"],
-                            values["phone_vestee"],
-                            values["remark"],
-                            chart_no,
-                            name_pinyin(values["display_name"]),
-                            current_hash,
-                            now,
-                            now,
-                            now,
-                        ),
-                    )
-                    break
-                except sqlite3.IntegrityError:
-                    if _bump >= 7:
-                        raise HTTPException(
-                            status_code=409,
-                            detail={
-                                "code": "chart_no_conflict",
-                                "message": "病历号生成冲突，请重试",
-                            },
-                        )
-                    continue
-            audit_write(conn, "patient", patient_identity, "create_patient",
-                        new_json=stable_json(snapshot), created_at=now)
+            _insert_patient_row(conn, patient_identity, values, now)
             conn.commit()
 
         response = {"patient_identity": patient_identity}
         if raw_request_id is not None:
             response["replayed"] = False
         return response
+
+    @router.post("/api/patients/import")
+    async def import_patients(
+        file: UploadFile = File(...),
+        mode: str = Form("preview"),
+        mapping: str = Form(""),
+    ):
+        """患者批量导入(CSV/XLSX/SQLite):表头自动匹配建档字段。
+        mode=preview 只解析回报映射/条数/问题;mode=commit 入库(同名同电话跳过防重复导)。
+        mapping 可选:前端确认过的 {列下标: 字段名} JSON,覆盖自动匹配。
+        批量数据进出=管理员专属(与数据备份同口径,用户拍板);单个建档仍是建档权限。"""
+        require_admin()
+        if mode not in ("preview", "commit"):
+            raise HTTPException(status_code=400, detail="mode 只能是 preview 或 commit")
+        data = await file.read()
+        if len(data) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="文件太大(限 10MB)")
+        try:
+            rows = parse_table(file.filename or "", data)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        if len(rows) < 2:
+            raise HTTPException(status_code=400, detail="文件里除表头外没有数据行")
+        header, body = rows[0], rows[1:]
+        col_map = auto_map_header(header)
+        if mapping.strip():
+            try:
+                user_map = {
+                    int(k): v for k, v in json.loads(mapping).items() if v
+                }
+            except (ValueError, TypeError, AttributeError):
+                raise HTTPException(status_code=400, detail="mapping 必须是 {列下标: 字段名} 的 JSON")
+            unknown = [v for v in user_map.values() if v not in _FIELDS]
+            if unknown:
+                raise HTTPException(status_code=400, detail=f"未知字段: {','.join(unknown)}")
+            col_map = user_map
+
+        parsed, issues = [], []
+        for line_no, raw in enumerate(body, start=2):
+            values = {field: "" for field in _FIELDS}
+            for col, field in col_map.items():
+                if col < len(raw):
+                    values[field] = normalize_value(field, raw[col])
+            if not any(v.strip() for v in values.values()):
+                continue   # 全空行
+            if not values["display_name"].strip():
+                issues.append(f"第{line_no}行缺姓名,跳过")
+                continue
+            if not values["phone"].strip():
+                # 与单个建档同口径:姓名+电话必填,避免落"有名无电话"的档
+                issues.append(f"第{line_no}行缺电话,跳过")
+                continue
+            parsed.append({k: v.strip() for k, v in values.items()})
+
+        if mode == "preview":
+            return {
+                "total_rows": len(body),
+                "importable": len(parsed),
+                "matched_columns": [
+                    {"column": col, "header": header[col] if col < len(header) else "",
+                     "field": field}
+                    for col, field in sorted(col_map.items())
+                ],
+                "unmatched_headers": [
+                    str(header[i]) for i in range(len(header)) if i not in col_map
+                ],
+                "issues": issues[:50],
+                "sample": parsed[:5],
+            }
+
+        if "display_name" not in col_map.values() or "phone" not in col_map.values():
+            raise HTTPException(status_code=400, detail="必须有姓名列和电话列才能导入(可在预览里手动指定)")
+        if not parsed:
+            raise HTTPException(status_code=400, detail="没有可导入的有效行")
+        created, skipped = 0, 0
+        with connect(db_path) as conn:
+            begin_immediate(conn)
+            now = now_str()
+            for values in parsed:
+                dup = conn.execute(
+                    "select 1 from patients where coalesce(is_deleted, 0) = 0 "
+                    "and display_name = ? and phone = ?",
+                    (values["display_name"], values["phone"]),
+                ).fetchone()
+                if dup:
+                    skipped += 1
+                    continue
+                _insert_patient_row(conn, new_id("local-pat"), values, now)
+                created += 1
+            conn.commit()
+        return {"created": created, "skipped_duplicates": skipped, "issues": issues[:50]}
 
     return router

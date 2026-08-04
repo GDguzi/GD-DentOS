@@ -34,8 +34,18 @@ async function ensureStaff(force) {
   try {
     const res = await fetch("/api/staff-members");
     staffCache = (await res.json()).members || [];
-  } catch { staffCache = []; }
+  } catch { staffCache = null; return []; }   // 失败不缓存空名单,下次调用重试
+  refreshStaffDatalists();
   return staffCache;
+}
+
+// 页面上已存在的员工 datalist 全量重填。ensureStaff 每次真正取数后自动调用,
+// 所以人员新增/修改/离职/复职后走 ensureStaff(true) 即可让所有打开中的选人框拿到新候选。
+function refreshStaffDatalists() {
+  document.querySelectorAll('datalist[id^="staff-"]').forEach(dl => {
+    const role = dl.id.slice("staff-".length);
+    dl.innerHTML = staffByRole(role).map(m => `<option value="${escapeAttr(m.name)}"></option>`).join("");
+  });
 }
 
 function staffByRole(role) {

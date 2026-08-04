@@ -853,7 +853,9 @@ async function _chvLoadReturnPlans(itemName) {
         : typeof rawDays === "string" && /^[+-]?\d+$/.test(rawDays.trim())
           ? Number(rawDays.trim()) : Number.NaN;
       if (!Number.isSafeInteger(days)) throw new TypeError("invalid_return_plan_days");
-      return {name: item.name.trim(), days};
+      // describe=该计划的回访内容(打电话问什么),快捷填单用
+      return {name: item.name.trim(), days,
+              describe: typeof item.describe === "string" ? item.describe : ""};
     });
     _chvPlans = normalized;
   }
@@ -867,6 +869,47 @@ async function _chvLoadReturnPlans(itemName) {
       const bh = hit && b.name.includes(hit) ? 0 : 1;
       return ah - bh || a.days - b.days;
     });
+}
+
+// 处理弹窗内上传录音文件:与麦克风直录同一条保存链路(action=attachment,自动挂本回访)。
+// 版本冲突(409)如实报错让用户重开弹窗,不做自动重试(与截图上传同口径)。
+function _chvUploadCallButton(pid, rvId, getRevision, setRevision) {
+  const label = document.createElement("label");
+  label.className = "chv-btn";
+  label.textContent = "📁 上传录音";
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "audio/*,.mp3,.m4a,.wav,.amr,.webm";
+  input.hidden = true;
+  label.appendChild(input);
+  if (!rvId) { label.style.display = "none"; return label; }
+  let busy = false;
+  input.addEventListener("change", async () => {
+    const file = input.files && input.files[0];
+    if (!file || busy) return;
+    busy = true;
+    label.style.opacity = ".6";
+    try {
+      const result = await _chvWrite("call", {
+        action: "attachment",
+        patientIdentity: pid,
+        linkedReturnVisitId: rvId,
+        expectedRevision: getRevision(),
+        media: file,
+        fileName: file.name || "upload.audio",
+        direction: "outbound",
+        source: "panel_upload",
+      });
+      if (!result.ok) { _chvWriteError(result, "录音上传"); return; }
+      const nextRevision = result.response && result.response.data
+        ? result.response.data.context_revision : undefined;
+      if (Number.isSafeInteger(nextRevision) && typeof setRevision === "function") setRevision(nextRevision);
+      label.textContent = "✓ 已挂录音";
+      label.appendChild(input);
+    } catch { window.alert("录音上传失败（网络异常）"); }
+    finally { busy = false; label.style.opacity = ""; input.value = ""; }
+  });
+  return label;
 }
 
 // ============ #856三期③A 桌面麦克风直录(MediaRecorder→既有上传→自动转写) ============
@@ -1661,7 +1704,14 @@ function _chvBindPatientPick(ovl, inputId, hintId, state) {
   const input = ovl.querySelector(`#${inputId}`);
   const hint = ovl.querySelector(`#${hintId}`);
   let searchGen = 0; // 请求代数:丢弃迟到的旧响应,防它覆盖 state.pid
-  input.addEventListener("change", async () => {
+  let debounce = null;
+  // 边打字边搜(和顶栏搜索一个手感,拼音/首字母/手机号都认);防抖300ms
+  input.addEventListener("input", () => {
+    clearTimeout(debounce);
+    debounce = setTimeout(() => runSearch(), 300);
+  });
+  input.addEventListener("change", () => { clearTimeout(debounce); runSearch(); });
+  async function runSearch() {
     const gen = ++searchGen;
     state.pid = "";
     hint.innerHTML = "";
@@ -1685,7 +1735,7 @@ function _chvBindPatientPick(ovl, inputId, hintId, state) {
       state.pid = b.dataset.pick;
       hint.textContent = `已选:${b.textContent}`;
     }));
-  });
+  }
 }
 
 async function _chvOpenAddComm(pid) {
@@ -1772,6 +1822,10 @@ async function _chvOpenNewRv(presetPid) {
     <div class="chv-pbody chv-form2">
       <label>患者<input id="chvNrP" placeholder="搜姓名/手机号" value="${escapeAttr(presetPid || "")}"${presetPid ? " readonly" : ""}><span id="chvNrHint" class="chv-note"></span></label>
       <label>回访时间<input type="datetime-local" id="chvNrT"></label>
+      <label style="grid-column:1/-1">按计划快速填<span class="chv-inline">
+        <select id="chvNrPlan"><option value="">选计划：自动填回访时间和事项…</option></select>
+        ${hasPerm("master_data.manage") ? '<button type="button" class="chv-btn" data-chv-planmgr="1">⚙ 管理计划</button>' : ""}
+      </span></label>
       <label style="grid-column:1/-1">回访事项<select onchange="if(this.value){document.getElementById('chvNrI').value=this.value;this.selectedIndex=0}">
         <option value="">插入常用语…</option>${(dicts.visit_content || []).map(x => `<option>${escapeHtml(x)}</option>`).join("")}</select>
         <input id="chvNrI" placeholder="回访事项"></label>
@@ -1784,6 +1838,30 @@ async function _chvOpenNewRv(presetPid) {
   const state = {pid: presetPid || ""};
   if (presetPid) ovl.querySelector("#chvNrHint").textContent = "已锁定当前患者";
   else _chvBindPatientPick(ovl, "chvNrP", "chvNrHint", state);
+  // 回访计划快捷:选一条 → 回访时间=今天+N天 10:00,事项自动带计划内容(已手填的不覆盖)
+  const planSel = ovl.querySelector("#chvNrPlan");
+  const fillPlanOptions = async () => {
+    try {
+      const plans = await _chvLoadReturnPlans("");
+      planSel.innerHTML = `<option value="">选计划：自动填回访时间和事项…</option>` + plans.map(p =>
+        `<option value="${escapeAttr(String(p.days))}" data-desc="${escapeAttr(p.describe || p.name)}">${escapeHtml(p.name)}（${p.days} 天后）</option>`).join("");
+    } catch { /* 无权限或还没建计划:下拉保持空 */ }
+  };
+  if (planSel) {
+    fillPlanOptions();
+    planSel.addEventListener("change", () => {
+      const opt = planSel.selectedOptions[0];
+      if (!opt || !opt.value) return;
+      const d = bjToday();
+      d.setDate(d.getDate() + Number(opt.value));
+      ovl.querySelector("#chvNrT").value = `${localDateValue(d)}T10:00`;
+      const itemInput = ovl.querySelector("#chvNrI");
+      if (!itemInput.value.trim()) itemInput.value = opt.dataset.desc || "";
+    });
+    const mgr = ovl.querySelector("[data-chv-planmgr]");
+    if (mgr) mgr.addEventListener("click", () =>
+      _chvOpenPlanManager(() => { _chvPlans = null; fillPlanOptions(); }));
+  }
   const saveBtn = ovl.querySelector("[data-chv-save]");
   saveBtn.addEventListener("click", async () => {
     if (!_chvHasAllPermissions("patient.profile.view", "return_visit.manage")) return false;
@@ -1804,6 +1882,65 @@ async function _chvOpenNewRv(presetPid) {
     _chvDisposeOverlay(ovl);
     loadCustomerHubV2();
   });
+}
+
+// 回访计划维护:计划=多久之后回访+回访什么内容。这里就是"在哪里设置"的答案——
+// 新增回访/处理回访旁的 ⚙ 都进这里,不用去别处找配置页。
+async function _chvOpenPlanManager(onChange) {
+  if (!hasPerm("master_data.manage")) { window.alert("无主数据维护权限"); return; }
+  let payload;
+  try { payload = await _chvFetchJson("/api/dictionaries?type=ReturnPlan"); }
+  catch { window.alert("计划载入失败（网络异常）"); return; }
+  const items = (payload && payload.items) || [];
+  const ovl = _chvOvl("chvPlanMgrOvl", `
+    <div class="chv-phead"><h3>回访计划维护</h3><button type="button" class="chv-btn" data-chv-close="1">✕</button></div>
+    <div class="chv-pbody">
+      <div class="chv-note">计划 = 多久之后回访 + 回访什么内容。建好后在新增回访、处理回访里一点即用。</div>
+      <div>${items.map(it => `
+        <div class="chv-plan-row">
+          <b>${escapeHtml(it.name)}</b>（${escapeHtml(String(it.value))} 天后）
+          <span class="chv-note">${escapeHtml(it.describe || "")}</span>
+          <button type="button" class="chv-btn danger" data-plan-stop="${escapeAttr(it.dict_id)}">停用</button>
+        </div>`).join("") || '<div class="chv-note">还没有计划，在下面建第一条</div>'}</div>
+      <div class="chv-form2" style="margin-top:10px">
+        <label>计划名称<input id="chvPmName" placeholder="拔牙术后关怀"></label>
+        <label>多少天后回访<input id="chvPmDays" type="number" min="1" max="3650" placeholder="1"></label>
+        <label style="grid-column:1/-1">回访内容<textarea id="chvPmDesc" placeholder="到时打电话问什么、叮嘱什么"></textarea></label>
+        <div class="chv-actions" style="grid-column:1/-1;justify-content:flex-end">
+          <button type="button" class="chv-btn pri" data-plan-add="1">添加计划</button>
+          <button type="button" class="chv-btn" data-chv-close="1">关闭</button>
+        </div>
+      </div>
+    </div>`);
+  const reopen = () => { ovl._chvClean = true; _chvDisposeOverlay(ovl); if (onChange) onChange(); _chvOpenPlanManager(onChange); };
+  // 写期间禁用全部按钮:防双击把同一条计划建两遍(后端 ReturnPlan 无重名约束)
+  let planBusy = false;
+  const withPlanBusy = async fn => {
+    if (planBusy) return;
+    planBusy = true;
+    const buttons = [...ovl.querySelectorAll("button")];
+    buttons.forEach(b => { b.disabled = true; });
+    try { await fn(); }
+    finally { planBusy = false; buttons.forEach(b => { b.disabled = false; }); }
+  };
+  ovl.querySelectorAll("[data-plan-stop]").forEach(b => b.addEventListener("click", () => withPlanBusy(async () => {
+    if (!window.confirm("停用该计划？已排出去的回访不受影响。")) return;
+    const result = await _chvWrite("dictionary", {action: "stop_plan", id: b.dataset.planStop});
+    if (!result.ok) { _chvWriteError(result, "计划停用"); return; }
+    reopen();
+  })));
+  ovl.querySelector("[data-plan-add]").addEventListener("click", () => withPlanBusy(async () => {
+    const name = ovl.querySelector("#chvPmName").value.trim();
+    const days = Number(ovl.querySelector("#chvPmDays").value);
+    const describe = ovl.querySelector("#chvPmDesc").value.trim();
+    if (!name || !Number.isInteger(days) || days <= 0) { window.alert("名称和天数必填，天数为正整数"); return; }
+    const result = await _chvWrite("dictionary", {
+      action: "create_plan",
+      fields: {dict_type: "ReturnPlan", name, value: days, describe},
+    });
+    if (!result.ok) { _chvWriteError(result, "计划添加"); return; }
+    reopen();
+  }));
 }
 
 // ============ 回访处理弹窗(任务4:左五页签患者卡 + 右回访表单) ============
@@ -1992,6 +2129,7 @@ async function _chvOpenRvModal(rvId, pid) {
             ${canEdit ? `<label class="chv-btn">📷 上传截图<input type="file" id="chvScFile" accept="image/*" hidden></label>` : ""}
           </div>
         </div>
+        <div class="chv-actions" id="chvRecActions"></div>
         <label>回访人 *<input id="chvMV" value="${escapeAttr(d.visitor || "")}" placeholder="回访人"${ro}></label>
         <label>回访状态 *<span class="chv-radios">
           ${stdStatus === null ? `<label><input type="radio" name="chvSt" value="${escapeAttr(curSt)}" checked${ro}>${escapeHtml(legacyLabel)}</label>` : ""}
@@ -2008,7 +2146,7 @@ async function _chvOpenRvModal(rvId, pid) {
           ${dictBtn("visit_result")}</span>
           <textarea id="chvMR" placeholder="患者反馈"${ro}>${escapeHtml(d.return_result || "")}</textarea></label>
         ${canEdit ? `<label>下次回访（可选：填了保存时自动排一条计划回访）
-          <span class="chv-inline">${hasPerm("master_data.view") ? '<select data-chv-plan="1"><option value="">按计划预填…</option></select>' : ""}<input type="date" id="chvMNext"></span>
+          <span class="chv-inline">${hasPerm("master_data.view") ? '<select data-chv-plan="1"><option value="">按计划预填…</option></select>' : ""}${hasPerm("master_data.manage") ? '<button type="button" class="chv-btn" data-chv-planmgr="1">⚙</button>' : ""}<input type="date" id="chvMNext"></span>
           <span class="chv-pick" aria-label="下次回访快捷日期">
             <button type="button" class="chv-btn" data-chv-next="15d">半个月</button>
             <button type="button" class="chv-btn" data-chv-next="1m">1 个月</button>
@@ -2031,27 +2169,39 @@ async function _chvOpenRvModal(rvId, pid) {
   const noteEl = ovl.querySelector("#chvMC");
   if (noteEl) noteEl.addEventListener("input", () => { ovl._chvNoteDirty = true; });
   _chvMaybeFillTranscript(ovl, rvId, pid);
-  // #856三期③A:弹窗内桌面麦克风直录(自动挂本回访)
-  const scList = ovl.querySelector("#chvScList");
-  if (scList && hasPerm("call_record.manage")) {
-    scList.appendChild(_chvMicButton(
+  // #856三期③A:弹窗内桌面麦克风直录(自动挂本回访)。
+  // 录音控件放方式无关的 #chvRecActions——原来塞在微信截图容器里,电话回访时整块 display:none 看不见
+  const recActions = ovl.querySelector("#chvRecActions");
+  if (recActions && hasPerm("call_record.manage")) {
+    recActions.appendChild(_chvMicButton(
       pid,
       rvId,
       () => currentRevision,
       revision => { currentRevision = revision; },
       ovl,
     ));
+    // 上传录音文件也收进本弹窗(自动挂本回访),不用再去"新增通话录音"区块选关联
+    recActions.appendChild(_chvUploadCallButton(
+      pid,
+      rvId,
+      () => currentRevision,
+      revision => { currentRevision = revision; },
+    ));
   }
   // #856三期:下次回访制度预填——选 ReturnPlan 计划名,日期=北京今天+天数;事项关键词命中排前,不自动选
   const planSel = ovl.querySelector("[data-chv-plan]");
   if (planSel) {
-    _chvLoadReturnPlans(d.item_name).then(plans => {
+    const fillDealPlans = () => _chvLoadReturnPlans(d.item_name).then(plans => {
       planSel.innerHTML = `<option value="">按计划预填…</option>` +
         plans.map(p => `<option value="${p.days}">${escapeHtml(p.name)}(+${p.days}天)</option>`).join("");
     }).catch(() => {
       planSel.innerHTML = '<option value="">制度载入失败，请关闭后重试</option>';
       planSel.disabled = true;
     });
+    fillDealPlans();
+    const planMgr = ovl.querySelector("[data-chv-planmgr]");
+    if (planMgr) planMgr.addEventListener("click", () =>
+      _chvOpenPlanManager(() => { _chvPlans = null; fillDealPlans(); }));
     planSel.addEventListener("change", () => {
       if (planSel.value === "") return;
       const base = new Date(`${_chvToday()}T00:00:00`);

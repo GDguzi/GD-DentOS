@@ -365,7 +365,7 @@ class AdminInitialPasswordFileTest(unittest.TestCase):
             seeded = auth.ensure_seed_admin(db)
             self.assertIsNotNone(seeded)
             username, pw = seeded
-            self.assertGreaterEqual(len(pw), 32, "#583:初始口令应为 token_hex(16)=32字符,不再是8字符弱口令")
+            self.assertEqual(pw, "admin", "出厂默认口令 admin(2026-08-03 拍板,取代 #583 随机口令)")
             f = Path(tmp) / ".admin_initial_password"
             self.assertTrue(f.is_file(), "首启应写初始密码文件")
             c = TestClient(create_app(db))

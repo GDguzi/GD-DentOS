@@ -16,6 +16,7 @@ datas = [
     (os.path.join(ROOT, "local_app", "static"), "local_app/static"),
     (os.path.join(ROOT, "local_app", "schema.sql"), "local_app"),
     (os.path.join(ROOT, "local_app", "personnel_access_schema.sql"), "local_app"),
+    (os.path.join(ROOT, "local_app", "consent_templates_seed.json"), "local_app"),
 ]
 datas += collect_data_files("tzdata")
 

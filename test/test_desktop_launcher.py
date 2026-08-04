@@ -35,8 +35,8 @@ class ResolveDataDirTest(unittest.TestCase):
 
 class ApplyDesktopDefaultsTest(unittest.TestCase):
     def test_defaults_local_only_and_never_ships_a_fixed_password(self):
-        """一键版只默认「只听本机」；绝不出厂固定管理员口令——
-        不注入 DENTAL_ADMIN_PASSWORD，交回核心的随机口令路径。"""
+        """一键版只默认「只听本机」；启动器自己不注入 DENTAL_ADMIN_PASSWORD，
+        密码默认值(admin)统一由核心 ensure_seed_admin 出，避免两处各说各话。"""
         env = {}
         dl.apply_desktop_defaults(env)
         self.assertEqual(env["DENTAL_LOCAL_ONLY"], "1")

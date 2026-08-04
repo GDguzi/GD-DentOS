@@ -660,6 +660,9 @@ def _create_access_v3_users_router(db_path):
             ).fetchone()
             if row is None or not verify_password(old_password, row["password_hash"]):
                 raise HTTPException(status_code=400, detail="原密码错误")
+            actor_name = conn.execute(
+                "select username from users where id = ?", (actor.user_id,)
+            ).fetchone()
             conn.execute(
                 "update users set password_hash = ?, updated_at = ? where id = ?",
                 (hash_password(new_password), now_str(), actor.user_id),
@@ -674,6 +677,10 @@ def _create_access_v3_users_router(db_path):
                 action="account.password.change",
             )
             conn.commit()
+        if actor_name and actor_name["username"] == "admin":
+            # #583 对齐旧认证分支:admin 改密后首启明文初始密码文件立即删除,
+            # 不让凭据常驻磁盘——v3 路由此前漏掉这步(合成库已复现)。
+            (Path(db_path).parent / ".admin_initial_password").unlink(missing_ok=True)
         return {"ok": True}
 
     return router

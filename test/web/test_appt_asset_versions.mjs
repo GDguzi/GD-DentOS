@@ -8,7 +8,7 @@ import { dirname, join } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const index = readFileSync(join(here, "..", "..", "local_app", "static", "index.html"), "utf8");
-const version = "2026-08-02-quick-checkin-1";
+const version = "2026-08-04-r3";
 
 test("预约与挂号相关静态资源统一使用本轮缓存版本", () => {
   const assets = [

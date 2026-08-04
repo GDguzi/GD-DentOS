@@ -60,9 +60,12 @@ function renderCallsTab(panel, data, contexts = []) {
     `<option value="${escapeAttr(row.return_visit_id)}" data-revision="${escapeAttr(row.revision)}">${escapeHtml(String(row.due_time || "").slice(0, 16))} ${escapeHtml(row.item_name || "回访")}</option>`
   ).join("");
 
+  // 默认收起:处理回访时传录音已并进处理弹窗;这里留给"不挂回访的通话/带登记信息的补录",点开才展开
   panel.innerHTML = `
-    <section class="panel"><div class="panel-head"><span>新增通话录音</span></div>
-      <div class="panel-body cs-form" data-call-form>
+    <section class="panel"><div class="panel-head"><span>新增通话录音</span>
+      <button type="button" class="plain-button" data-call-form-toggle
+        onclick="const f=this.closest('.panel').querySelector('[data-call-form]');f.hidden=!f.hidden;this.textContent=f.hidden?'展开 ▾':'收起 ▴'">展开 ▾</button></div>
+      <div class="panel-body cs-form" data-call-form hidden>
         <div class="cs-grid">
           <label><span>关联回访</span><select class="cs-input" data-call-context>
             <option value="">请选择回访记录</option>${contextOptions}</select></label>

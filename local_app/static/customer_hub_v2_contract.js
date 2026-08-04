@@ -502,7 +502,19 @@
 
   function buildDictionaryWriteRequest(options) {
     const source = isRecord(options) ? options : {};
-    if (ownDataValue(source, "action") !== "update") return null;
+    const action = ownDataValue(source, "action");
+    // 回访计划维护(ReturnPlan 字典):新建/停用。字段校验在后端(类型白名单+天数区间)。
+    if (action === "create_plan") {
+      const fields = copyOwnWriteFields(source);
+      return fields === null ? null : jsonWrite("POST", "/api/dictionaries", fields);
+    }
+    if (action === "stop_plan") {
+      // 复用白名单已有的 id 字段(currentOptions 只透传白名单键,新键会被滤掉)
+      const dictId = ownDataValue(source, "id");
+      if (typeof dictId !== "string" || !dictId) return null;
+      return jsonWrite("POST", `/api/dictionaries/${encodeURIComponent(dictId)}/stop`, {});
+    }
+    if (action !== "update") return null;
     const fields = copyOwnWriteFields(source);
     return fields === null ? null
       : jsonWrite("PUT", "/api/settings/customer-hub-dicts", fields);

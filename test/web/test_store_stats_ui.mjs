@@ -73,3 +73,24 @@ test("store_stats 顶层 let/const/var 不与其他静态JS 撞名(全局作用�
     }
   }
 });
+
+// ---------- GD-07:未归类就诊量单列 + 空态区分 + 新建病历医生预填 ----------
+
+test("GD-07:未归类行展示无法归类的就诊量,不只金额", () => {
+  assert.ok(
+    /u\.first\.visit|u\.revisit\.visit/.test(storeSrc),
+    "未归类行必须带就诊量列",
+  );
+});
+
+test("GD-07:空结果文案区分 确实无就诊 vs 存在无法归类就诊", () => {
+  assert.ok(storeSrc.includes("该区间无就诊记录"), "保留纯空态文案");
+  assert.ok(storeSrc.includes("无法唯一归类"), "有未归类数据时空态必须说明,不能装作没数据");
+});
+
+test("GD-07:新建病历预填当日唯一预约医生(可改),不唯一不猜", () => {
+  const tabsSrc = readFileSync(join(here, "..", "..", "local_app", "static", "workspace_tabs.js"), "utf8");
+  assert.ok(tabsSrc.includes("function defaultRecordDoctor"), "缺预填函数");
+  assert.ok(/doctor_name:\s*defaultRecordDoctor\(\)/.test(tabsSrc), "新建病历必须走预填");
+  assert.ok(/docs\.size === 1/.test(tabsSrc), "多候选必须放弃预填,不得取第一个");
+});

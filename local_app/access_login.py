@@ -140,6 +140,9 @@ def render_access_login_html(clinic_name):
             localStorage.removeItem("dl.rememberedUsername.v1");
           }}
         }} catch (error) {{}}
+        if (payload.password === "admin") {{
+          window.alert("当前是默认密码 admin，请进系统后到「配置管理 → 人员与权限 → 账号管理」尽快修改。");
+        }}
         location.assign("/");
       }} catch (error) {{
         loginError.textContent = "暂时无法登录，请稍后重试";

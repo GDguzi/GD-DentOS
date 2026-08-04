@@ -112,6 +112,72 @@ class WarehouseStockTakeTest(unittest.TestCase):
                 400,
             )
 
+    # ---- GD-08 补充守卫 ----
+
+    def test_server_ignores_forged_book_qty_and_diff(self):
+        # 账面数与差异以后端保存时重算为准,浏览器伪造的 book_qty/diff 不得入库
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path, client = _client(tmpdir)
+            item_id = _seed_stock(client, qty=5)
+            resp = client.post("/api/stock-take", json={
+                "operator": "库管",
+                "items": [{"stock_item_id": item_id, "actual_qty": 5,
+                           "book_qty": 999, "diff": 999}],
+            })
+            self.assertEqual(resp.status_code, 200)
+            row = resp.json()["items"][0]
+            self.assertEqual(row["book_qty"], 5)
+            self.assertEqual(row["diff"], 0)
+            with connect(db_path) as conn:
+                db_row = conn.execute(
+                    "select book_qty, diff from stock_take_item where stock_take_id = ?",
+                    (resp.json()["id"],),
+                ).fetchone()
+            self.assertEqual(db_row["book_qty"], 5)
+            self.assertEqual(db_row["diff"], 0)
+
+    def test_failed_loss_confirm_leaves_no_partial_change(self):
+        # 盘亏库存不足确认失败:同单其他行的盘盈也必须回滚,不得留部分库存变更
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path, client = _client(tmpdir)
+            item_a = _seed_stock(client, qty=5)
+            category_id = client.get("/api/stock-items").json()["items"][0]["category_id"]
+            item_b = client.post(
+                "/api/stock-items",
+                json={"code": "TAKE-002", "name": "膜", "category_id": category_id, "unit": "张"},
+            ).json()["id"]
+            supplier_id = client.post("/api/suppliers", json={"name": "供二"}).json()["id"]
+            si = client.post("/api/stock-in", json={
+                "type": "purchase", "supplier_id": supplier_id,
+                "items": [{"stock_item_id": item_b, "qty": 1, "batch_no": "B2"}],
+            }).json()["id"]
+            client.post(f"/api/stock-in/{si}/confirm")
+
+            # 草稿:A 盘盈+2,B 盘亏-1(此刻账面1,可行)
+            take_id = client.post("/api/stock-take", json={
+                "operator": "库管",
+                "items": [
+                    {"stock_item_id": item_a, "actual_qty": 7},
+                    {"stock_item_id": item_b, "actual_qty": 0},
+                ],
+            }).json()["id"]
+            # 先用另一张盘点单把 B 清零 → 上面草稿的 -1 变成库存不足
+            other = client.post("/api/stock-take", json={
+                "operator": "库管",
+                "items": [{"stock_item_id": item_b, "actual_qty": 0}],
+            }).json()["id"]
+            self.assertEqual(client.post(f"/api/stock-take/{other}/confirm").status_code, 200)
+
+            resp = client.post(f"/api/stock-take/{take_id}/confirm")
+            self.assertEqual(resp.status_code, 409)
+            balance = client.get("/api/stock-balance", params={"item": "TAKE-001"}).json()
+            self.assertEqual(balance["items"][0]["qty"], 5, "A 的盘盈必须随失败回滚")
+            with connect(db_path) as conn:
+                status = conn.execute(
+                    "select status from stock_take where id = ?", (take_id,)
+                ).fetchone()["status"]
+            self.assertEqual(status, "draft")
+
 
 if __name__ == "__main__":
     unittest.main()

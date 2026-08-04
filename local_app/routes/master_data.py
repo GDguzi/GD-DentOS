@@ -237,6 +237,66 @@ def create_master_data_router(db_path, *, access_v3=True):
             },
         }
 
+    # 字典写接口只放开回访计划(名称+间隔天数+回访内容),不给全字典开口子——
+    # 其余字典仍由数据侧维护,避免误改收费/科室等关键枚举。
+    _WRITABLE_DICT_TYPES = ("ReturnPlan",)
+
+    @router.post("/api/dictionaries")
+    def create_dictionary(payload: dict):
+        require_perm("master_data.manage")
+        payload = payload or {}
+        dict_type = str(payload.get("dict_type") or "").strip()
+        name = str(payload.get("name") or "").strip()
+        describe = str(payload.get("describe") or "").strip()
+        if dict_type not in _WRITABLE_DICT_TYPES:
+            raise HTTPException(status_code=400, detail="该字典类型不开放在线维护")
+        if not name:
+            raise HTTPException(status_code=400, detail="名称不能为空")
+        try:
+            value = int(payload.get("value"))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="间隔天数必须是数字")
+        if value <= 0 or value > 3650:
+            raise HTTPException(status_code=400, detail="间隔天数须在 1~3650 之间")
+        now = now_str()
+        dict_id = new_id("local-dict")
+        with connect(db_path) as conn:
+            begin_immediate(conn)
+            conn.execute(
+                "insert into dictionaries(dict_id, dict_type, name, value, describe, "
+                "display_order, stopped, created_at, updated_at) "
+                "values (?, ?, ?, ?, ?, ?, 0, ?, ?)",
+                (dict_id, dict_type, name, value, describe, value, now, now),
+            )
+            audit_write(conn, "dictionary", dict_id, "create_dictionary",
+                        new_json=json.dumps({"dict_type": dict_type, "name": name,
+                                             "value": value}, ensure_ascii=False),
+                        created_at=now)
+            conn.commit()
+        return {"dict_id": dict_id, "dict_type": dict_type, "name": name,
+                "value": value, "describe": describe}
+
+    @router.post("/api/dictionaries/{dict_id}/stop")
+    def stop_dictionary(dict_id: str):
+        require_perm("master_data.manage")
+        now = now_str()
+        with connect(db_path) as conn:
+            begin_immediate(conn)
+            row = conn.execute(
+                "select dict_type, stopped from dictionaries where dict_id = ?",
+                (dict_id,),
+            ).fetchone()
+            if not row or row["dict_type"] not in _WRITABLE_DICT_TYPES:
+                raise HTTPException(status_code=404, detail="计划不存在或不可在线停用")
+            conn.execute(
+                "update dictionaries set stopped = 1, updated_at = ? where dict_id = ?",
+                (now, dict_id),
+            )
+            audit_write(conn, "dictionary", dict_id, "stop_dictionary",
+                        new_json="{}", created_at=now)
+            conn.commit()
+        return {"dict_id": dict_id, "stopped": True}
+
     @router.get("/api/dictionaries")
     def dictionaries(type: str = ""):
         """字典枚举，可按 dict_type 筛选；不传则返回全部在用项。"""

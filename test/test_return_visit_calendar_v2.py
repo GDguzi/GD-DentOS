@@ -207,3 +207,52 @@ class ReturnVisitCalendarV2Test(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReturnVisitChannelFallbackTest(ReturnVisitCalendarV2Test):
+    """GD-06:月度统计 channel 优先、旧数据中文 return_type 回退;筛选与汇总同一口径。"""
+
+    def _seed_july_legacy(self, tmp):
+        client = self._client(tmp)
+        db = Path(tmp) / "clinic.sqlite3"
+        with connect(db) as conn:
+            rows = [
+                ("jl-phone", "电话", ""),
+                ("jl-wechat", "微信", ""),
+                ("jl-visit", "到店", ""),
+                ("jl-none", "", ""),
+                ("jl-mixed", "微信", "phone"),   # 显式 channel 以它为准
+            ]
+            for rid, rtype, channel in rows:
+                conn.execute(
+                    "insert into return_visits(return_visit_id,patient_identity,due_time,"
+                    "item_name,status,return_type,channel) "
+                    "values(?, 'p1', '2026-07-05 09:00', '事项', '待回访', ?, ?)",
+                    (rid, rtype, channel),
+                )
+            conn.commit()
+        return client
+
+    def test_legacy_return_type_maps_into_channel_counts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            client = self._seed_july_legacy(tmp)
+            summary = client.get("/api/return-visits/calendar?month=2026-07").json()["summary"]
+            self.assertEqual(summary["channel_counts"], [
+                {"channel": "phone", "count": 2},
+                {"channel": "wechat", "count": 1},
+                {"channel": "other", "count": 1},
+                {"channel": "unknown", "count": 1},
+            ])
+
+    def test_channel_filter_and_summary_share_normalization(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            client = self._seed_july_legacy(tmp)
+            body = client.get("/api/return-visits/calendar?month=2026-07&channel=wechat").json()
+            self.assertEqual(body["summary"]["total"], 1)
+            self.assertEqual(sum(day["count"] for day in body["days"]), 1)
+            self.assertEqual(body["summary"]["channel_counts"], [
+                {"channel": "phone", "count": 0},
+                {"channel": "wechat", "count": 1},
+                {"channel": "other", "count": 0},
+                {"channel": "unknown", "count": 0},
+            ])

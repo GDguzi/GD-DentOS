@@ -47,9 +47,14 @@ async function refreshWorkspaceDetail() {
       const summaryRes = await fetch(`/api/patients/${encodeURIComponent(identity)}/summary`);
       if (summaryRes.ok && identity === workspacePatientId) {
         const summary = await summaryRes.json();
+        if (identity !== workspacePatientId || !workspaceData) return data;
+        // GD-09:summary 写回共享状态并重渲染左栏——收款后累计消费立即更新,
+        // 不用退出档案再进。失败走 catch:保留旧 summary,不清零。
+        workspaceData.summary = summary;
         if (typeof renderWorkspaceTabCounts === "function") renderWorkspaceTabCounts(summary.counts || {});
+        if (typeof renderWorkspaceRail === "function") renderWorkspaceRail(workspaceData.patient, summary);
       }
-    } catch { /* 角标刷新失败不影响 detail 已刷新的主流程 */ }
+    } catch { /* 角标/左栏刷新失败不影响 detail 已刷新的主流程 */ }
     return data;
   } catch {
     return null;
@@ -100,9 +105,11 @@ async function loadMedicalCardItems() {
   }
   const byRecord = data.records || {};
   document.querySelectorAll("[data-medical-card]").forEach(card => {
-    const items = byRecord[card.dataset.medicalCard];
     const slot = card.querySelector("[data-card-items]");
-    if (!slot || !items || !items.length) return;
+    if (!slot) return;
+    slot.dataset.loaded = "1";   // 标记条目已装载(含"该病历无条目"),打印用来判断完整性
+    const items = byRecord[card.dataset.medicalCard];
+    if (!items || !items.length) return;
     slot.innerHTML = renderCardItems(items);
   });
 }
@@ -146,12 +153,29 @@ function renderCardItems(items) {
   return groups.map(g => medicalSubjectBlock(g.label, g.entries)).join("");
 }
 
+// GD-07:新建病历预填当日能唯一确定的预约医生(排除已取消/爽约),可改可清空;
+// 多候选或无预约不猜,留空由医生自己填。
+function defaultRecordDoctor() {
+  const today = localDateValue();
+  const appts = (workspaceData && workspaceData.detail && workspaceData.detail.appointments) || [];
+  const docs = new Set();
+  appts.forEach(a => {
+    const day = String(a.start_time || "").slice(0, 10);
+    // 取消口径与后端 today_work/check_in 对齐:显式取消态('3'/'9'/中文)+同步对账疑似取消都不算候选
+    const cancelled = ["3", "9", "已取消", "已爽约", "爽约"].includes(String(a.status == null ? "" : a.status))
+      || Boolean(a.suspect_cancelled);
+    const dn = String(a.doctor_name || "").trim();
+    if (day === today && !cancelled && dn) docs.add(dn);
+  });
+  return docs.size === 1 ? docs.values().next().value : "";
+}
+
 // 顶部「+ 新建病历」：弹全屏「病历填写」覆盖层（sentinel record_id "new"）。
 async function openNewMedicalRecord() {
   openMedicalEditorOverlay({
     record_id: "new",
     record_type: "",
-    doctor_name: "",
+    doctor_name: defaultRecordDoctor(),
     visit_time: localDateValue(),
     content_json: "{}",
     tooth_json: "{}",
@@ -250,8 +274,9 @@ function renderWorkspaceMedicalCardBody(row) {
       ${nurse ? `<span class="card-head-field">护士：${escapeHtml(nurse)}</span>` : ""}
       ${row.record_type ? `<span class="record-type-stamp">${escapeHtml(row.record_type)}</span>` : ""}
       <span class="card-head-actions">
-        <button type="button" class="plain-button medical-card-print" onclick="printWorkspaceMedicalCard('${escapeAttr(row.record_id)}')">打印</button>
-        <button type="button" class="plain-button medical-card-edit" onclick="editWorkspaceMedicalCard('${escapeAttr(row.record_id)}')">修改</button>
+        <!-- #35 同款:record_id 走 data-*,不拼进 inline onclick 的 JS 字符串 -->
+        <button type="button" class="plain-button medical-card-print" data-record-id="${escapeAttr(row.record_id)}" onclick="printWorkspaceMedicalCard(this.dataset.recordId)">打印</button>
+        <button type="button" class="plain-button medical-card-edit" data-record-id="${escapeAttr(row.record_id)}" onclick="editWorkspaceMedicalCard(this.dataset.recordId)">修改</button>
       </span>
     </div>
     <div class="medical-card-body">
@@ -276,6 +301,12 @@ function printWorkspaceMedicalCard(recordId) {
   const row = findWorkspaceMedicalRecord(recordId);
   const card = workspaceMedicalCardEl(recordId);
   if (!row || !card) return;
+  // 条目(检查/诊断/方案/治疗)异步装载,没到位就打印会出一张看似正式实则缺项的病历
+  const itemsSlot = card.querySelector("[data-card-items]");
+  if (itemsSlot && itemsSlot.dataset.loaded !== "1"
+      && !window.confirm("处置/诊断等条目还没加载完成（或加载失败），现在打印可能缺项。仍要打印吗？")) {
+    return;
+  }
   const body = card.querySelector(".medical-card-body");
   const p = (workspaceData && workspaceData.patient) || {};
   const content = parseMedicalContent(row.content_json);
@@ -426,7 +457,7 @@ async function renderCsReturnVisitsSub(panel) {
           <label>回访内容 <input class="cs-input" data-rv="item_name" placeholder="如 种牙复诊"></label>
           <label>回访医生 <select class="cs-input" data-rv="return_doctor">${rvStaffOptions("", "医生", "选择医生")}</select></label>
           <label>回访人 <select class="cs-input" data-rv="visitor">${rvStaffOptions("", "", "选择回访人")}</select></label>
-          <label>回访类型 <select class="cs-input" data-rv="return_type">${rvOptions(RV_TYPES, "")}</select></label>
+          <label>回访方式 <select class="cs-input" data-rv="return_type">${rvOptions(RV_TYPES, "")}</select></label>
         </div>
         <div class="cs-actions"><button type="button" onclick="createReturnVisit()">保存</button>
           <button type="button" class="plain-button" onclick="hideReturnVisitForm()">取消</button>
@@ -545,6 +576,22 @@ function rvText(s) {
   return escapeHtml(t).replace(/\n/g, "<br>");
 }
 
+// 档案客户沟通与客户通共用同一个回访处理弹窗(用户拍板:一套界面两处用,不维护第二套编辑区)。
+// 弹窗关闭后刷新本 tab,处理结果立刻反映在档案里。
+function openReturnVisitPanelFromWorkspace(rvId) {
+  const pid = workspacePatientId;
+  Promise.resolve(_chvOpenRvModal(rvId, pid)).then(() => {
+    let ticks = 0;
+    const watch = setInterval(() => {
+      if (document.getElementById("chvRvOvl") && ticks++ < 1200) return;   // 弹窗还开着(上限10分钟)
+      clearInterval(watch);
+      if (pid !== workspacePatientId) return;   // 期间切了患者,别刷别人的 tab
+      if (typeof workspaceLoadedTabs !== "undefined") workspaceLoadedTabs.delete("return-visits");
+      if (typeof switchWorkspaceTab === "function") switchWorkspaceTab("return-visits");
+    }, 500);
+  });
+}
+
 // 患者档案回访卡：头部(时间/回访人/诊所/斜章/操作)+正文(就诊时间/回访内容/回访类型)
 function renderReturnVisit(row) {
   const id = escapeAttr(row.return_visit_id);
@@ -558,7 +605,7 @@ function renderReturnVisit(row) {
         <span class="rv-card-field">就诊诊所：<b>${escapeHtml(RV_CLINIC)}</b></span>
         <span class="rv-stamp ${done ? "rv-stamp-done" : "rv-stamp-pending"}">${done ? "已回访" : "未回访"}</span>
         <span class="rv-card-actions">
-          <button type="button" class="rv-act" onclick="toggleReturnVisitEdit('${id}')">${done ? "编辑" : "回访"}</button>
+          <button type="button" class="rv-act" onclick="openReturnVisitPanelFromWorkspace('${id}')">${done ? "编辑" : "回访"}</button>
           <button type="button" class="rv-act rv-act-del" onclick="deleteReturnVisitRow('${id}')">删除</button>
           <button type="button" class="rv-act" onclick="toggleReturnVisitLog('${id}')">日志</button>
         </span>
@@ -568,7 +615,7 @@ function renderReturnVisit(row) {
         <div class="rv-card-line">回访内容：${rvText(row.item_name)}</div>
         ${row.note ? `<div class="rv-card-note">${rvText(row.note)}</div>` : ""}
         ${row.return_result ? `<div class="rv-card-line">回访结果：${rvText(row.return_result)}</div>` : ""}
-        <div class="rv-card-line">回访类型：${escapeHtml(row.return_type || "")}</div>
+        <div class="rv-card-line">回访方式：${escapeHtml(row.return_type || "")}</div>
         ${(row.intent_level || row.satisfaction) ? `<div class="rv-card-line">${row.intent_level ? `意向：${escapeHtml(row.intent_level)}　` : ""}${row.satisfaction ? `满意度：${escapeHtml(row.satisfaction)}` : ""}</div>` : ""}
       </div>
       <div class="appt-rec-edit rv-edit" hidden>
@@ -1009,28 +1056,48 @@ async function loadEditableRecordVersions(target) {
 }
 
 async function loadRecordVersions(entityType, entityId, container) {
-  if (!container || !entityType || !entityId) return;
+  if (!container || !entityType) return;
+  const id = String(entityId || "").trim();
+  // GD-10:空ID/新建 sentinel(尚未取得正式 record_id)不发请求——
+  // 否则 404 会被误报成"载入失败",空ID 则永卡"载入中"。
+  if (!id || id === "new") {
+    container.innerHTML = '<span class="empty">暂无本地版本记录</span>';
+    return;
+  }
   const versionUrls = {
-    medical_record: `/api/versions?entity_type=medical_record&entity_id=${encodeURIComponent(entityId)}&pagesize=3`,
-    appointment: `/api/versions?entity_type=appointment&entity_id=${encodeURIComponent(entityId)}&pagesize=3`,
-    return_visit: `/api/versions?entity_type=return_visit&entity_id=${encodeURIComponent(entityId)}&pagesize=3`,
+    medical_record: `/api/versions?entity_type=medical_record&entity_id=${encodeURIComponent(id)}&pagesize=3`,
+    appointment: `/api/versions?entity_type=appointment&entity_id=${encodeURIComponent(id)}&pagesize=3`,
+    return_visit: `/api/versions?entity_type=return_visit&entity_id=${encodeURIComponent(id)}&pagesize=3`,
   };
   const url = versionUrls[entityType];
   if (!url) {
     container.textContent = "版本记录类型不支持";
     return;
   }
+  // 序号守卫:快速重进/重试并发时,旧请求(慢返回或失败)不得覆盖新结果
+  const token = String((Number(container.dataset.versionReq) || 0) + 1);
+  container.dataset.versionReq = token;
+  const fail = detail => {
+    // 真实 HTTP/网络错误如实报(带安全的状态码),不伪装成"暂无";给可点重试
+    container.innerHTML = `<span class="empty">版本记录载入失败${detail ? `(${escapeHtml(detail)})` : ""}</span> `
+      + '<button type="button" class="plain-button" data-version-retry>重试</button>';
+    const retry = container.querySelector("[data-version-retry]");
+    if (retry) retry.addEventListener("click", () => loadRecordVersions(entityType, id, container));
+  };
   let data;
   try {
     const res = await fetch(url);
+    if (container.dataset.versionReq !== token) return;
     if (!res.ok) {
-      container.textContent = "版本记录载入失败";
+      fail(String(res.status));
       return;
     }
     data = await res.json();
+    if (container.dataset.versionReq !== token) return;
   } catch {
     // 网络异常：避免面板永卡"载入中"和 unhandled rejection
-    container.textContent = "版本记录载入失败";
+    if (container.dataset.versionReq !== token) return;
+    fail("网络异常");
     return;
   }
   const rows = data.list || [];

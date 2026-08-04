@@ -53,7 +53,14 @@ async function fetchRolePerf(target, role) {
   const rows = d.rows || [];
   const head = `<div class="rpt-summary">${escapeHtml(d.start || "")} ~ ${escapeHtml(d.end || "")}　共 <b>${rows.length}</b> 人</div>`;
   if (!rows.length) {
-    const emptyMsg = (role === "doctor" || role === "nurse") ? "该区间无就诊记录" : "本地暂无该角色的配台数据";
+    // GD-07:空结果要区分"确实无就诊"和"有就诊但无法归类"(病历没填医生且线索不唯一)
+    const u0 = d.unclassified;
+    const unclCount = u0 ? (Number(u0.first.visit) || 0) + (Number(u0.revisit.visit) || 0) : 0;
+    const emptyMsg = (role === "doctor" || role === "nurse")
+      ? (unclCount > 0
+        ? `该区间有 ${unclCount} 次就诊无法唯一归类到医生(病历未填医生,预约/处置线索也不唯一),未计入任何人`
+        : "该区间无就诊记录")
+      : "本地暂无该角色的配台数据";
     target.innerHTML = head + `<div class="empty">${emptyMsg}</div>`;
     return;
   }
@@ -65,14 +72,15 @@ async function fetchRolePerf(target, role) {
   const trs = rows.map(r => `<tr><td>${escapeHtml(r.name || "")}</td>${cell(r, "first")}${cell(r, "revisit")}</tr>`).join("");
   const t = d.total || {first: {}, revisit: {}};
   const totalRow = `<tr class="rpt-total"><td><b>总合计</b></td>${cell(t, "first")}${cell(t, "revisit")}</tr>`;
-  // 未归类(账单关联不上就诊的实收),仅医生统计有,有金额才显示
+  // 未归类:关联不上就诊的收款 + 无法唯一归类到医生的就诊量(GD-07),有数才显示
   let uncl = "";
   const u = d.unclassified;
-  if (u && (u.first.paid || u.first.receivable)) {
-    uncl = `<tr class="rpt-uncl"><td>(未归类·关联不上就诊的收款)</td>
-      <td style="text-align:right">—</td><td style="text-align:right">—</td>
+  if (u && (u.first.paid || u.first.receivable || u.first.visit || u.revisit.visit)) {
+    uncl = `<tr class="rpt-uncl"><td>(未归类)</td>
+      <td style="text-align:right">${num(u.first.visit) || "—"}</td><td style="text-align:right">—</td>
       <td style="text-align:right"><b>${money(u.first.paid)}</b></td><td style="text-align:right">${money(u.first.receivable)}</td>
-      <td colspan="4" style="text-align:left;color:#888">约6%账单缺就诊关联，单列不并入初/复诊</td></tr>`;
+      <td style="text-align:right">${num(u.revisit.visit) || "—"}</td>
+      <td colspan="3" style="text-align:left;color:#888">病历缺医生或账单缺就诊关联，单列不并入具体医生</td></tr>`;
   }
   target.innerHTML = head + `<div class="rpt-scroll">
     <table class="data-table">

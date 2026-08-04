@@ -418,6 +418,7 @@ function renderWorkspaceRail(p, summary) {
     ${vip ? `<div class="workspace-vip-badge">VIP：${escapeHtml(vip)}</div>` : ""}
     <div class="rail-tags" id="railTags"></div>
     ${renderBizOverview(summary.business)}
+    <button type="button" class="plain-button rail-fields-toggle" data-rail-fields-toggle>详细资料</button>
     <div class="workspace-rail-fields">
       ${pair("电话", escapeHtml(p.phone || ""))}
       ${pair("病历号", escapeHtml(p.chart_no || "") || sv("patientid") || escapeHtml(p.patient_identity || ""))}
@@ -429,6 +430,16 @@ function renderWorkspaceRail(p, summary) {
       ${pair("备注", sv("remark"))}
     </div>
   `;
+  // GD-02:手机端详细字段收起态按患者记账——换患者收起,同患者重渲染(如收款后刷新)保留展开
+  if (rail.dataset.railExpandedFor !== pid) {
+    rail.classList.remove("rail-expanded");
+    delete rail.dataset.railExpandedFor;
+  }
+  const fieldsToggle = rail.querySelector("[data-rail-fields-toggle]");
+  if (fieldsToggle) fieldsToggle.addEventListener("click", () => {
+    if (rail.classList.toggle("rail-expanded")) rail.dataset.railExpandedFor = pid;
+    else delete rail.dataset.railExpandedFor;
+  });
   // #105 头像上传用闭包绑定(pid 不拼进 inline JS,避免注入)
   const av = rail.querySelector("[data-avatar-upload]");
   if (av) av.addEventListener("click", () => uploadPatientAvatar(pid));
@@ -537,12 +548,17 @@ function workspaceSexAgeText(p) {
 }
 
 function ageFromBirthday(birthday) {
-  const match = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(String(birthday || "").trim());
-  if (!match) return null;
-  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const s = String(birthday || "").trim();
+  const match = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
+  const yearOnly = !match && /^(\d{4})$/.test(s);   // 年龄直填只存推算出生年
+  if (!match && !yearOnly) return null;
+  const year = Number(match ? match[1] : s);
   const now = bjToday();
   let age = now.getFullYear() - year;
-  if (now.getMonth() + 1 < month || (now.getMonth() + 1 === month && now.getDate() < day)) age -= 1;
+  if (match) {
+    const [month, day] = [Number(match[2]), Number(match[3])];
+    if (now.getMonth() + 1 < month || (now.getMonth() + 1 === month && now.getDate() < day)) age -= 1;
+  }
   return age >= 0 && age <= 150 ? age : null;
 }
 

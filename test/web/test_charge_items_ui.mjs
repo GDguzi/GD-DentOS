@@ -638,7 +638,7 @@ test("收费项目变更会失效处置选择器缓存并更新静态资源版�
   assert.strictEqual(sandbox.__cache.generation, 1);
 
   const versionedResources = [
-    '<link rel="stylesheet" href="/styles.css?v=2026-08-02-quick-checkin-1">',
+    '<link rel="stylesheet" href="/styles.css?v=2026-08-04-r3">',
     '<script src="/audit_log.js?v=2026-07-27-charge-items"></script>',
     '<script src="/treatment_plan_editor.js?v=2026-07-27-charge-items"></script>',
     '<script src="/charge_items.js?v=2026-07-27-charge-items"></script>',

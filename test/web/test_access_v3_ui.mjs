@@ -2216,11 +2216,11 @@ test("旧 staff/user/role 权限通过唯一 access 入口合并承载", () => {
 });
 
 test("配置中心缓存串锁定人员与权限合并版本", () => {
-  assert.match(indexSrc, /\/config_center\.js\?v=2026-07-19-access-tree/);
+  assert.match(indexSrc, /\/config_center\.js\?v=2026-08-04-r3/);
   assert.match(indexSrc, /\/role_permissions\.js\?v=2026-07-19-access-tree/);
-  assert.match(indexSrc, /\/workspace_tabs\.js\?v=2026-07-17-workspace-leave-guard/);
-  assert.match(indexSrc, /\/patient_workspace\.js\?v=2026-08-02-quick-checkin-1/);
-  assert.match(indexSrc, /\/app\.js\?v=2026-08-02-quick-checkin-1/);
+  assert.match(indexSrc, /\/workspace_tabs\.js\?v=2026-08-04-r3/);
+  assert.match(indexSrc, /\/patient_workspace\.js\?v=2026-08-04-r3/);
+  assert.match(indexSrc, /\/app\.js\?v=2026-08-04-r3/);
 });
 
 test("付款方式齿轮统一使用新旧兼容能力判断", () => {

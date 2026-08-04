@@ -96,3 +96,23 @@ class AppSettingsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SimpleBillingFeatureTest(AppSettingsTest):
+    """简易收费模式开关:默认关;配置管理可开;部分更新不串改会员开关。"""
+
+    def test_simple_billing_default_off(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            client = self._client(tmp)
+            feats = client.get("/api/settings/features").json()
+            self.assertIs(feats["simple_billing_enabled"], False)
+            self.assertIs(feats["membership_enabled"], True)
+
+    def test_simple_billing_toggle_and_persist(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            client = self._client(tmp)
+            resp = client.put("/api/settings/features", json={"simple_billing_enabled": True})
+            self.assertEqual(resp.status_code, 200)
+            feats = client.get("/api/settings/features").json()
+            self.assertIs(feats["simple_billing_enabled"], True)
+            self.assertIs(feats["membership_enabled"], True, "只传一个开关不得串改另一个")

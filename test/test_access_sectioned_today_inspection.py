@@ -269,6 +269,59 @@ class SectionedTodayInspectionTest(unittest.TestCase):
             "p2", {item["patient_identity"] for item in billing_payload["walkins"]}
         )
 
+    # ---- GD-05:summary 是唯一汇总权威,total 覆盖全部可见条目,状态数守恒 ----
+
+    def test_summary_total_covers_all_visible_entries_and_statuses_balance(self):
+        payload, _ = self._request(
+            {"patient.profile.view", "billing.view", "audit.view"}
+        )
+        visible = (
+            len(payload["appointments"]) + len(payload["orders"])
+            + len(payload["bills"]) + len(payload["return_visits"])
+            + len(payload["walkins"])
+        )
+        s = payload["summary"]
+        self.assertEqual(s["total"], visible)
+        self.assertEqual(s["ok"] + s["warn"] + s["missing"] + s["error"], s["total"])
+        for item in payload["return_visits"]:
+            self.assertIn(item["overall"], ("ok", "warn"))
+        for item in payload["walkins"]:
+            self.assertEqual(item["overall"], "warn")
+
+    def test_summary_total_self_consistent_without_billing(self):
+        payload, _ = self._request({"patient.profile.view", "audit.view"})
+        visible = (
+            len(payload["appointments"]) + len(payload["orders"])
+            + len(payload["return_visits"]) + len(payload["walkins"])
+        )
+        s = payload["summary"]
+        self.assertEqual(s["total"], visible)
+        self.assertEqual(s["ok"] + s["warn"] + s["missing"] + s["error"], s["total"])
+
+    def test_completed_return_visit_is_ok_and_pending_is_warn(self):
+        with real_connect(self.db_path) as conn:
+            conn.execute(
+                "update return_visits set status = '已回访', "
+                "actual_date = '2026-07-16' where return_visit_id = 'rv1'"
+            )
+            conn.commit()
+        payload, _ = self._request({"patient.profile.view", "audit.view"})
+        self.assertEqual(payload["return_visits"][0]["overall"], "ok")
+
+    def test_order_pay_state_derived_from_bill_not_stale_status(self):
+        # 处置状态列滞后(priced)但账单已结清 → 派生 pay_state=paid;原 status 字段保持不动
+        with real_connect(self.db_path) as conn:
+            conn.execute(
+                "update treatment_orders set status = 'priced' where order_id = 'o1'"
+            )
+            conn.commit()
+        payload, _ = self._request(
+            {"patient.profile.view", "billing.view", "audit.view"}
+        )
+        order = payload["orders"][0]
+        self.assertEqual(order["status"], "priced")
+        self.assertEqual(order["pay_state"], "paid")
+
 
 if __name__ == "__main__":
     unittest.main()

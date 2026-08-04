@@ -108,12 +108,9 @@ jobs:
           done
           if [ "$ok" != "1" ]; then grep -v "已建管理员" out.log || true; kill $pid 2>/dev/null || true; exit 1; fi
           curl -sf -o /dev/null http://127.0.0.1:8892/ || { kill $pid 2>/dev/null || true; exit 1; }
-          # 拍照建档：/api/ocr/status 要登录才给看，用首启打印的管理员口令登一下。
+          # 拍照建档：/api/ocr/status 要登录才给看，用出厂默认口令 admin 登一下。
           # 不断言这条，OCR 依赖漏装时包照样打得出来、冒烟照样绿，只有用户下载后才发现入口没了。
-          # `|| true` 不可省：grep 没命中会让整条管道在 pipefail 下失败，set -e 当场静默退出，
-          # 下面那句诊断根本打不出来 —— CI 里就成了"失败但不说为什么"(本机实测踩到)。
-          pw="$(grep -o 'admin / [a-f0-9]*' out.log | head -1 | awk '{print $3}' || true)"
-          [ -n "$pw" ] || { echo "没从启动输出里取到首启口令，冒烟无法验证 OCR"; kill $pid 2>/dev/null || true; exit 1; }
+          pw="admin"
           curl -sf -c jar.txt -X POST http://127.0.0.1:8892/api/auth/login \
             -H 'Content-Type: application/json' -d "{\"username\":\"admin\",\"password\":\"$pw\"}" -o /dev/null \
             || { echo "冒烟登录失败"; kill $pid 2>/dev/null || true; exit 1; }

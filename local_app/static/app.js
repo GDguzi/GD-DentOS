@@ -496,11 +496,18 @@ function refreshWorkDateViews() {
   if (activeView === "billing") loadBillingModule();
 }
 
-function changeWorkDate(offsetDays) {
-  if (!workDate) return;
+// 纯日期层:只更新共享 workDate 并返回新日期,不渲染任何视图。
+// 工作检查等自管刷新的视图直接用它,避免被 refreshWorkDateViews 的今日工作台覆盖(GD-04)。
+function shiftWorkDate(offsetDays) {
+  if (!workDate) return null;
   const date = offsetDays === 0 ? bjToday() : dateFromWorkValue(workDate.value);
   date.setDate(date.getDate() + Number(offsetDays || 0));
   workDate.value = localDateValue(date);
+  return date;
+}
+
+function changeWorkDate(offsetDays) {
+  if (shiftWorkDate(offsetDays) === null) return;
   refreshWorkDateViews();
 }
 
@@ -556,11 +563,13 @@ function avatarHtml(p, extraClass) {
 window.avatarHtml = avatarHtml;
 
 function _ageFromBirthday(b) {
-  const m = String(b || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!m || m[1] === "0000") return "";
+  const s = String(b || "").trim();
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const y = m ? m[1] : ((s.match(/^(\d{4})$/) || [])[1]);   // 年龄直填只存推算出生年
+  if (!y || y === "0000") return "";
   const now = bjToday();
-  let age = now.getFullYear() - (+m[1]);
-  if (now.getMonth() + 1 < (+m[2]) || (now.getMonth() + 1 === (+m[2]) && now.getDate() < (+m[3]))) age--;
+  let age = now.getFullYear() - (+y);
+  if (m && (now.getMonth() + 1 < (+m[2]) || (now.getMonth() + 1 === (+m[2]) && now.getDate() < (+m[3])))) age--;
   return age >= 0 && age < 130 ? String(age) : "";
 }
 async function runQSuggest(val) {

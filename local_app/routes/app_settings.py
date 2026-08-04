@@ -35,7 +35,11 @@ _DEFAULT_CLINIC = {
 # 诊室列表：候诊队列给患者分诊室用(将来对接语音系统,按诊室归属操作)。可在设置里改。
 _DEFAULT_ROOMS = {"list": ["诊室1", "诊室2", "诊室3", "治疗室"]}
 # 功能开关：诊所按需启停模块。membership_enabled=会员储值(默认开,不用会员可关掉)。
-_DEFAULT_FEATURES = {"membership_enabled": True}
+_DEFAULT_FEATURES = {
+    "membership_enabled": True,
+    # 简易收费模式:处置编辑器多一个「处置并结算」——原价直接出待收费单并跳收费(小诊所快流程)
+    "simple_billing_enabled": False,
+}
 # #638 付款方式：收费弹窗下拉的候选名单,前台可在弹窗⚙️里自定义(默认=原写死8种,零迁移)。
 _DEFAULT_PAY_METHODS = {"list": ["现金", "微信", "支付宝", "银行卡", "社保卡", "医保", "其他"]}
 
@@ -216,7 +220,10 @@ def create_app_settings_router(db_path):
         payload = payload or {}
         with connect(db_path) as conn:
             current = _read(conn, "features", _DEFAULT_FEATURES)
-            value = {"membership_enabled": _as_bool(payload.get("membership_enabled"), current["membership_enabled"])}
+            value = {
+                "membership_enabled": _as_bool(payload.get("membership_enabled"), current["membership_enabled"]),
+                "simple_billing_enabled": _as_bool(payload.get("simple_billing_enabled"), current["simple_billing_enabled"]),
+            }
             conn.execute(
                 "insert into app_settings(key, value, updated_at) values ('features', ?, ?) "
                 "on conflict(key) do update set value = excluded.value, updated_at = excluded.updated_at",

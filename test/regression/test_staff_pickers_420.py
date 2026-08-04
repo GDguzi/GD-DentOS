@@ -49,6 +49,20 @@ class StaffPickers420Test(unittest.TestCase):
         self.assertIn("bindStaffInputs(body)", t)
 
 
+    def test_staff_members_contract_reads_members(self):
+        # GD-03:/api/staff-members 返回 {members,totalcount},全站禁止猜测式读取 .list
+        for name in ("appointment_views.js", "appointment_grid.js"):
+            t = _t(name)
+            self.assertIn("doctors = rD.ok ? (await rD.json()).members || [] : []", t, name)
+            self.assertNotIn("rD.json()).list", t, name)
+
+    def test_staff_cache_failure_not_poisoned_and_datalists_refresh(self):
+        # GD-03:请求失败不得把空数组当缓存;强刷后已存在 datalist 必须重填
+        t = _t("staff_manager.js")
+        self.assertIn("catch { staffCache = null; return []; }", t,
+                      "ensureStaff 失败分支必须清缓存以便重试")
+        self.assertIn("function refreshStaffDatalists()", t)
+
     def test_pay_cashier_picker_666(self):
         # #666 收款弹窗收银员必须接人员库(用户拍板:只放前台岗),弹窗打开时绑定
         t = _t("index.html")

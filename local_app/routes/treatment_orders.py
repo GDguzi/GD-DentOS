@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException
 
 from local_app.timeutil import now_str
 from local_app.validation import valid_int_qty
-from local_app.auth import audit_write, require_perm
+from local_app.auth import audit_write, in_target_mode, require_perm
 from local_app.db import begin_immediate, connect, new_id
 from local_app.routes.patient_common import require_patient   # 审计R2:软删患者按不存在处理(共享校验)
 
@@ -201,6 +201,12 @@ def create_treatment_orders_router(db_path):
     # ---------- 新增处置（待划价，不出收费单） ----------
     @router.post("/api/patients/{patient_identity}/treatment-orders")
     def create_order(patient_identity: str, payload: dict):
+        # 简易结算(price_now)=开单+按原价出待收费单一步到位——等于同时行使划价权,
+        # 与 /price 路由同口径把门:v3 查精确键 treatment_order.price;
+        # 旧权限模式的 /price 本身只由 treatment.manage 把门(下一行照常检查),
+        # 旧矩阵没有 v3 键,不能拿它误伤旧模式。
+        if (payload or {}).get("price_now") and in_target_mode():
+            require_perm("treatment_order.price")
         require_perm("treatment.manage")
         payload = payload or {}
         lines = _parse_order_lines(payload)

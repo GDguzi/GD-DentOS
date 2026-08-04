@@ -56,6 +56,11 @@ def main():
     applied = apply_migrations(DEFAULT_DB_PATH)
     if applied:
         print(f"  已应用迁移: {', '.join(applied)}", flush=True)
+    # 出厂内置同意书:全新库自动带 25 套行业通用模板(用户动过模板后永不重种)
+    from local_app.consent_seed import ensure_consent_seed
+    seeded = ensure_consent_seed(DEFAULT_DB_PATH)
+    if seeded:
+        print(f"  已内置知情同意书模板 {seeded} 套", flush=True)
     # SQLite 与文件系统无法共享一个事务：必须在构建应用、接受任何请求前
     # 收敛上次中断的客户通附件操作。不一致时直接阻止启动，不带病服务。
     images_dir = Path(
@@ -94,6 +99,11 @@ def main():
     if seeded:
         print(f"  ★ 首次启动已建管理员：{seeded[0]} / {seeded[1]}  （请尽快登录后改密）", flush=True)
         print("    凭据也已存到 data/.admin_initial_password", flush=True)
+    # 弱口令+局域网是最危险组合:每次启动实测,不只首启提示一次
+    from local_app.auth import admin_password_is_default
+    if lan and admin_password_is_default(DEFAULT_DB_PATH):
+        print("  ⚠️ 管理员仍是默认密码 admin，且已开局域网——同一 WiFi 任何人都能登录！", flush=True)
+        print("     请立即登录 →「配置管理 → 人员与权限 → 账号管理」改密；或设 DENTAL_LOCAL_ONLY=1 只听本机。", flush=True)
     print("=" * 48, flush=True)
 
     # 影像目录默认 data/images；设 DENTAL_IMAGES 可换(演示实例用独立占位图目录,

@@ -68,6 +68,22 @@ _EDITABLE_FIELDS = (
     "satisfaction",
 )
 MAX_BATCH_DELETE_ITEMS = 200
+
+
+def normalized_rv_channel(channel, return_type):
+    """GD-06 回访方式唯一映射:显式 channel 优先(原样保留);
+    否则由中文 return_type 推导——含"电话"→phone,含"微信"→wechat,其余非空→other,空→空。"""
+    explicit = str(channel or "").strip()
+    if explicit:
+        return explicit
+    rtype = str(return_type or "").strip()
+    if not rtype:
+        return ""
+    if "电话" in rtype:
+        return "phone"
+    if "微信" in rtype:
+        return "wechat"
+    return "other"
 _MIGRATION_MERGE_FIELDS = (
     "return_doctor",
     "visitor",
@@ -668,6 +684,9 @@ def create_return_visit(db_path, patient_identity, payload, actor):
                 field: _request_text(checked_payload, field, default="")
                 for field in _CREATE_FIELDS
             }
+            values["channel"] = normalized_rv_channel(
+                values["channel"], values["return_type"]
+            )
             _require_active_patient(conn, patient_identity)
             return_visit_id = new_id("local-rv")
             now = timeutil.now_str()
@@ -755,6 +774,13 @@ def update_return_visit(db_path, return_visit_id, payload, actor):
                     status_code=400, detail="no_editable_fields"
                 )
             current = _require_active_visit(conn, return_visit_id)
+            # GD-06:改了回访方式却没显式传 channel → 按新 return_type 重推导
+            if not str(updates.get("channel", "") or "").strip() and (
+                "return_type" in updates or "channel" in updates
+            ):
+                updates["channel"] = normalized_rv_channel(
+                    "", updates.get("return_type", current["return_type"])
+                )
             require_no_pending_attachment_op(
                 conn, parent_type="return_visit", parent_id=return_visit_id
             )

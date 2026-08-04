@@ -63,6 +63,34 @@ def create_consent_forms_router(db_path):
         items = [{"template_id": r["template_id"], "name": r["name"], "category": r["category"]} for r in rows]
         return {"templates": items, "totalcount": len(items)}
 
+    @router.post("/api/consent-templates")
+    def create_template(payload: dict):
+        """签署弹窗内直接新建模板(名称/类别/正文都必填);同名在用模板拒绝防重。"""
+        require_perm("consent.manage")
+        payload = payload or {}
+        name = str(payload.get("name") or "").strip()
+        category = str(payload.get("category") or "").strip()
+        body = str(payload.get("body") or "").strip()
+        if not name or not category or not body:
+            raise HTTPException(status_code=400, detail="模板名称、类别、正文都不能为空")
+        now = now_str()
+        template_id = new_id("consent-tpl")
+        with connect(db_path) as conn:
+            begin_immediate(conn)
+            dup = conn.execute(
+                "select 1 from consent_templates where active = 1 and name = ?",
+                (name,),
+            ).fetchone()
+            if dup:
+                raise HTTPException(status_code=409, detail="已有同名的在用模板")
+            conn.execute(
+                "insert into consent_templates(template_id, name, category, body, source, "
+                "active, created_at, updated_at) values (?, ?, ?, ?, 'local', 1, ?, ?)",
+                (template_id, name, category, body, now, now),
+            )
+            conn.commit()
+        return {"template_id": template_id, "name": name, "category": category}
+
     @router.get("/api/consent-templates/{template_id}")
     def get_template(template_id: str):
         """单个模板详情（含正文 body）。"""
@@ -187,7 +215,8 @@ def create_consent_forms_router(db_path):
         require_perm("consent.manage")   # #482：知情同意签署件读守卫用本模块对应权限
         with connect(db_path) as conn:
             rows = conn.execute(
-                "select document_id, template_id, template_name, bill_id, order_id, content_hash, tsa_token, status, signed_at "
+                "select document_id, template_id, template_name, bill_id, order_id, content_hash, tsa_token, status, signed_at, "
+                "json_extract(iif(json_valid(content_json), content_json, '{}'), '$.sign_method') as sign_method "
                 "from consent_documents where patient_identity = ? order by created_at desc",
                 (patient_identity,),
             ).fetchall()
@@ -195,7 +224,9 @@ def create_consent_forms_router(db_path):
                  "template_name": r["template_name"], "bill_id": r["bill_id"],
                  "order_id": r["order_id"],
                  "content_hash": r["content_hash"], "has_tsa": bool(r["tsa_token"]), "status": r["status"],
-                 "signed_at": r["signed_at"]} for r in rows]
+                 "signed_at": r["signed_at"],
+                 # 旧件没记 sign_method 的都是电子签(纸质留档机制后加)
+                 "sign_method": r["sign_method"] or "electronic"} for r in rows]
         return {"documents": docs, "totalcount": len(docs)}
 
     @router.get("/api/consent-documents/{document_id}")

@@ -264,6 +264,7 @@ async function renderShopSettings(body) {
         <label><input type="checkbox" data-shop="show_doctor_column"${appt.show_doctor_column ? " checked" : ""}> 预约按医生分列</label>
         <label class="cfg-wide">诊室列表(逗号分隔) <input class="ord-input" data-shop="rooms" value="${escapeAttr((rooms.list || []).join(","))}"></label>
         <label><input type="checkbox" data-shop="membership_enabled"${feats.membership_enabled ? " checked" : ""}> 启用会员储值模块</label>
+        <label><input type="checkbox" data-shop="simple_billing_enabled"${feats.simple_billing_enabled ? " checked" : ""}> 启用简易收费模式（处置里多一个「处置并结算」：按原价直接出待收费单并跳到收费）</label>
         <div class="cfg-shop-foot">
           <button type="button" class="tooth-confirm-btn" data-shop-save>保存全部</button>
           <span class="record-save-status" data-shop-status></span>
@@ -286,7 +287,8 @@ async function renderShopSettings(body) {
         fetch("/api/settings/rooms", {method: "PUT", headers: {"Content-Type": "application/json"},
           body: JSON.stringify({list: val("rooms").value.split(/[,，]/).map(s => s.trim()).filter(Boolean)})}),
         fetch("/api/settings/features", {method: "PUT", headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({membership_enabled: val("membership_enabled").checked})}),
+          body: JSON.stringify({membership_enabled: val("membership_enabled").checked,
+            simple_billing_enabled: val("simple_billing_enabled").checked})}),
       ]);
       const bad = results.find(r => !r.ok);
       if (bad) { const m = await bad.json().catch(() => ({})); status.textContent = "保存失败：" + (m.detail || bad.status); return; }
@@ -300,12 +302,65 @@ async function renderShopSettings(body) {
   });
 }
 
+// 患者批量导入(CSV/XLSX/SQLite):选文件 → 预览(自动匹配到的字段/条数/问题) → 确认 → 入库。
+// 同名同电话自动跳过防重复导;认不出的列忽略不导。
+const IMPORT_FIELD_CN = {
+  display_name: "姓名", phone: "电话", sex: "性别", birthday: "生日", id_card: "身份证号",
+  address: "地址", wechat: "微信", email: "邮箱", occupation: "职业", work_unit: "工作单位",
+  allergy_history: "过敏史", medication_history: "用药史", patient_type: "患者类型",
+  responsible_doctor: "责任医生", consultant: "咨询师", referral_source: "患者来源",
+  introducer_name: "介绍人", remark: "备注",
+};
+
+function importPatientsFile() {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".csv,.xlsx,.xls,.db,.sqlite,.sqlite3";
+  input.onchange = async () => {
+    const f = input.files && input.files[0];
+    if (!f) return;
+    const preview = new FormData();
+    preview.append("file", f);
+    preview.append("mode", "preview");
+    let prev;
+    try {
+      const res = await fetch("/api/patients/import", {method: "POST", body: preview});
+      if (!res.ok) { const m = await res.json().catch(() => ({})); window.alert("解析失败：" + (m.detail || res.status)); return; }
+      prev = await res.json();
+    } catch { window.alert("解析失败（网络异常）"); return; }
+    const matched = (prev.matched_columns || [])
+      .map(m => `「${m.header}」→${IMPORT_FIELD_CN[m.field] || m.field}`).join("、");
+    const unmatched = (prev.unmatched_headers || []).filter(Boolean).join("、");
+    const issues = (prev.issues || []).slice(0, 5).join("\n");
+    if (!prev.importable) {
+      window.alert(`没有可导入的行（共 ${prev.total_rows} 行）。\n识别到的列：${matched || "一个都没认出——表头需要含「姓名」和「电话」"}\n${issues}`);
+      return;
+    }
+    const msg = `共 ${prev.total_rows} 行,可导入 ${prev.importable} 行。\n\n识别到的列：${matched}` +
+      (unmatched ? `\n没认出的列(忽略不导)：${unmatched}` : "") +
+      (issues ? `\n\n问题行：\n${issues}` : "") +
+      `\n\n确认导入吗？同名同电话的会自动跳过。`;
+    if (!window.confirm(msg)) return;
+    const commit = new FormData();
+    commit.append("file", f);
+    commit.append("mode", "commit");
+    try {
+      const res = await fetch("/api/patients/import", {method: "POST", body: commit});
+      if (!res.ok) { const m = await res.json().catch(() => ({})); window.alert("导入失败：" + (m.detail || res.status)); return; }
+      const r = await res.json();
+      window.alert(`导入完成：新建 ${r.created} 人，重复跳过 ${r.skipped_duplicates} 人。`);
+    } catch { window.alert("导入失败（网络异常）"); }
+  };
+  input.click();
+}
+
 // ===== #617第4步 数据备份(仅管理员;后端 require_admin 是闸门) =====
 async function renderBackupTab(body) {
   body.innerHTML = `
     <section class="panel">
       <div class="panel-head"><span>数据备份</span>
-        <span class="cfg-hint">整库热备(不锁库)存到 data/backups；可勾选打包患者影像；下载后请妥善保管(含全量隐私)</span></div>
+        <span class="cfg-hint">整库热备(不锁库)存到 data/backups；可勾选打包患者影像；下载后请妥善保管(含全量隐私)。
+          注意：本系统数据【明文存储、不加密】——数据完全归你,保管责任也完全在你。电脑要设开机密码、data 文件夹别外传、坚持每周备份并把备份放到另一台设备/U盘。</span></div>
       <div class="panel-body">
         <div class="rpt-filter">
           <label><input type="checkbox" data-bk-images> 连患者影像一起打包(zip,较大)</label>
@@ -314,7 +369,18 @@ async function renderBackupTab(body) {
         </div>
         <div data-bk-list><div class="module-loading">载入中...</div></div>
       </div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><span>数据导入</span>
+        <span class="cfg-hint">从旧系统/花名册批量导入患者：支持 CSV、Excel(.xlsx)、SQLite(.db)；表头自动匹配建档字段，先预览确认再入库，同名同电话自动跳过</span></div>
+      <div class="panel-body">
+        <div class="rpt-filter">
+          <button type="button" class="tooth-confirm-btn" data-bk-import>选择文件导入患者</button>
+        </div>
+        <div class="cfg-hint" style="margin-top:8px">⚠️ 加密的数据库文件（部分旧软件的 .db）打不开、读不进来。碰到这种情况：趁旧软件还能用，先在它里面「导出 Excel / 患者名单」，再拿导出的文件到这里导入；旧软件没有导出功能的，把患者列表复制粘贴到 Excel（表头写上姓名、电话）也能导。</div>
+      </div>
     </section>`;
+  body.querySelector("[data-bk-import]").addEventListener("click", () => importPatientsFile());
   const listEl = body.querySelector("[data-bk-list]");
   async function refreshList() {
     let d;

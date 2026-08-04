@@ -217,6 +217,8 @@ function openNewAppointment(prefill) {
   // 医生改了 → 时段表按该医生重拉(看他当天排班)
   if (doctor) doctor.oninput = () => renderApptTimeline();
   if (typeof bindStaffInputs === "function") bindStaffInputs(m);   // 预约医生/咨询师选人 datalist
+  // GD-01:打开/重开滚动位置回顶(手机单滚动容器=appt-dialog;桌面各栏独立滚)
+  m.querySelectorAll(".appt-dialog, .appt-col").forEach(el => { el.scrollTop = 0; });
   m.hidden = false;
   if (search) {
     search.oninput = () => searchApptPatients(search.value);
@@ -291,7 +293,13 @@ async function searchApptPatients(keyword) {
   const seq = ++_apptSearchSeq;
   let data;
   try { data = await (await fetch(`/api/patients?q=${encodeURIComponent(keyword)}&pagesize=8`)).json(); }
-  catch { return; }
+  catch {
+    // 网络失败不再静默——否则看起来像"搜不到"(接口本身支持拼音/首字母/手机号)
+    if (seq !== _apptSearchSeq) return;
+    results.hidden = false;
+    results.innerHTML = `<div class="appt-patient-empty">搜索失败（网络异常），请重试</div>`;
+    return;
+  }
   if (seq !== _apptSearchSeq) return;   // 旧搜索响应，丢弃
   const list = data.list || [];
   if (!list.length) { results.hidden = false; results.innerHTML = `<div class="appt-patient-empty">无匹配患者</div>`; return; }

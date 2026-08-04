@@ -6,8 +6,8 @@
 2. 选端口——DENTAL_PORT 显式指定就用它；未指定时 8765 空闲用 8765，
    被占则让系统分一个空闲端口并在控制台说清（前台电脑常已有一个实例在跑）。
 3. 起服务（完整复用 run_local 启动序列：建库→v3 首启引导→迁移→附件恢复→建管理员）
-   ，健康检查 200 后自动打开浏览器。首启管理员密码打印在本控制台，
-   也存在数据目录的 .admin_initial_password。
+   ，健康检查 200 后自动打开浏览器。首启管理员 admin/admin（出厂默认，
+   登录页会提醒改密），凭据也存在数据目录的 .admin_initial_password。
 
 冻结打包见 packaging/windows/；本模块不含任何平台专属 API，macOS/Windows 通吃。
 """
@@ -78,10 +78,10 @@ def apply_desktop_defaults(env):
     """桌面一键版的默认值（环境变量显式设置过的一律不动）：
     - 只听本机：一键版一人一机用,默认不对局域网暴露;要让 iPad/手机连,自己设
       DENTAL_LOCAL_ONLY=0 并配合局域网访问口令。
-    - 首启 admin 密码不设默认值：交回核心的随机口令路径(128bit),口令打印在本控制台
-      并存 data/.admin_initial_password。绝不出厂固定弱口令——打包版一旦配合
-      DENTAL_LOCAL_ONLY=0 上局域网,固定口令等于人人可登。
-      要预设请显式给 DENTAL_ADMIN_PASSWORD。
+    - 首启 admin 密码交回核心默认(admin,用户 2026-08-03 拍板:开箱即用优先,
+      登录页对 admin 密码弹改密提醒)。默认只听本机,弱口令不直接暴露局域网;
+      设 DENTAL_LOCAL_ONLY=0 上局域网前请先改密,并配合局域网访问口令。
+      要预设其他密码显式给 DENTAL_ADMIN_PASSWORD。
     """
     env.setdefault("DENTAL_LOCAL_ONLY", "1")
 

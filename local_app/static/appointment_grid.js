@@ -75,7 +75,7 @@ async function loadAppointmentDayGrid() {
     ]);
     if (token !== _apptGridToken) return;
     settings = rS.ok ? await rS.json() : {};
-    doctors = rD.ok ? (await rD.json()).list || [] : [];
+    doctors = rD.ok ? (await rD.json()).members || [] : [];   // GD-03:staff-members 契约字段是 members
     appts = rA.ok ? (await rA.json()).list || [] : [];
     if (token !== _apptGridToken) return;
   } catch {

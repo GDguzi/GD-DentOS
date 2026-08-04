@@ -250,3 +250,46 @@ class ReturnVisitOpsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReturnVisitChannelDerivationTest(unittest.TestCase):
+    """GD-06:channel 标准字段——显式传入优先;未传/传空由中文 return_type 推导写入。"""
+
+    def _channel_of(self, db_path, rv_id):
+        with connect(db_path) as conn:
+            return conn.execute(
+                "select channel, return_type from return_visits where return_visit_id = ?",
+                (rv_id,),
+            ).fetchone()
+
+    def test_create_derives_channel_from_return_type(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path, client = _client(tmpdir)
+            for rtype, expect in (("微信", "wechat"), ("电话回访", "phone"), ("到店", "other"), ("", "")):
+                rv_id = client.post("/api/patients/p1/return-visits", json={
+                    "due_time": "2026-07-20", "item_name": "复查", "return_type": rtype,
+                }).json()["return_visit_id"]
+                row = self._channel_of(db_path, rv_id)
+                self.assertEqual(row["channel"], expect, rtype)
+                self.assertEqual(row["return_type"], rtype)   # 兼容字段原样保留
+
+    def test_create_explicit_channel_wins(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path, client = _client(tmpdir)
+            rv_id = client.post("/api/patients/p1/return-visits", json={
+                "due_time": "2026-07-20", "item_name": "复查",
+                "return_type": "微信", "channel": "phone",
+            }).json()["return_visit_id"]
+            self.assertEqual(self._channel_of(db_path, rv_id)["channel"], "phone")
+
+    def test_update_return_type_rederives_channel_when_not_explicit(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path, client = _client(tmpdir)
+            rv_id = client.post("/api/patients/p1/return-visits", json={
+                "due_time": "2026-07-20", "item_name": "复查", "return_type": "电话",
+            }).json()["return_visit_id"]
+            self.assertEqual(self._channel_of(db_path, rv_id)["channel"], "phone")
+            resp = client.put(f"/api/return-visits/{rv_id}", json={
+                "expected_revision": 1, "return_type": "微信"})
+            self.assertEqual(resp.status_code, 200)
+            self.assertEqual(self._channel_of(db_path, rv_id)["channel"], "wechat")

@@ -165,13 +165,13 @@ function openTodaySaasEntry(button) {
   // 结算简表=表格布局:表头+合计行与数据行同网格列(对齐SaaS今日结算)。
   // 总额=今日现金流入(与流水同过滤口径恒等于逐行合计);支付方式列脚给出各方式小计。
   const methodNote = (data.today_pay_methods || [])
-    .map((m) => `${escapeHtml(m.pay_type)} ${formatMoney(m.amount)}`).join("<br>");
+    .map((m) => `${escapeHtml(m.pay_type)} ${todayMoneyOrMask(m.amount)}`).join("<br>");
   const isSettled = entry === "settled";
   const footer = isSettled && summary.today_cash_in != null
     ? `<div class="settle-row settle-foot">
         <span>总合计</span><span></span><span></span><span></span>
         <span class="settle-methods">${methodNote}</span>
-        <span class="num">${formatMoney(summary.today_cash_in)}</span>
+        <span class="num">${todayMoneyOrMask(summary.today_cash_in)}</span>
       </div>` : "";
   main.innerHTML = renderTodaySimpleShell(button, label, rows, renderer, totals[entry], footer, isSettled ? SETTLE_HEAD : "");
   bindPatientDetailRows(main);
@@ -252,7 +252,7 @@ function renderTodaySettleLite(row) {
       <span>${escapeHtml(row.doctor || "")}</span>
       <span>${escapeHtml((row.pay_time || "").slice(11, 16))}</span>
       <span>${escapeHtml(row.pay_type || "")}</span>
-      <span class="num">${formatMoney(row.amount)}</span>
+      <span class="num">${todayMoneyOrMask(row.amount)}</span>
     </button>`;
 }
 
@@ -260,9 +260,9 @@ function renderTodayBillLite(row) {
   const unpaid = row.unpaid_fee != null ? row.unpaid_fee : null;
   return todayPatientRow(row.patient_identity, row.display_name, [
     row.bill_no ? `单号${row.bill_no}` : "",
-    row.total_fee != null ? `应收${formatMoney(row.total_fee)}` : "",
-    row.paid_fee != null ? `已收${formatMoney(row.paid_fee)}` : "",
-    unpaid != null && Number(unpaid) > 0.005 ? `欠${formatMoney(unpaid)}` : "",
+    row.total_fee != null ? `应收${todayMoneyOrMask(row.total_fee)}` : "",
+    row.paid_fee != null ? `已收${todayMoneyOrMask(row.paid_fee)}` : "",
+    unpaid != null && Number(unpaid) > 0.005 ? `欠${todayMoneyOrMask(unpaid)}` : "",
   ]);
 }
 
@@ -282,6 +282,7 @@ function todaySaasKpiStrip(summary = {}) {
       ${todaySaasKpiItem("今日应收", todayMoneyOrMask(summary.today_receivable))}
       ${todaySaasKpiItem("今日实收", todayMoneyOrMask(summary.today_paid))}
       ${todaySaasKpiItem("今日现金流入", todayMoneyOrMask(summary.today_cash_in))}
+      <button type="button" class="plain-button today-money-toggle" onclick="toggleTodayMoneyHidden()" title="${todayMoneyHidden() ? "金额已隐藏，点击显示" : "一键隐藏主页所有金额"}">${todayMoneyHidden() ? "🙈" : "👁"}</button>
     </section>
   `;
 }
@@ -303,7 +304,18 @@ function todayVisitBreakdown(summary = {}) {
   return `${formatCount(total)}(${formatCount(first)}/${formatCount(revisit)}/${formatCount(newVisit)})`;
 }
 
+// 主页金额一键隐藏(屏幕转给患者看时防泄露)。状态记本浏览器,刷新不丢
+function todayMoneyHidden() {
+  try { return localStorage.getItem("today_money_hidden") === "1"; } catch { return false; }
+}
+
+function toggleTodayMoneyHidden() {
+  try { localStorage.setItem("today_money_hidden", todayMoneyHidden() ? "0" : "1"); } catch { /* 隐私模式无存储,仅本次生效 */ }
+  if (latestTodayWorkData) renderTodayWork(latestTodayWorkData);
+}
+
 function todayMoneyOrMask(value) {
+  if (todayMoneyHidden()) return "****";
   return value === null || value === undefined || value === "" ? "******" : formatMoney(value);
 }
 
@@ -918,6 +930,12 @@ function openNewPatient() {
               <span id="npAgeBadge" class="np-age-badge"></span>
             </span>
           </label>
+          <label class="appt-field">年龄
+            <span class="np-birthday-wrap">
+              <input id="npAge" type="number" min="0" max="149" inputmode="numeric" class="ord-input" placeholder="不知生日填这里" oninput="updateNewPatientBirthdayFromAge()">
+              <span id="npAgeEstBadge" class="np-age-badge"></span>
+            </span>
+          </label>
           ${_npInput("npIdCard", "身份证号")}
           ${_npInput("npAddress", "地址", {wide: true})}
         </div>
@@ -1021,18 +1039,33 @@ function searchIntroducer(v) {
 }
 window.searchIntroducer = searchIntroducer;
 
-// 生日 → 实岁(按当前日期算,未到生日减一岁)
+// 生日 → 实岁(按当前日期算,未到生日减一岁)。生日有值时清掉年龄直填,两者互斥后填生效。
 function updateNewPatientAge() {
   const badge = document.getElementById("npAgeBadge");
   if (!badge) return;
   const v = (document.getElementById("npBirthday") || {}).value || "";
   const d = v ? new Date(v) : null;
   if (!d || isNaN(d.getTime())) { badge.textContent = ""; return; }
+  const ageEl = document.getElementById("npAge");
+  const estBadge = document.getElementById("npAgeEstBadge");
+  if (ageEl && ageEl.value) { ageEl.value = ""; if (estBadge) estBadge.textContent = ""; }
   const now = bjToday();
   let age = now.getFullYear() - d.getFullYear();
   const m = now.getMonth() - d.getMonth();
   if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age -= 1;
   badge.textContent = age >= 0 && age < 150 ? `${age}岁` : "";
+}
+
+// 年龄直填(不知生日时)：换算"推算出生年"，只存年份 → 各处岁数随时间自动增长
+function updateNewPatientBirthdayFromAge() {
+  const ageEl = document.getElementById("npAge");
+  const badge = document.getElementById("npAgeEstBadge");
+  if (!ageEl || !badge) return;
+  const age = parseInt(ageEl.value, 10);
+  if (!Number.isFinite(age) || age < 0 || age >= 150) { badge.textContent = ""; return; }
+  const b = document.getElementById("npBirthday");
+  if (b && b.value) { b.value = ""; updateNewPatientAge(); }
+  badge.textContent = `按 ${bjToday().getFullYear() - age} 年生推算`;
 }
 
 // ---- 拍照建档：证件图 → 预填表单。识别在本机跑，照片不落盘、不出本机 ----
@@ -1238,6 +1271,13 @@ async function submitNewPatient(mode = "save") {
       const sexEl = document.querySelector('input[name="npSex"]:checked');
       const payload = {request_id: _newPatientRequestId, sex: sexEl ? sexEl.value : ""};
       Object.entries(NEW_PATIENT_FIELD_MAP).forEach(([id, key]) => { payload[key] = val(id).trim(); });
+      if (!payload.birthday) {
+        // 年龄直填 → 只存推算出生年(如 "1990")：new Date("1990") 合法,岁数随年份自动长
+        const directAge = parseInt(val("npAge"), 10);
+        if (Number.isFinite(directAge) && directAge >= 0 && directAge < 150) {
+          payload.birthday = String(bjToday().getFullYear() - directAge);
+        }
+      }
       if (status) status.textContent = "保存中...";
       const post = () => fetch("/api/patients", {
         method: "POST",
@@ -1382,7 +1422,7 @@ function renderTodayQueueRow(row) {
         ${tqAvatar(row)}
         <span class="tq-who-text">
           <span class="tq-name-line"><span class="tq-name tq-link">${escapeHtml(row.display_name || "(无名)")}</span>${tqGenderAge(row)}</span>
-          <span class="tq-sub"><span class="tq-phone">${escapeHtml(row.phone || "")}</span>${owe ? `<span class="tq-owe-amt">欠 ¥${escapeHtml(String(Number(row.unpaid_amount)))}</span>` : ""}</span>
+          <span class="tq-sub"><span class="tq-phone">${escapeHtml(row.phone || "")}</span>${owe ? `<span class="tq-owe-amt">欠 ${escapeHtml(todayMoneyOrMask(row.unpaid_amount))}</span>` : ""}</span>
         </span>
       </span>
       <span class="tq-dim">${tqTimeCell(row)}${row.room ? ` <span class="tq-room-chip">${escapeHtml(row.room)}</span>` : ""} ${tqRegChip(row)}</span>
@@ -1526,7 +1566,7 @@ function renderTodayReturnVisit(row) {
 function renderTodayBill(row) {
   return todayPatientRow(row.patient_identity, row.display_name, [
     row.bill_no,
-    `欠 ${formatMoney(row.unpaid_fee)}`,
+    `欠 ${todayMoneyOrMask(row.unpaid_fee)}`,
   ]);
 }
 

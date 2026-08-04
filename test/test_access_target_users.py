@@ -1238,6 +1238,31 @@ class AccessTargetUsersTest(unittest.TestCase):
             ("alice", "user-self"),
         )
 
+    def test_admin_change_password_removes_initial_password_file_v3(self):
+        # #583 在 v3 认证分支的对齐:admin 改密后首启明文密码文件必须删除。
+        # 旧测试只覆盖非 v3 create_app,v3 路由漏了这步曾假绿(合成库复现)。
+        marker = self.db_path.parent / ".admin_initial_password"
+        marker.write_text("admin / admin\n", encoding="utf-8")
+        response = self.admin.post(
+            "/api/auth/change-password",
+            json={"old_password": ADMIN_PASSWORD, "new_password": "new-admin-pw"},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertFalse(marker.exists(), "v3 admin 改密后明文初始密码文件必须删除")
+
+    def test_non_admin_change_password_keeps_initial_password_file_v3(self):
+        # 非 admin 改密不动 admin 的初始密码文件
+        marker = self.db_path.parent / ".admin_initial_password"
+        marker.write_text("admin / admin\n", encoding="utf-8")
+        alice = TestClient(self.app)
+        _login(alice, "alice", SELF_PASSWORD)
+        response = alice.post(
+            "/api/auth/change-password",
+            json={"old_password": SELF_PASSWORD, "new_password": "new-self-2"},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertTrue(marker.exists(), "非 admin 改密不应删 admin 初始密码文件")
+
     def test_surrogate_passwords_are_400_with_no_side_effects(self):
         create_response = _raw_post(
             self.admin,

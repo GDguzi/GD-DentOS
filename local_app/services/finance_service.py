@@ -364,11 +364,84 @@ def split_persons(s):
     return out
 
 
+def _empty_doctor_resolver(conn, raw, start, end):
+    """GD-07 有效医生解析链(仅病历医生为空时启用),按优先级:
+    ① 同一 study 的非空处置医生(经账单 BillStudyIdentity 关联)
+    ② 同患者同日能唯一确定的预约医生(排除已取消/爽约)
+    ③ 同患者同日能唯一确定的处置医生
+    同一优先级出现多个不同医生 → None(未归类);候选为空则落到下一级。"""
+    empty_rows = [r for r in raw if not r["person"]]
+    study_docs, appt_docs, order_docs = {}, {}, {}
+    sids = {str(r["sid"]) for r in empty_rows if r["sid"]}
+    pairs = {(r["pid"], r["vd"]) for r in empty_rows}
+    pids = {pid for pid, _ in pairs}
+    for chunk in chunks(sids):
+        ph = ",".join("?" * len(chunk))
+        for row in conn.execute(
+            f"""select json_extract(iif(json_valid(b.source_json), b.source_json, '{{}}'),
+                       '$.BillStudyIdentity') as sid,
+                       trim(coalesce(o.doctor_name, '')) as dn
+                from treatment_orders o join bills b on b.bill_id = o.bill_id
+                where json_extract(iif(json_valid(b.source_json), b.source_json, '{{}}'),
+                      '$.BillStudyIdentity') in ({ph})
+                  and coalesce(o.status, '') != 'voided'
+                  and trim(coalesce(o.doctor_name, '')) <> ''""",
+            tuple(chunk),
+        ).fetchall():
+            study_docs.setdefault(str(row["sid"]), set()).add(row["dn"])
+    for chunk in chunks(pids):
+        ph = ",".join("?" * len(chunk))
+        for row in conn.execute(
+            f"""select patient_identity as pid, substr(start_time, 1, 10) as vd,
+                       trim(coalesce(doctor_name, '')) as dn
+                from appointments
+                where patient_identity in ({ph})
+                  and substr(coalesce(start_time, ''), 1, 10) between ? and ?
+                  and coalesce(status, '') not in ('3', '9', '已取消', '已爽约', '爽约')
+                  and coalesce(suspect_cancelled, 0) = 0
+                  and trim(coalesce(doctor_name, '')) <> ''""",
+            tuple(chunk) + (start, end),
+        ).fetchall():
+            if (row["pid"], row["vd"]) in pairs:
+                appt_docs.setdefault((row["pid"], row["vd"]), set()).add(row["dn"])
+        for row in conn.execute(
+            f"""select patient_identity as pid, substr(order_date, 1, 10) as vd,
+                       trim(coalesce(doctor_name, '')) as dn
+                from treatment_orders
+                where patient_identity in ({ph})
+                  and substr(coalesce(order_date, ''), 1, 10) between ? and ?
+                  and coalesce(status, '') != 'voided'
+                  and trim(coalesce(doctor_name, '')) <> ''""",
+            tuple(chunk) + (start, end),
+        ).fetchall():
+            if (row["pid"], row["vd"]) in pairs:
+                order_docs.setdefault((row["pid"], row["vd"]), set()).add(row["dn"])
+
+    def resolve(r):
+        levels = []
+        sid = str(r["sid"] or "")
+        if sid:
+            levels.append(study_docs.get(sid, set()))
+        key = (r["pid"], r["vd"])
+        levels.extend((appt_docs.get(key, set()), order_docs.get(key, set())))
+        for candidates in levels:
+            if len(candidates) == 1:
+                return next(iter(candidates))
+            if len(candidates) > 1:
+                return None
+        return None
+
+    return resolve
+
+
 def visit_perf(conn, start, end, staff, role):
     """医生/护士统计（病历为轴）。role=doctor 取 doctor_name；nurse 取 content_json.Nurse。
     一次就诊可配多人(护士常逗号多人)：量按人各计一次；实收/应收在同就诊多人间平摊(合计不虚增)。
     返回 (rows, unclassified_row)。"""
     person_sql = _VISIT_ROLE_SQL[role]
+    # GD-07:医生统计不再整行丢弃 doctor_name 为空的病历(会把整段就诊统计清零),
+    # 改为按解析链归类;护士轴无预约/处置人名可回退,维持原过滤。
+    empty_person_clause = "" if role == "doctor" else f"and {person_sql} <> ''"
     raw = conn.execute(
         f"""
         select coalesce(nullif(trim(study_identity), ''), '') as sid,
@@ -377,14 +450,26 @@ def visit_perf(conn, start, end, staff, role):
         from medical_records
         where trim(record_type) in ('初诊', '复诊')
           and substr(coalesce(visit_time, ''), 1, 10) between ? and ?
-          and {person_sql} <> ''
+          {empty_person_clause}
         order by coalesce(visit_time, ''), record_id
         """,
         (start, end),
     ).fetchall()
+
+    resolve_doctor = (
+        _empty_doctor_resolver(conn, raw, start, end) if role == "doctor" else None
+    )
     visits = []
+    uncl_visits = {"初诊": 0, "复诊": 0}
     for r in raw:
         persons = split_persons(r["person"])
+        if not persons and resolve_doctor is not None:
+            effective = resolve_doctor(r)
+            if effective is None:
+                # 同级多候选或全无线索:明确进未归类,不得随便挂给某位医生
+                uncl_visits[r["vt"]] += 1
+                continue
+            persons = [effective]
         if persons:
             visits.append({"sid": r["sid"], "pid": r["pid"], "vt": r["vt"], "vd": r["vd"], "persons": persons})
 
@@ -480,6 +565,9 @@ def visit_perf(conn, start, end, staff, role):
     rows.sort(key=lambda r: -(r["first"]["paid"] + r["revisit"]["paid"]))
     uncl = pack_row("(未归类)", blank_cell(), blank_cell())
     uncl["first"]["paid"] = round(unclassified["paid"], 2)
+    if not staff:   # GD-07:无法唯一归类的就诊量单列;单人筛选时同金额一并隐藏
+        uncl["first"]["visit"] = uncl_visits["初诊"]
+        uncl["revisit"]["visit"] = uncl_visits["复诊"]
     return rows, uncl
 
 
