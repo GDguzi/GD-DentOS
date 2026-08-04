@@ -28,7 +28,7 @@
 
 - 新增 `local_app/version.py`：`APP_VERSION = "0.0.0-dev"`（开发态默认值）。
 - CI 构建时把 tag 写入该文件（workflow 加一步 sed，如 `0.1.5`），发版无需手动改代码。
-- 冻结 exe 里读到的就是构建时的版本；比较用"语义化版本数字元组"，不做字符串比较。
+- 冻结 exe 里读到的就是构建时的版本；比较用"语义化版本数字元组"（Gitee tag 如 `v0.1.6`，先去掉开头的 `v` 再逐段转 int 比较），不做字符串比较。
 
 ### 更新源
 
@@ -42,7 +42,7 @@
 | 接口 | 职责 |
 |---|---|
 | `GET /api/update/check` | 返回 `{current, latest, has_update, notes}`。结果进程内缓存（默认 6 小时），避免每次刷页面都打 Gitee |
-| `POST /api/update/download` | 后台线程开始下载 zip 到 exe 同级 `update/new.pkg`（先写 `.part`，完成改名）；返回任务 id |
+| `POST /api/update/download` | 后台线程开始下载 zip 到 exe 同级 `update/new.pkg`（先写 `.part`，完成改名）。单机单任务：已有下载进行中时再次调用直接复用/返回当前状态，不并发下载 |
 | `GET /api/update/status` | 返回 `{phase: idle/downloading/ready/error, percent, message}` 供前端进度条轮询 |
 | `POST /api/update/apply` | 前置校验（下载完成+校验通过）→ 备份数据库 → 生成引导 bat → 启动 bat → 进程退出 |
 
