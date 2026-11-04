@@ -682,6 +682,7 @@ def create_appointments_router(db_path):
                 from appointments a
                 left join patients p on p.patient_identity = a.patient_identity
                 where a.appointment_id = ?
+                  and (p.patient_identity is null or coalesce(p.is_deleted, 0) = 0)
                 """,
                 (appointment_id,),
             ).fetchone()

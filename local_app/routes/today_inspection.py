@@ -141,6 +141,7 @@ def create_today_inspection_router(db_path):
                 from medical_records mr
                 left join patients p on p.patient_identity = mr.patient_identity
                 where substr(coalesce(mr.visit_time, ''), 1, 10) = ?
+                  and coalesce(mr.draft_status, '') = ''
                 order by coalesce(mr.visit_time, ''), mr.record_id
                 limit 300
             """, (work_date,))

@@ -42,7 +42,6 @@ from local_app.rv_query import build_month_calendar, build_rv_filter, csv_safe
 from local_app.timeutil import now_str
 
 IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
-IMAGE_MAX_BYTES = 8 * 1024 * 1024              # 截图上限 8MB（对齐 patient_assets/communications）
 CSV_BATCH_SIZE = 500
 CSV_SPOOL_MAX_BYTES = 1024 * 1024
 CSV_STREAM_CHUNK_CHARS = 64 * 1024
@@ -305,8 +304,6 @@ def create_return_visit_ops_router(db_path, images_dir):
         data = await file.read()
         if not data:
             raise HTTPException(status_code=400, detail="空文件")
-        if len(data) > IMAGE_MAX_BYTES:
-            raise HTTPException(status_code=400, detail="截图不要超过 8MB")
         if not attachment_content_matches(data, ext):
             raise HTTPException(status_code=400, detail="截图文件类型不匹配")
         now = now_str()

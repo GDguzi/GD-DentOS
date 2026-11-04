@@ -361,4 +361,34 @@ class DoctorAttributionFallbackTest(unittest.TestCase):
             self.assertIsNone(self._row(d, "医生F"))
             self.assertEqual(d["unclassified"]["first"]["visit"], 1)
             self.assertEqual(d["unclassified"]["first"]["paid"], 100)
+            self.assertEqual(d["unclassified"]["first"]["receivable"], 100)
             self.assertEqual(d["total"]["first"]["paid"], 0)
+
+    def test_ambiguous_money_is_separate_from_named_doctor_and_staff_filter(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db, client = _client(tmp)
+            with connect(db) as c:
+                _visit(c, "ambiguous", "p1", "", "初诊", "2026-07-14", study="unassigned-study")
+                _appt(c, "choice-a", "p1", "Synthetic A", "2026-07-14")
+                _appt(c, "choice-b", "p1", "Synthetic B", "2026-07-14")
+                _bill(c, "unassigned-bill", "p1", "2026-07-14", 150,
+                      study="unassigned-study", discount=50)
+                _pay(c, "unassigned-pay", "p1", "unassigned-bill", "2026-07-14", 80)
+                _visit(c, "assigned", "p2", "Synthetic A", "初诊", "2026-07-14", study="assigned-study")
+                _bill(c, "assigned-bill", "p2", "2026-07-14", 200, study="assigned-study")
+                _pay(c, "assigned-pay", "p2", "assigned-bill", "2026-07-14", 120)
+                c.commit()
+            report = self._q(client)
+            self.assertEqual(report["unclassified"]["first"]["receivable"], 100)
+            self.assertEqual(report["unclassified"]["first"]["paid"], 80)
+            self.assertEqual(report["total"]["first"]["receivable"], 200)
+            self.assertEqual(report["total"]["first"]["paid"], 120)
+            self.assertEqual(report["total"]["first"]["visit"], 1)
+            selected = self._q(client, staff="Synthetic A")
+            self.assertEqual(len(selected["rows"]), 1)
+            self.assertEqual(selected["rows"][0]["name"], "Synthetic A")
+            self.assertEqual(selected["total"]["first"]["receivable"], 200)
+            self.assertEqual(selected["total"]["first"]["paid"], 120)
+            for side in ("first", "revisit"):
+                for key in ("visit", "paid", "receivable"):
+                    self.assertEqual(selected["unclassified"][side][key], 0)

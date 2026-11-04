@@ -15,7 +15,6 @@ from local_app.validation import valid_date_param
 # lab-config 支持的三类候选项 → 对应 app_settings 的 key
 _CONFIG_KINDS = {"factories": "lab_factories", "projects": "lab_projects", "colors": "lab_colors"}
 _ALLOWED_IMG_SUFFIX = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
-_MAX_IMG_BYTES = 20 * 1024 * 1024  # 单张配图上限 20MB(手机拍照足够)
 
 
 
@@ -206,9 +205,7 @@ def create_lab_orders_router(db_path, images_dir):
         suffix = Path(file.filename or "").suffix.lower()
         if suffix not in _ALLOWED_IMG_SUFFIX:
             raise HTTPException(status_code=400, detail="仅支持图片文件")
-        data = file.file.read(_MAX_IMG_BYTES + 1)
-        if len(data) > _MAX_IMG_BYTES:
-            raise HTTPException(status_code=400, detail="图片超过 20MB")
+        data = file.file.read()
         if not data:
             raise HTTPException(status_code=400, detail="空文件")
         now = now_str()

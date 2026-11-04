@@ -1,11 +1,14 @@
 """拍照建档 OCR 接口：GET /api/ocr/status、POST /api/ocr/patient-card。"""
 import asyncio
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
 
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from starlette.requests import Request
 
 from local_app import auth
 from local_app.api import create_app
@@ -18,7 +21,7 @@ def _admin_client(db):
         if not conn.execute("select 1 from users where username='admin'").fetchone():
             auth.create_user(conn, "admin", "管理员", "admin123", role="admin")
             conn.commit()
-    c = TestClient(create_app(db))
+    c = TestClient(create_app(db, images_dir=Path(db).parent / "images", require_login=True))
     c.post("/api/auth/login", json={"username": "admin", "password": "admin123"})
     return c
 
@@ -99,23 +102,88 @@ class TestOcrRecognize(unittest.TestCase):
                 r = self._post(c, content=b"not an image at all")
             self.assertEqual(r.status_code, 400)
 
-    def test_rejects_oversize(self):
+    def _assert_body_at_limit(self, chunked, over_limit=False):
         with tempfile.TemporaryDirectory() as tmp:
             c = self._client(tmp)
-            oversize = _JPEG_HEADER + b"x" * (8 * 1024 * 1024 + 1)
-            with mock.patch("local_app.ocr.available", return_value=True):
-                r = self._post(c, content=oversize)
-            self.assertEqual(r.status_code, 400)
+            size = 25 * 1024 * 1024 + int(over_limit)
+            payload = _JPEG_HEADER + b"x" * (size - len(_JPEG_HEADER))
+            self.assertEqual(len(payload), size)
+            boxes = [TextBox("公民身份号码990101199003070015", 0.9, 0.09, 0.15, 0.6, 0.05)]
+            headers = {"Content-Type": "image/jpeg"}
+            if chunked:
+                content = (payload[i:i + 1024 * 1024] for i in range(0, len(payload), 1024 * 1024))
+            else:
+                content = payload
+                headers["Content-Length"] = str(len(payload))
+            with mock.patch("local_app.ocr.available", return_value=True), \
+                 mock.patch("local_app.ocr.recognize", return_value=boxes) as recognize:
+                r = self._post(c, content=content, headers=headers)
+            if over_limit:
+                self.assertEqual(r.status_code, 400, r.text)
+                self.assertIn("25MB", r.json()["detail"])
+                recognize.assert_not_called()
+            else:
+                self.assertEqual(r.status_code, 200, r.text)
+                self.assertEqual(r.json()["fields"]["id_card"], "990101199003070015")
+                self.assertEqual(r.json()["fields"]["birthday"], "1990-03-07")
+                self.assertEqual(r.json()["kind"], "id_card")
+                recognize.assert_called_once_with(payload)
+            if chunked:
+                self.assertNotIn("content-length", r.request.headers)
+                self.assertEqual(r.request.headers["transfer-encoding"], "chunked")
+            else:
+                self.assertEqual(r.request.headers["content-length"], str(len(payload)))
 
-    def test_rejects_oversize_by_declared_content_length(self):
-        """声明了超大 Content-Length 就该直接 400，不用真的发 8MB 数据。"""
+    def test_exact_25mb_chunked_body_reaches_recognizer_without_content_length(self):
+        self._assert_body_at_limit(chunked=True)
+
+    def test_exact_25mb_body_reaches_recognizer_with_content_length(self):
+        self._assert_body_at_limit(chunked=False)
+
+    def test_25mb_plus_one_chunked_body_is_rejected(self):
+        self._assert_body_at_limit(chunked=True, over_limit=True)
+
+    def test_25mb_plus_one_body_is_rejected_with_content_length(self):
+        self._assert_body_at_limit(chunked=False, over_limit=True)
+
+    def test_declared_oversize_is_rejected_before_receiving_body(self):
+        from local_app.routes import ocr as ocr_routes
+
+        async def scenario():
+            endpoint = next(route.endpoint for route in ocr_routes.create_ocr_router().routes
+                            if route.path == "/api/ocr/patient-card")
+            receive = mock.AsyncMock(side_effect=AssertionError("body must not be read"))
+            request = Request({"type": "http", "headers": [
+                (b"content-length", str(25 * 1024 * 1024 + 1).encode("ascii")),
+            ]}, receive=receive)
+            with mock.patch.object(ocr_routes, "require_perm"), \
+                 mock.patch.object(ocr_routes.ocr, "available", return_value=True), \
+                 mock.patch.object(ocr_routes.ocr, "recognize") as recognize:
+                with self.assertRaises(HTTPException) as caught:
+                    await endpoint(request)
+                self.assertEqual(caught.exception.status_code, 400)
+                self.assertIn("25MB", caught.exception.detail)
+                receive.assert_not_awaited()
+                recognize.assert_not_called()
+
+        asyncio.run(scenario())
+
+    def test_permission_denial_does_not_recognize_image(self):
         with tempfile.TemporaryDirectory() as tmp:
-            c = self._client(tmp)
-            with mock.patch("local_app.ocr.available", return_value=True):
-                r = self._post(c, content=_JPEG_HEADER,
-                                headers={"Content-Type": "image/jpeg",
-                                         "Content-Length": str(9 * 1024 * 1024)})
-            self.assertEqual(r.status_code, 400)
+            db = Path(tmp) / "clinic.sqlite3"
+            init_db(db)
+            with connect(db) as conn:
+                auth.create_user(conn, "test-reader", "Synthetic reader", "test-password", role="nurse")
+                conn.commit()
+            with TestClient(create_app(db, images_dir=Path(tmp) / "images", require_login=True)) as c:
+                login = c.post("/api/auth/login", json={
+                    "username": "test-reader", "password": "test-password",
+                })
+                self.assertEqual(login.status_code, 200, login.text)
+                with mock.patch("local_app.ocr.recognize") as recognize:
+                    r = self._post(c)
+                self.assertEqual(r.status_code, 403, r.text)
+                recognize.assert_not_called()
 
     def test_returns_parsed_fields(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -174,6 +242,53 @@ class TestOcrRecognize(unittest.TestCase):
             return entered_before_release
 
         self.assertEqual(asyncio.run(scenario()), 4)
+
+    def test_decode_concurrency_stays_at_two(self):
+        """真实请求读取与线程池保持运行,仅阻塞合成识别器来观察同时进入的数量。"""
+        from local_app.routes import ocr as ocr_routes
+
+        async def scenario():
+            endpoint = next(route.endpoint for route in ocr_routes.create_ocr_router().routes
+                            if route.path == "/api/ocr/patient-card")
+            loop = asyncio.get_running_loop()
+            two_entered = asyncio.Event()
+            release = threading.Event()
+            lock = threading.Lock()
+            active = peak = 0
+
+            def recognize(_data):
+                nonlocal active, peak
+                with lock:
+                    active += 1
+                    peak = max(peak, active)
+                    if active == 2:
+                        loop.call_soon_threadsafe(two_entered.set)
+                try:
+                    if not release.wait(timeout=3):
+                        raise AssertionError("synthetic recognizer was not released")
+                    return []
+                finally:
+                    with lock:
+                        active -= 1
+
+            async def receive():
+                return {"type": "http.request", "body": _JPEG_HEADER, "more_body": False}
+
+            with mock.patch.object(ocr_routes, "require_perm"), \
+                 mock.patch.object(ocr_routes.ocr, "available", return_value=True), \
+                 mock.patch.object(ocr_routes.ocr, "recognize", side_effect=recognize):
+                tasks = [asyncio.create_task(endpoint(Request(
+                    {"type": "http", "headers": []}, receive=receive,
+                ))) for _ in range(8)]
+                try:
+                    await asyncio.wait_for(two_entered.wait(), timeout=2)
+                    await asyncio.sleep(0.05)
+                finally:
+                    release.set()
+                    await asyncio.gather(*tasks)
+            return peak
+
+        self.assertEqual(asyncio.run(scenario()), 2)
 
 
 if __name__ == "__main__":

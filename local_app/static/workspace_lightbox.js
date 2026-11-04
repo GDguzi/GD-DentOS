@@ -250,24 +250,46 @@ async function _collectEntryFiles(entry, out) {
 // 本地选图/拖拽(含文件夹) → 上传到当前患者(category=本地上传),完成刷新影像 tab
 async function uploadWorkspaceLocalFiles(fileList) {
   const okExt = /\.(jpe?g|png|webp)$/i;
-  const files = Array.from(fileList || []).filter(f => /^image\//.test(f.type || "") || okExt.test(f.name || ""));
-  if (!files.length) return;
+  const selected = Array.from(fileList || []);
+  if (!selected.length) return;
+  const files = selected.filter(f => /^image\//.test(f.type || "") || okExt.test(f.name || ""));
+  const skipped = selected.filter(f => !files.includes(f));
   const id = workspacePatientId;
-  const hint = document.querySelector('[data-workspace-panel="images"] .image-drop-hint');
+  const showHint = text => {
+    if (id !== workspacePatientId) return;
+    const hint = document.querySelector('[data-workspace-panel="images"] .image-drop-hint');
+    if (hint) hint.textContent = text;
+  };
+  const details = skipped.map(f => `${f.name || "未命名文件"}：不是支持的图片，已跳过`);
   let ok = 0, fail = 0;
   for (const f of files) {
-    if (hint) hint.textContent = `上传中 ${ok + fail + 1}/${files.length}...`;
+    showHint(`上传中 ${ok + fail + 1}/${files.length}...`);
     const fd = new FormData();
     fd.append("file", f, f.name || "upload.jpg");
     fd.append("slot", "本地上传");
     try {
       const r = await fetch(`/api/patients/${encodeURIComponent(id)}/images`, {method: "POST", body: fd});
-      if (r.ok) ok++; else fail++;
-    } catch { fail++; }
+      if (r.ok) ok++;
+      else {
+        fail++;
+        let reason = `上传失败（HTTP ${r.status}）`;
+        if (r.status === 403) reason = "没有上传权限，请联系管理员";
+        else {
+          try {
+            const body = await r.json();
+            if (typeof body.detail === "string" && body.detail) reason = body.detail;
+          } catch {}
+        }
+        details.push(`${f.name || "未命名文件"}：${reason}`);
+      }
+    } catch {
+      fail++;
+      details.push(`${f.name || "未命名文件"}：网络异常，请检查连接后重试`);
+    }
   }
-  if (hint) hint.textContent = `上传完成：成功 ${ok}${fail ? "，失败 " + fail : ""}`;
   const panel = document.querySelector('[data-workspace-panel="images"]');
-  if (panel && id === workspacePatientId) renderWorkspaceImagesTab(panel);
+  if (ok && panel && id === workspacePatientId) await renderWorkspaceImagesTab(panel);
+  showHint(`上传完成：成功 ${ok}${fail ? "，失败 " + fail : ""}${skipped.length ? "，跳过 " + skipped.length : ""}${details.length ? "；" + details.join("；") : ""}`);
 }
 
 // 删除一张影像(硬删,二次确认),完成刷新

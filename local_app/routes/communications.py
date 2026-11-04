@@ -50,7 +50,6 @@ from local_app.validation import valid_date_param
 
 CHANNELS = ("phone", "wechat")                 # 电话 / 微信
 IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
-IMAGE_MAX_BYTES = 8 * 1024 * 1024              # 截图上限 8MB（对齐 patient_assets）
 
 
 def create_communications_router(db_path, images_dir):
@@ -255,8 +254,6 @@ def create_communications_router(db_path, images_dir):
         data = await file.read()
         if not data:
             raise HTTPException(status_code=400, detail="空文件")
-        if len(data) > IMAGE_MAX_BYTES:
-            raise HTTPException(status_code=400, detail="截图不要超过 8MB")
         if not attachment_content_matches(data, ext):
             raise HTTPException(status_code=400, detail="截图文件类型不匹配")
         now = now_str()

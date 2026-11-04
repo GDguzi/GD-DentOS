@@ -50,7 +50,6 @@ from local_app.routes.patient_common import require_patient   # 审计R2:软删�
 from local_app.timeutil import now_str
 
 AUDIO_EXTS = (".wav", ".mp3", ".ogg", ".m4a", ".webm", ".amr")
-AUDIO_MAX_BYTES = 100 * 1024 * 1024          # 录音上限 100MB
 DIRECTIONS = ("inbound", "outbound")          # 呼入 / 呼出
 UPLOAD_SOURCES = ("manual_import", "return_visit_mobile", "desktop_mic")   # Phase1 允许的来源(+三期③桌面直录)
 
@@ -174,8 +173,6 @@ def create_calls_router(db_path, images_dir):
         data = await file.read()
         if not data:
             raise HTTPException(status_code=400, detail="空文件")
-        if len(data) > AUDIO_MAX_BYTES:
-            raise HTTPException(status_code=400, detail="录音不要超过 100MB")
         if not attachment_content_matches(data, ext):
             raise HTTPException(status_code=400, detail="录音文件类型不匹配")
         linked_consult_id = linked_consult_id.strip()

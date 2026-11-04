@@ -184,7 +184,7 @@ class TestUnknownCard(unittest.TestCase):
 
 class TestPixelBomb(unittest.TestCase):
     def test_huge_dimensions_rejected_before_decoding(self):
-        """8MB 限的是压缩后的字节。一张几十 KB 的纯色 PNG 能解压成几千万像素撑爆内存，
+        """文件字节数不代表解码内存。一张几十 KB 的纯色 PNG 能解压成几千万像素撑爆内存，
         必须在解码前按尺寸拒掉。"""
         import io
 

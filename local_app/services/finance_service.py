@@ -468,6 +468,8 @@ def visit_perf(conn, start, end, staff, role):
             if effective is None:
                 # 同级多候选或全无线索:明确进未归类,不得随便挂给某位医生
                 uncl_visits[r["vt"]] += 1
+                # 保留就诊索引,其账单应收与实收仍须归入未归类。
+                visits.append({"sid": r["sid"], "pid": r["pid"], "vt": r["vt"], "vd": r["vd"], "persons": []})
                 continue
             persons = [effective]
         if persons:
@@ -498,6 +500,7 @@ def visit_perf(conn, start, end, staff, role):
             cell_for(person, v["vt"])["visit"] += 1
 
     # 应收：仅有效账单(排作废)，净应收=total−优惠；就诊在区间才计，多人平摊
+    unclassified = blank_cell()
     pids = {v["pid"] for v in visits}
     disc = bill_discount_sql("")
     seen_recv = set()
@@ -509,7 +512,11 @@ def visit_perf(conn, start, end, staff, role):
             seen_recv.add(b["bill_id"])
             v = resolve(str(b["sid"] or ""), b["pid"], b["bd"])
             if v is not None:
-                share = ((b["total_fee"] or 0) - (b["net_disc"] or 0)) / len(v["persons"])
+                net_recv = (b["total_fee"] or 0) - (b["net_disc"] or 0)
+                if not v["persons"]:
+                    unclassified["receivable"] += net_recv
+                    continue
+                share = net_recv / len(v["persons"])
                 for person in v["persons"]:
                     cell_for(person, v["vt"])["receivable"] += share
 
@@ -542,12 +549,11 @@ def visit_perf(conn, start, end, staff, role):
         ).fetchall():
             bill_meta[b["bill_id"]] = (str(b["sid"] or ""), b["pid"], b["bd"])
 
-    unclassified = blank_cell()
     for bid, net in net_by_bill.items():
         meta = bill_meta.get(bid)
         v = resolve(*meta) if meta else None
-        if v is None:
-            # 关联不上就诊(含无病历患者)的收款进未归类,使总实收+未归类=收银净实收。
+        if v is None or not v["persons"]:
+            # 关联不上或无法归类的就诊收款单列,使总实收+未归类=收银净实收。
             unclassified["paid"] += net
             continue
         share = net / len(v["persons"])
@@ -565,6 +571,7 @@ def visit_perf(conn, start, end, staff, role):
     rows.sort(key=lambda r: -(r["first"]["paid"] + r["revisit"]["paid"]))
     uncl = pack_row("(未归类)", blank_cell(), blank_cell())
     uncl["first"]["paid"] = round(unclassified["paid"], 2)
+    uncl["first"]["receivable"] = round(unclassified["receivable"], 2)
     if not staff:   # GD-07:无法唯一归类的就诊量单列;单人筛选时同金额一并隐藏
         uncl["first"]["visit"] = uncl_visits["初诊"]
         uncl["revisit"]["visit"] = uncl_visits["复诊"]

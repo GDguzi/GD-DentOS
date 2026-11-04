@@ -38,7 +38,6 @@ CAPTURE_TEMPLATE = {
 _FDI_RE = re.compile(r"^[1-8][1-8]$")   # 恒牙11-48 + 乳牙51-85(象限5-8)
 LOCAL_UPLOAD_SLOT = "本地上传"            # 本地选图/拖拽上传的机位哨兵(非模板)
 VIDEO_SLOT = "录像"                      # 内窥镜录像的机位哨兵(非模板),存视频文件
-VIDEO_MAX_BYTES = 200 * 1024 * 1024      # 录像上限 200MB(约10分钟)
 
 
 def resolve_capture(slot, manual_tooth):
@@ -499,8 +498,10 @@ def create_patient_assets_router(db_path, images_dir):
         with connect(db_path) as conn:
             row = conn.execute(
                 """
-                select rel_path from patient_images
-                where image_id = ? and patient_identity = ?
+                select i.rel_path from patient_images i
+                join patients p on p.patient_identity = i.patient_identity
+                where i.image_id = ? and i.patient_identity = ?
+                  and coalesce(p.is_deleted, 0) = 0
                 """,
                 (image_id, patient_identity),
             ).fetchone()
@@ -671,8 +672,6 @@ def create_patient_assets_router(db_path, images_dir):
         if ext not in (".jpg", ".jpeg", ".png", ".webp", ".gif"):
             raise HTTPException(status_code=400, detail="只支持 jpg/png/webp/gif 图片")
         data = await file.read()
-        if len(data) > 8 * 1024 * 1024:
-            raise HTTPException(status_code=400, detail="图片不要超过 8MB")
         # #104 用 patient_identity 的哈希做文件名前缀，避免不同ID清洗后碰撞串图。
         # 审计R2复核三轮:每次上传独立文件名(带随机段)——新文件永不覆盖旧文件,并发上传互不踩;
         # 库成功指向新文件之前,旧头像文件分毫不动(提交失败/竞态404只丢自己的新文件)。
@@ -686,7 +685,7 @@ def create_patient_assets_router(db_path, images_dir):
             begin_immediate(conn)   # 首次校验到此处之间身份可能刚被合并,写前同事务再查一次(P1竞态窗口)
             try:
                 require_patient(conn, patient_identity)
-                final_path.write_bytes(data)   # 独立名新文件(≤8MB,毫秒级),不碰任何旧文件
+                final_path.write_bytes(data)   # 独立名新文件,不碰任何旧文件
                 conn.execute(
                     "update patients set avatar_path = ?, local_updated_at = ? where patient_identity = ?",
                     (rel, now, patient_identity),
@@ -724,7 +723,8 @@ def create_patient_assets_router(db_path, images_dir):
         require_perm("patient.view")   # 越权:读患者/病历数据
         with connect(db_path) as conn:
             row = conn.execute(
-                "select avatar_path from patients where patient_identity = ?", (patient_identity,)
+                "select avatar_path from patients where patient_identity = ? "
+                "and coalesce(is_deleted, 0) = 0", (patient_identity,)
             ).fetchone()
         if not row or not row["avatar_path"]:
             raise HTTPException(status_code=404, detail="no avatar")
@@ -757,11 +757,6 @@ def create_patient_assets_router(db_path, images_dir):
         elif ext not in (".jpg", ".jpeg", ".png", ".webp"):
             raise HTTPException(status_code=400, detail="只支持 jpg/png/webp 图片")
         data = await file.read()
-        if is_video:
-            if len(data) > VIDEO_MAX_BYTES:
-                raise HTTPException(status_code=400, detail="录像不要超过 200MB")
-        elif len(data) > 8 * 1024 * 1024:
-            raise HTTPException(status_code=400, detail="图片不要超过 8MB")
         with connect(db_path) as conn:
             require_patient(conn, patient_identity)   # 患者不存在 → 404,且不落孤儿文件
         day = (image_date or "").strip()[:10]

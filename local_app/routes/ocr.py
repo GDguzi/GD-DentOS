@@ -8,14 +8,14 @@ from starlette.concurrency import run_in_threadpool
 from local_app import ocr
 from local_app.auth import require_perm
 
-_MAX_BYTES = 8 * 1024 * 1024
+_MAX_BYTES = 25 * 1024 * 1024
 
 # 请求准入从读取 body 前开始，并持续到解析结束。诊所单机并发很低，4 槽既容纳正常拍照突发，
 # 又把内存中压缩图数量硬限制为 4；未获准请求不读取、不持有图片 body。
 _REQUEST_LIMIT = 4
 
 # 解码才是吃内存的大头(单张可到 6000 万像素)。诊所是单进程服务，几张大图并发解码就能把它撑死，
-# 所以同时只让两张进解码。排队的请求只占着压缩字节(≤8MB)，等一下就好，不拒绝。
+# 所以同时只让两张进解码。排队的请求仅持有压缩图片字节，不提前解码。
 _DECODE_LIMIT = 2
 
 _SLOTS_LOOP = None
@@ -48,15 +48,15 @@ def _sniff_image(data: bytes) -> bool:
 
 
 async def _read_limited(request: Request, limit: int) -> bytes:
-    """流式读，边读边卡上限——不等整张图读完才拒，也不落临时文件。"""
+    """流式读取并在追加超限数据前拒绝,图片只保存在内存中。"""
     declared = request.headers.get("content-length")
     if declared and declared.isdigit() and int(declared) > limit:
-        raise HTTPException(status_code=400, detail="图片不要超过 8MB")
+        raise HTTPException(status_code=400, detail="图片不要超过 25MB")
     buf = bytearray()
     async for chunk in request.stream():
+        if len(chunk) > limit - len(buf):
+            raise HTTPException(status_code=400, detail="图片不要超过 25MB")
         buf += chunk
-        if len(buf) > limit:
-            raise HTTPException(status_code=400, detail="图片不要超过 8MB")
     return bytes(buf)
 
 

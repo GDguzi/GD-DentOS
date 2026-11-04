@@ -61,7 +61,12 @@ async function fetchRolePerf(target, role) {
         ? `该区间有 ${unclCount} 次就诊无法唯一归类到医生(病历未填医生,预约/处置线索也不唯一),未计入任何人`
         : "该区间无就诊记录")
       : "本地暂无该角色的配台数据";
-    target.innerHTML = head + `<div class="empty">${emptyMsg}</div>`;
+    const unclPaid = u0 ? (Number(u0.first.paid) || 0) + (Number(u0.revisit.paid) || 0) : 0;
+    const unclRecv = u0 ? (Number(u0.first.receivable) || 0) + (Number(u0.revisit.receivable) || 0) : 0;
+    const unclMoney = (unclPaid || unclRecv)
+      ? `<div class="rpt-summary">未归类金额：实收 <b>${money(unclPaid)}</b>　应收 ${money(unclRecv)}</div>`
+      : "";
+    target.innerHTML = head + `<div class="empty">${emptyMsg}</div>` + unclMoney;
     return;
   }
   const cell = (r, side) => `

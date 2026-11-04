@@ -219,8 +219,6 @@ def create_patient_create_router(db_path):
         if mode not in ("preview", "commit"):
             raise HTTPException(status_code=400, detail="mode 只能是 preview 或 commit")
         data = await file.read()
-        if len(data) > 10 * 1024 * 1024:
-            raise HTTPException(status_code=400, detail="文件太大(限 10MB)")
         try:
             rows = parse_table(file.filename or "", data)
         except ValueError as exc:

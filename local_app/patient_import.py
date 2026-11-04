@@ -173,7 +173,7 @@ def _sqlite_rows(data):
             _, table, cols = best
             quoted = '"' + table.replace('"', '""') + '"'
             rows = [list(cols)]
-            for row in conn.execute(f"select * from {quoted} limit 100000"):
+            for row in conn.execute(f"select * from {quoted}"):
                 rows.append(["" if v is None else str(v) for v in row])
             return rows
         finally:

@@ -239,7 +239,7 @@ def _recognize(image_bytes: bytes):
     if src is None or Quartz.CGImageSourceGetCount(src) < 1:
         raise ValueError("无法解析图片")
 
-    # 先读元数据(不解码)，再决定要不要解码：8MB 限的是压缩后的字节，
+    # 先读元数据(不解码)，再决定要不要解码：文件字节数不代表解码后的内存占用，
     # 一张几十 KB 的图能解压成几亿像素撑爆内存(压缩炸弹)。
     props = Quartz.CGImageSourceCopyPropertiesAtIndex(src, 0, None) or {}
     px = (props.get(Quartz.kCGImagePropertyPixelWidth) or 0) * (props.get(Quartz.kCGImagePropertyPixelHeight) or 0)

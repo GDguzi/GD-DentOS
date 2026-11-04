@@ -284,18 +284,25 @@ class VideoUploadTest(unittest.TestCase):
             self.assertEqual(c.post("/api/patients/p1/images",
                              files={"file": self._webm()}, data={"slot": "本地上传"}).status_code, 400)
 
-    def test_upload_video_size_limit(self):
-        # 录像上限走 VIDEO_MAX_BYTES(200MB),图片仍是 8MB;用猴补丁把上限缩小免得测试造大文件
+    def test_upload_video_ignores_former_size_limit(self):
+        # 缩小旧门槛来验证上传和落盘,避免构造超过 200MB 的测试文件。
         from unittest import mock
         from local_app.routes import patient_assets as pa
         with tempfile.TemporaryDirectory() as tmp:
             db = _seed(tmp)
             c = TestClient(create_app(db, images_dir=Path(tmp) / "images", require_login=True))
             c.post("/api/auth/login", json={"username": "doc", "password": "pw123456"})
-            with mock.patch.object(pa, "VIDEO_MAX_BYTES", 10):
-                big = ("clip.webm", io.BytesIO(b"x" * 11), "video/webm")
-                self.assertEqual(c.post("/api/patients/p1/images",
-                                 files={"file": big}, data={"slot": "录像"}).status_code, 400)
+            payload = b"\x1aE\xdf\xa3" + b"x" * 11
+            with mock.patch.object(pa, "VIDEO_MAX_BYTES", 10, create=True):
+                response = c.post("/api/patients/p1/images",
+                                  files={"file": ("clip.webm", payload, "video/webm")},
+                                  data={"slot": "录像"})
+            self.assertEqual(response.status_code, 200, response.text)
+            with connect(db) as conn:
+                row = conn.execute("select rel_path, size_bytes from patient_images where image_id=?",
+                                   (response.json()["image_id"],)).fetchone()
+            self.assertEqual(row["size_bytes"], len(payload))
+            self.assertEqual((Path(tmp) / "images" / row["rel_path"]).read_bytes(), payload)
 
 
 class CaptureTemplateTest(unittest.TestCase):

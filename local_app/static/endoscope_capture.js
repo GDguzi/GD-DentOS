@@ -384,7 +384,6 @@ function _endoToggleRec() {
     if (b) { b.textContent = "⏺ 录像"; b.classList.remove("rec-on"); }
     const blob = new Blob(chunks, {type: mime});
     if (!blob.size) { _endoStatus("录像为空,未保存"); return; }
-    if (blob.size > 200 * 1024 * 1024) { _endoStatus("录像超过200MB存不下,请分段录"); return; }
     _endoShots.push({slot: "录像", blob, url: URL.createObjectURL(blob), tooth: "", status: "", video: true});
     _endoRenderStrip();
     _endoStatus(`录像完成(${(blob.size / 1048576).toFixed(1)}MB),点"全部上传"存入影像`);
