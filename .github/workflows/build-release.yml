@@ -33,7 +33,10 @@ jobs:
         run: |
           $env:DENTAL_PORT = "8891"
           # onefile 首启要解压+建库+迁移,慢机器实测可超 3 分钟 → 等 300 秒;失败时打印 exe 输出定位
-          $p = Start-Process "dist/good-dental-clinic.exe" -PassThru -WindowStyle Hidden `
+          New-Item -ItemType Directory -Path smoke -Force | Out-Null
+          Copy-Item dist/good-dental-clinic.exe smoke/
+          $exe = Join-Path (Resolve-Path smoke).Path "good-dental-clinic.exe"
+          $p = Start-Process $exe -WorkingDirectory smoke -PassThru -WindowStyle Hidden `
             -RedirectStandardOutput exe_stdout.log -RedirectStandardError exe_stderr.log
           try {
             $ok = $false
@@ -60,6 +63,12 @@ jobs:
       - name: 打包 zip
         shell: pwsh
         run: Compress-Archive -Path dist/good-dental-clinic.exe -DestinationPath dist/good-dental-clinic-windows.zip -Force
+
+      - name: 校验最终发行文件隐私（含压缩包内部）
+        run: |
+          python scripts/check_release_privacy.py --selftest
+          python -m unittest discover -s test -p 'test_release_privacy.py' -v
+          python scripts/check_release_privacy.py dist
 
       - uses: actions/upload-artifact@v4
         with:
@@ -130,6 +139,12 @@ jobs:
           chmod +x dist/good-dental-clinic.command
           cd dist && zip -q good-dental-clinic-mac.zip good-dental-clinic.command
 
+      - name: 校验最终发行文件隐私（含压缩包内部）
+        run: |
+          python scripts/check_release_privacy.py --selftest
+          python -m unittest discover -s test -p 'test_release_privacy.py' -v
+          python scripts/check_release_privacy.py dist
+
       - uses: actions/upload-artifact@v4
         with:
           name: pkg-macos
@@ -141,6 +156,13 @@ jobs:
     runs-on: ubuntu-latest   # 中文文件名在 Linux 上收发正常，Windows runner 的 curl 读不了
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 安装发行文件检查工具
+        run: python -m pip install pyinstaller
 
       - uses: actions/download-artifact@v4
         with:
@@ -155,6 +177,11 @@ jobs:
           pandoc docs/常见问题解答.md -o dist/常见问题解答.docx
           pandoc README.md -o dist/使用说明.docx
           ls -lh dist
+
+      - name: 发布前校验全部附件（含 Word 与安装包内部）
+        run: |
+          python scripts/check_release_privacy.py --selftest
+          python scripts/check_release_privacy.py dist
 
       # Release 说明 = 更新日志.md 里本版小节；缺小节直接红，逼着每版都写更新内容。
       - name: 提取本版更新说明
