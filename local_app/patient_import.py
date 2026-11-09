@@ -7,6 +7,8 @@ import os
 import re
 import sqlite3
 import tempfile
+
+from local_app.restore_pending import FULL_BACKUP_MESSAGE, is_full_backup_tables, reject_full_backup_zip
 import zipfile
 from datetime import date, timedelta
 from xml.etree import ElementTree as ET
@@ -59,6 +61,7 @@ def auto_map_header(header):
 
 def parse_table(filename, data):
     """CSV/XLSX/SQLite → 行列表(list[list[str]],首行为表头)。按文件魔数判别格式。"""
+    reject_full_backup_zip(data)
     if not data:
         raise ValueError("文件是空的")
     if data[:2] == b"PK":
@@ -155,6 +158,8 @@ def _sqlite_rows(data):
                     "and name not like 'sqlite_%'")]
             except sqlite3.DatabaseError:
                 raise ValueError("SQLite 文件损坏或加了密")
+            if is_full_backup_tables(tables):
+                raise ValueError(FULL_BACKUP_MESSAGE)
             best = None   # (匹配字段数, 行数, 表名, 列名列表)
             for table in tables:
                 quoted = '"' + table.replace('"', '""') + '"'

@@ -8,13 +8,14 @@ import uuid
 import zipfile
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from local_app.timeutil import bj_now
 from local_app.auth import audit_write, require_admin
 from local_app.backup_util import claim_backup_name, prune_backups, sweep_stale_tmp
 from local_app.db import connect
+from local_app.restore_pending import cancel_restore, pending_restore, stage_restore
 
 _NAME_RE = re.compile(r"^backup_\d{8}_\d{6}(?:_\d+)?\.(db|zip)$")  # 只认本接口/同步前备份命名(含同秒 _n 后缀)，挡路径逃逸
 
@@ -79,6 +80,35 @@ def create_backup_router(db_path, images_dir):
         pruned = prune_backups(db_path)
         return {"name": result.name, "size_bytes": result.stat().st_size,
                 "include_images": include_images, "pruned": pruned}
+
+    @router.get("/api/backup/restore")
+    def restore_status():
+        require_admin()
+        return {"pending": pending_restore(db_path)}
+
+    @router.post("/api/backup/restore")
+    def restore_upload(file: UploadFile = File(...)):
+        """暂存一份整库备份，下次启动时换入；当前运行中的数据不动。"""
+        require_admin()
+        try:
+            summary = stage_restore(db_path, file.file, file.filename)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        with connect(db_path) as conn:
+            audit_write(conn, "backup", summary["filename"], "stage_restore",
+                        new_json=json.dumps(summary, ensure_ascii=False))
+            conn.commit()
+        return {"pending": summary}
+
+    @router.post("/api/backup/restore/cancel")
+    def restore_cancel():
+        require_admin()
+        cancelled = cancel_restore(db_path)
+        if cancelled:
+            with connect(db_path) as conn:
+                audit_write(conn, "backup", "restore_pending", "cancel_restore")
+                conn.commit()
+        return {"cancelled": cancelled}
 
     @router.get("/api/backup/list")
     def list_backups():

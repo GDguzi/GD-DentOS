@@ -40,11 +40,26 @@ def _lan_password():
     return pw
 
 
+def _apply_pending_restore():
+    """换入「从备份恢复」暂存的数据；失败时保留暂存并照常用当前数据启动。"""
+    from local_app.restore_pending import apply_pending_restore
+    images = Path(os.environ.get("DENTAL_IMAGES") or DEFAULT_DB_PATH.parent / "images")
+    try:
+        done = apply_pending_restore(DEFAULT_DB_PATH, images)
+    except Exception:
+        logging.getLogger("local_app").exception("从备份恢复失败，继续使用当前数据")
+        print("  ⚠️ 从备份恢复失败，当前数据未改动，下次启动会重试", flush=True)
+        return
+    if done:
+        print(f"  ✓ 已从备份恢复；恢复前的数据另存为 data/backups/{done.get('safety', '')}", flush=True)
+
+
 def main():
     # 配置校验必须排在所有副作用之前：放在 create_app() 里太晚——建库、迁移、附件收敛、
     # 种子管理员、PBX watcher 都已经跑完才抛错，一次配置写错就改了生产库。
     from local_app.paid_detail import load_pay_method_aliases
     load_pay_method_aliases()
+    _apply_pending_restore()
     init_db(DEFAULT_DB_PATH)
     # Access V3 空库首启:人事权限四表建成 v3 目标结构并差分收敛(生产已迁移库纯 no-op);
     # 有数据的未迁移旧库在此响亮报错,不带旧结构病启动。

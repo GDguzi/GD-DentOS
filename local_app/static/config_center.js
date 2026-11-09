@@ -371,8 +371,18 @@ async function renderBackupTab(body) {
       </div>
     </section>
     <section class="panel">
+      <div class="panel-head"><span>从备份恢复</span>
+        <span class="cfg-hint">换版本、换电脑时用：把之前下载的备份文件恢复回来，病历、预约、收费等全部还原</span></div>
+      <div class="panel-body">
+        <div class="rpt-filter">
+          <button type="button" class="tooth-confirm-btn" data-bk-restore>选择备份文件</button>
+          <span class="record-save-status" data-bk-restore-status></span>
+        </div>
+      </div>
+    </section>
+    <section class="panel">
       <div class="panel-head"><span>数据导入</span>
-        <span class="cfg-hint">从旧系统/花名册批量导入患者：支持 CSV、Excel(.xlsx)、SQLite(.db)；表头自动匹配建档字段，先预览确认再入库，同名同电话自动跳过</span></div>
+        <span class="cfg-hint">只导入患者名单和建档资料（不含病历、预约、收费）：支持 CSV、Excel(.xlsx)、SQLite(.db)；表头自动匹配建档字段，先预览确认再入库，同名同电话自动跳过</span></div>
       <div class="panel-body">
         <div class="rpt-filter">
           <button type="button" class="tooth-confirm-btn" data-bk-import>选择文件导入患者</button>
@@ -381,6 +391,45 @@ async function renderBackupTab(body) {
       </div>
     </section>`;
   body.querySelector("[data-bk-import]").addEventListener("click", () => importPatientsFile());
+  const restoreStatus = body.querySelector("[data-bk-restore-status]");
+  function showRestorePending(p) {
+    restoreStatus.textContent = "";
+    if (!p) return;
+    const c = p.counts || {};
+    restoreStatus.textContent = `已准备恢复：患者 ${c.patients} 位、病历 ${c.medical_records} 条、预约 ${c.appointments} 条` +
+      (p.image_count ? `、影像 ${p.image_count} 张` : "（此备份不含影像）") +
+      `。关闭软件再打开后生效，登录要用备份里的账号密码。 `;
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "plain-button";
+    cancel.textContent = "取消恢复";
+    cancel.addEventListener("click", async () => {
+      await fetch("/api/backup/restore/cancel", {method: "POST"});
+      showRestorePending(null);
+    });
+    restoreStatus.appendChild(cancel);
+  }
+  fetch("/api/backup/restore").then(r => r.json()).then(d => showRestorePending(d.pending)).catch(() => {});
+  body.querySelector("[data-bk-restore]").addEventListener("click", () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".db,.zip";
+    input.onchange = async () => {
+      const f = input.files && input.files[0];
+      if (!f) return;
+      if (!confirm("恢复后，当前软件里的数据会被这份备份替换（替换前会自动另存一份）。继续吗？")) return;
+      restoreStatus.textContent = "正在校验备份...";
+      const form = new FormData();
+      form.append("file", f);
+      try {
+        const res = await fetch("/api/backup/restore", {method: "POST", body: form});
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) { restoreStatus.textContent = "恢复失败：" + (d.detail || res.status); return; }
+        showRestorePending(d.pending);
+      } catch { restoreStatus.textContent = "恢复失败（网络异常）"; }
+    };
+    input.click();
+  });
   const listEl = body.querySelector("[data-bk-list]");
   async function refreshList() {
     let d;
